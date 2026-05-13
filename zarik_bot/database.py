@@ -141,6 +141,18 @@ def get_total_stake() -> int:
         return row["total"] or 0
 
 
+def is_program_started(user_id: int) -> bool:
+    """Вернёт True если start_date уже наступил (программа идёт)"""
+    user = get_user(user_id)
+    if not user:
+        return False
+    try:
+        start = date.fromisoformat(user["start_date"])
+        return date.today() >= start
+    except Exception:
+        return False
+
+
 def set_user_timezone(user_id: int, timezone: str):
     """Сохраняет выбранный часовой пояс"""
     with get_conn() as conn:

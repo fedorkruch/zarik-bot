@@ -256,6 +256,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=timezone_keyboard()
             )
             return
+        if not db.is_program_started(user.id):
+            # Онбординг завершён, но старт ещё не наступил
+            await update.message.reply_text(
+                "🦥 Всё готово! Завтра в 8:00 пришлю первые задания.\n\n"
+                "Используй кнопки меню внизу 👇",
+                reply_markup=MAIN_MENU
+            )
+            return
         # Уже в программе — показываем задания дня
         day = db.get_current_day(user.id)
         completed = db.get_completed_tasks(user.id, day)
@@ -662,6 +670,15 @@ async def handle_unexpected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🦥 Выбери часовой пояс, чтобы продолжить 👇",
             reply_markup=timezone_keyboard()
+        )
+        return
+
+    if not db.is_program_started(user_id):
+        # Онбординг завершён, но старт ещё не наступил
+        await update.message.reply_text(
+            "🦥 Всё готово! Завтра в 8:00 пришлю первые задания.\n\n"
+            "Используй кнопки меню внизу 👇",
+            reply_markup=MAIN_MENU
         )
         return
 
