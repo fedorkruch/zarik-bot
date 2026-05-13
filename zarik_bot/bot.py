@@ -837,23 +837,30 @@ async def send_evening_reminder(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_migrate_threshold(context: ContextTypes.DEFAULT_TYPE):
-    """Уведомляет админа когда участников стало >= 150 — пора переехать на Postgres"""
+    """Уведомляет админа когда участников стало >= 150"""
     count = db.get_user_count()
     if count >= MIGRATE_THRESHOLD:
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=(
-                    f"🚨 *Время переезжать на PostgreSQL!*\n\n"
-                    f"Участников уже *{count}*, достигли порога {MIGRATE_THRESHOLD}.\n\n"
-                    f"SQLite начнёт тормозить при параллельных запросах.\n"
-                    f"Напиши мне — сделаем миграцию за час 🦥"
+                    f"🚨 *Достигли {MIGRATE_THRESHOLD} участников!*\n\n"
+                    f"Сейчас в программе: *{count}* чел.\n\n"
+                    f"*Что нужно сделать:*\n\n"
+                    f"1️⃣ *Переезд на PostgreSQL*\n"
+                    f"SQLite начнёт тормозить. Напиши мне — сделаем миграцию за час.\n\n"
+                    f"2️⃣ *Персональные данные (152-ФЗ)*\n"
+                    f"— Зарегистрироваться как оператор ПД на pd.rkn.gov.ru\n"
+                    f"— Опубликовать Политику конфиденциальности\n"
+                    f"— Добавить согласие на обработку ПД перед оплатой\n"
+                    f"— Проверить вопрос локализации данных (серверы РФ)\n\n"
+                    f"Напиши мне — подготовлю все документы 🦥"
                 ),
                 parse_mode=ParseMode.MARKDOWN
             )
-            logger.info(f"Отправлено уведомление о миграции: {count} участников")
+            logger.info(f"Отправлено уведомление о milestone 150: {count} участников")
         except Exception as e:
-            logger.error(f"Не удалось отправить уведомление о миграции: {e}")
+            logger.error(f"Не удалось отправить уведомление о milestone: {e}")
 
 
 # ── Запуск ────────────────────────────────────────────────────
