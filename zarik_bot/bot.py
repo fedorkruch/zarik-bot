@@ -36,6 +36,8 @@ BOT_TOKEN        = os.environ["BOT_TOKEN"]
 PROVIDER_TOKEN   = os.environ["PROVIDER_TOKEN"]
 PARTICIPATION_FEE = int(os.environ.get("PARTICIPATION_FEE_KOPECKS", "499000"))  # 4990₽ по умолчанию
 STAKE_MIN_RUB     = int(os.environ.get("STAKE_MIN_RUB", "500"))                 # 500₽ по умолчанию
+ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))                # Telegram ID администратора
+MIGRATE_THRESHOLD = 150                                                          # Порог для напоминания о переезде на Postgres
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -673,6 +675,98 @@ async def handle_unexpected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ── Админ-команды ─────────────────────────────────────────────
+
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
+
+
+async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сводка для администратора"""
+    if not is_admin(update.effective_user.id):
+        return
+
+    count = db.get_user_count()
+    total_stake = db.get_total_stake() // 100
+    active = db.get_all_active_users()
+    active_count = len(active)
+
+    lines = [
+        "🦥 *Админ · Сводка*",
+        "",
+        f"👥 Участников всего: *{count}*",
+        f"🏃 Активных сейчас: *{active_count}*",
+        f"💰 Общая сумма ставок: *{total_stake:,} ₽*".replace(",", " "),
+        "",
+        f"📊 До переезда на Postgres: *{max(0, MIGRATE_THRESHOLD - count)}* участников",
+    ]
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список участников"""
+    if not is_admin(update.effective_user.id):
+        return
+
+    users = db.get_all_users()
+    if not users:
+        await update.message.reply_text("Участников пока нет.")
+        return
+
+    lines = ["🦥 *Участники*", ""]
+    for u in users:
+        day = db.get_current_day(u["user_id"]) if u["onboarding_complete"] else 0
+        stake = (u["stake_amount"] or 0) // 100
+        name = u["full_name"] or u["first_name"] or "—"
+        status = f"День {day}" if u["onboarding_complete"] else "⏳ онбординг"
+        lines.append(f"• {name} | ставка {stake}₽ | {status}")
+
+    # Telegram лимит 4096 символов — если много, режем
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:4000] + "\n\n_...и ещё. Используй /export для полного списка._"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт участников в CSV"""
+    if not is_admin(update.effective_user.id):
+        return
+
+    import csv, io
+    users = db.get_all_users()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Имя", "Username", "ФИО", "Телефон", "Email",
+                     "Ставка (₽)", "Участие (₽)", "День", "Дата регистрации"])
+
+    for u in users:
+        day = db.get_current_day(u["user_id"]) if u["onboarding_complete"] else 0
+        writer.writerow([
+            u["user_id"],
+            u["first_name"] or "",
+            u["username"] or "",
+            u["full_name"] or "",
+            u["phone"] or "",
+            u["email"] or "",
+            (u["stake_amount"] or 0) // 100,
+            (u["participation_fee"] or 0) // 100,
+            day,
+            u["created_at"] or "",
+        ])
+
+    output.seek(0)
+    csv_bytes = output.getvalue().encode("utf-8-sig")  # BOM для Excel
+    bio = io.BytesIO(csv_bytes)
+    bio.name = "zarik_participants.csv"
+
+    await update.message.reply_document(document=bio, filename="zarik_participants.csv",
+                                        caption=f"📊 Участники Зарик — {len(users)} чел.")
+
+
 # ── Рассылки ──────────────────────────────────────────────────
 
 async def send_daily_tasks(context: ContextTypes.DEFAULT_TYPE):
@@ -725,6 +819,26 @@ async def send_evening_reminder(context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Не удалось отправить напоминание {user['user_id']}: {e}")
 
 
+async def check_migrate_threshold(context: ContextTypes.DEFAULT_TYPE):
+    """Уведомляет админа когда участников стало >= 150 — пора переехать на Postgres"""
+    count = db.get_user_count()
+    if count >= MIGRATE_THRESHOLD:
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"🚨 *Время переезжать на PostgreSQL!*\n\n"
+                    f"Участников уже *{count}*, достигли порога {MIGRATE_THRESHOLD}.\n\n"
+                    f"SQLite начнёт тормозить при параллельных запросах.\n"
+                    f"Напиши мне — сделаем миграцию за час 🦥"
+                ),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.info(f"Отправлено уведомление о миграции: {count} участников")
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление о миграции: {e}")
+
+
 # ── Запуск ────────────────────────────────────────────────────
 
 def main():
@@ -738,6 +852,11 @@ def main():
     app.add_handler(CommandHandler("today", cmd_today))
     app.add_handler(CommandHandler("progress", cmd_progress))
     app.add_handler(CommandHandler("setday", cmd_setday))
+
+    # Админ-команды
+    app.add_handler(CommandHandler("admin", cmd_admin))
+    app.add_handler(CommandHandler("users", cmd_users))
+    app.add_handler(CommandHandler("export", cmd_export))
 
     # Оплата
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
@@ -754,8 +873,9 @@ def main():
 
     # Расписание — каждый час проверяем у кого 8:00 или 21:00 по местному времени
     job_queue = app.job_queue
-    job_queue.run_repeating(send_daily_tasks,    interval=3600, first=10,  name="daily_tasks")
-    job_queue.run_repeating(send_evening_reminder, interval=3600, first=20, name="evening_reminder")
+    job_queue.run_repeating(send_daily_tasks,       interval=3600,        first=10,  name="daily_tasks")
+    job_queue.run_repeating(send_evening_reminder,  interval=3600,        first=20,  name="evening_reminder")
+    job_queue.run_repeating(check_migrate_threshold, interval=86400,      first=60,  name="migrate_check")  # раз в сутки
 
     logger.info("🦥 Зарик запущен!")
     app.run_polling(drop_pending_updates=True)

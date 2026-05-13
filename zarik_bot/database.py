@@ -117,6 +117,30 @@ def get_all_active_users():
         ).fetchall()
 
 
+def get_all_users():
+    """Все пользователи включая незавершивших онбординг"""
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
+
+
+def get_user_count() -> int:
+    """Количество оплативших участников"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM users WHERE onboarding_complete = 1"
+        ).fetchone()
+        return row["cnt"] if row else 0
+
+
+def get_total_stake() -> int:
+    """Суммарная ставка всех участников в копейках"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT SUM(stake_amount) as total FROM users WHERE onboarding_complete = 1"
+        ).fetchone()
+        return row["total"] or 0
+
+
 def set_user_timezone(user_id: int, timezone: str):
     """Сохраняет выбранный часовой пояс"""
     with get_conn() as conn:
