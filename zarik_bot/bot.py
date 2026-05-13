@@ -155,6 +155,12 @@ ONBOARDING_TEXT = (
 
 # ── Формирование сообщения дня ────────────────────────────────
 
+def get_task_labels(day: int) -> list:
+    """Возвращает список (icon, label) для задач дня"""
+    data = ct.get_day_content(day)
+    return [(t["icon"], t["label"]) for t in data["tasks"]]
+
+
 def build_day_message(day: int, completed: set) -> str:
     data = ct.get_day_content(day)
     done = len(completed)
@@ -271,7 +277,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             build_day_message(day, completed),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=tasks_keyboard(day, completed)
+            reply_markup=tasks_keyboard(day, completed, get_task_labels(day))
         )
         return
 
@@ -294,7 +300,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_day_message(day, completed),
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=tasks_keyboard(day, completed)
+        reply_markup=tasks_keyboard(day, completed, get_task_labels(day))
     )
 
 
@@ -328,7 +334,7 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🛠 Тест: день *{target}*\n\n{build_day_message(target, completed)}",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=tasks_keyboard(target, completed)
+        reply_markup=tasks_keyboard(target, completed, get_task_labels(target))
     )
 
 
@@ -403,15 +409,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.complete_task(user_id, day, task_index)
         completed = db.get_completed_tasks(user_id, day)
         text = build_day_message(day, completed)
+        data_content = ct.get_day_content(day)
+        total_tasks = len(data_content["tasks"])
+        labels = [(t["icon"], t["label"]) for t in data_content["tasks"]]
 
-        if len(completed) == 4:
+        if len(completed) >= total_tasks:
             await query.edit_message_text(
                 text, parse_mode=ParseMode.MARKDOWN, reply_markup=all_done_keyboard()
             )
-            data_content = ct.get_day_content(day)
             congrats = f"🦥 {data_content['evening']}"
             if day in ct.MILESTONE_MESSAGES:
                 congrats += f"\n\n{ct.MILESTONE_MESSAGES[day]}"
+            if day in ct.REFLECTION_NOTES:
+                congrats += f"\n\n{ct.REFLECTION_NOTES[day]}"
             congrats += f"\n\n_На сегодня всё. Завтра вернусь в 8:00 👋_"
             await query.message.reply_text(congrats, parse_mode=ParseMode.MARKDOWN)
 
@@ -423,7 +433,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
         else:
             await query.edit_message_text(
-                text, parse_mode=ParseMode.MARKDOWN, reply_markup=tasks_keyboard(day, completed)
+                text, parse_mode=ParseMode.MARKDOWN,
+                reply_markup=tasks_keyboard(day, completed, labels)
             )
         return
 
@@ -798,13 +809,14 @@ async def send_daily_tasks(context: ContextTypes.DEFAULT_TYPE):
             if day > 91:
                 continue
             completed = db.get_completed_tasks(user["user_id"], day)
-            if len(completed) == 4:
+            total_tasks = len(ct.get_day_content(day)["tasks"])
+            if len(completed) >= total_tasks:
                 continue
             await context.bot.send_message(
                 chat_id=user["user_id"],
                 text=build_day_message(day, completed),
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=tasks_keyboard(day, completed)
+                reply_markup=tasks_keyboard(day, completed, get_task_labels(day))
             )
         except Exception as e:
             logger.warning(f"Не удалось отправить задание {user['user_id']}: {e}")
@@ -820,9 +832,10 @@ async def send_evening_reminder(context: ContextTypes.DEFAULT_TYPE):
                 continue
             day = db.get_current_day(user["user_id"])
             completed = db.get_completed_tasks(user["user_id"], day)
-            if len(completed) == 4:
+            total_tasks = len(ct.get_day_content(day)["tasks"])
+            if len(completed) >= total_tasks:
                 continue
-            remaining = 4 - len(completed)
+            remaining = total_tasks - len(completed)
             await context.bot.send_message(
                 chat_id=user["user_id"],
                 text=(

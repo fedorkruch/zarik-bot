@@ -29,13 +29,18 @@ TIMEZONES = [
 ]
 
 
-def tasks_keyboard(day: int, completed: set) -> InlineKeyboardMarkup:
+def tasks_keyboard(day: int, completed: set, task_labels: list = None) -> InlineKeyboardMarkup:
     """
-    Клавиатура с 4 кнопками задач.
+    Клавиатура с кнопками задач (количество зависит от модуля).
+    task_labels: список (icon, label). Если None — используется дефолтный TASK_LABELS.
     Выполненные — зелёные ✅, невыполненные — серые ☐
     """
+    if task_labels is None:
+        task_labels = TASK_LABELS
+
+    total = len(task_labels)
     buttons = []
-    for i, (icon, label) in enumerate(TASK_LABELS):
+    for i, (icon, label) in enumerate(task_labels):
         if i in completed:
             text = f"✅ {icon} {label}"
         else:
@@ -49,10 +54,10 @@ def tasks_keyboard(day: int, completed: set) -> InlineKeyboardMarkup:
 
     # Кнопка прогресса внизу
     done = len(completed)
-    progress = "▓" * done + "░" * (4 - done)
+    progress = "▓" * done + "░" * (total - done)
     buttons.append([
         InlineKeyboardButton(
-            text=f"{progress} {done}/4",
+            text=f"{progress} {done}/{total}",
             callback_data="noop"
         )
     ])
