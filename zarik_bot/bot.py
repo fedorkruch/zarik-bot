@@ -51,6 +51,7 @@ _last_start: dict[int, float] = {}
 # Пользователи, ожидающие ввода суммы ставки
 # user_id → message_id сообщения-приглашения (чтобы отредактировать его потом)
 _awaiting_stake: dict[int, int] = {}
+_migrate_notified: bool = False  # флаг чтобы не спамить уведомление о миграции
 
 
 # ── Постоянная панель кнопок внизу чата ──────────────────────
@@ -180,10 +181,11 @@ def build_day_message(day: int, completed: set) -> str:
         lines.append(f"   {task['description']}")
         lines.append("")
 
-    if done == 4:
+    total = len(data["tasks"])
+    if done >= total:
         lines.append("🎉 *Все задачи выполнены! День засчитан.*")
     else:
-        lines.append(f"_Выполнено: {done} из 4_")
+        lines.append(f"_Выполнено: {done} из {total}_")
 
     return "\n".join(lines)
 
@@ -342,13 +344,12 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-
     user_id = query.from_user.id
     data = query.data
 
     # ── Шаги воронки ──
     if data.startswith("funnel:"):
+        await query.answer()
         key = data.split(":")[1]
 
         if key == "stake":
@@ -377,10 +378,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # stake: больше не используется как callback (ввод идёт через текст)
     if data.startswith("stake:"):
+        await query.answer()
         return
 
     # ── Выбор часового пояса ──
     if data.startswith("tz:"):
+        await query.answer()
         tz_name = data.split(":", 1)[1]
         db.set_user_timezone(user_id, tz_name)
         db.complete_onboarding(user_id)
@@ -406,6 +409,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Это задание уже не актуально.", show_alert=True)
             return
 
+        await query.answer()
         db.complete_task(user_id, day, task_index)
         completed = db.get_completed_tasks(user_id, day)
         text = build_day_message(day, completed)
@@ -439,8 +443,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "progress":
+        await query.answer()
         await query.message.reply_text(build_progress_text(user_id), parse_mode=ParseMode.MARKDOWN)
     elif data == "program":
+        await query.answer()
         await query.message.reply_text(
             "🗓 *Программа — 91 день*\n\n"
             "Модуль 1 (1–21): 🏃 Физическая база\n"
@@ -451,7 +457,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
     elif data == "noop":
-        pass
+        await query.answer()
 
 
 # ── Обработка оплаты ──────────────────────────────────────────
@@ -521,8 +527,6 @@ async def send_invoice_for_stake(chat_id: int, user_id: int, stake: int, context
     participation_rub = PARTICIPATION_FEE // 100
     stake_rub = stake // 100
     total_rub = participation_rub + stake_rub
-
-    total_kopecks = PARTICIPATION_FEE + stake
 
     # Две позиции — участие и ставка
     prices = [
@@ -699,7 +703,7 @@ async def handle_unexpected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_day_message(day, completed),
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=tasks_keyboard(day, completed)
+        reply_markup=tasks_keyboard(day, completed, get_task_labels(day))
     )
 
 
@@ -840,7 +844,7 @@ async def send_evening_reminder(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=user["user_id"],
                 text=(
                     f"🦥 Эй, до конца дня ещё есть время.\n"
-                    f"Осталось: *{remaining}* из 4 задач.\n\n"
+                    f"Осталось: *{remaining}* из {total_tasks} задач.\n\n"
                     f"Нажми «📋 Задания на сегодня» чтобы открыть."
                 ),
                 parse_mode=ParseMode.MARKDOWN
@@ -850,7 +854,10 @@ async def send_evening_reminder(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_migrate_threshold(context: ContextTypes.DEFAULT_TYPE):
-    """Уведомляет админа когда участников стало >= 150"""
+    """Уведомляет админа когда участников стало >= 150 — только один раз"""
+    global _migrate_notified
+    if _migrate_notified:
+        return
     count = db.get_user_count()
     if count >= MIGRATE_THRESHOLD:
         try:
@@ -871,6 +878,7 @@ async def check_migrate_threshold(context: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode=ParseMode.MARKDOWN
             )
+            _migrate_notified = True
             logger.info(f"Отправлено уведомление о milestone 150: {count} участников")
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление о milestone: {e}")
