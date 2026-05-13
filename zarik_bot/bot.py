@@ -439,7 +439,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if day % 7 == 0:
                 all_completed_days = db.get_completed_days_set(user_id)
                 week_completed_days = {d for d in all_completed_days if day - 6 <= d <= day}
-                stats_text = ct.build_weekly_stats(day, week_completed_days, all_completed_days)
+                # Детальные отметки по задачам (для статистики треков М2)
+                tasks_by_day = db.get_completed_tasks_for_days(user_id, list(all_completed_days))
+                # Реальный рейтинг среди участников
+                user_rank = db.get_leaderboard_rank(user_id, len(all_completed_days))
+                stats_text = ct.build_weekly_stats(
+                    day, week_completed_days, all_completed_days, tasks_by_day, user_rank
+                )
                 if stats_text:
                     await query.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
         else:

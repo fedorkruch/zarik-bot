@@ -258,19 +258,29 @@ def get_exercises_for_day(day: int) -> int:
         return 360
 
 
-def build_weekly_stats(day: int, week_completed: set, all_completed: set) -> str:
+def build_weekly_stats(
+    day: int,
+    week_completed: set,
+    all_completed: set,
+    tasks_by_day: dict = None,
+    user_rank: dict = None,
+) -> str:
     """
     Строит сообщение со статистикой за прошедшие недели.
     Вызывается на днях кратных 7: 7, 14, 21, ...
 
-    week_completed — множество дней, засчитанных на этой неделе (например {43, 45, 47, 49})
+    week_completed — множество дней, засчитанных на этой неделе
     all_completed  — множество всех засчитанных дней участника
+    tasks_by_day   — {day: set_of_task_indices} для всех засчитанных дней программы
+    user_rank      — {'rank': int, 'total': int} — реальный рейтинг из БД
     """
     week = day // 7
     if week < 1 or week > 13:
         return ""
 
-    # Статистика за эту неделю — только реально выполненные дни
+    week_start = day - 6
+
+    # Статистика за эту неделю
     week_done_count = len(week_completed)
     week_water = week_done_count * 8
     week_water_liters = round(week_water * 0.25, 1)
@@ -278,18 +288,13 @@ def build_weekly_stats(day: int, week_completed: set, all_completed: set) -> str
     week_activity = sum(20 if d > 21 else 15 for d in week_completed)
     week_evenings = week_done_count
 
-    # Накопленная статистика — все засчитанные дни за весь курс
+    # Накопленная статистика
     total_done_count = len(all_completed)
     total_water = total_done_count * 8
     total_water_liters = round(total_water * 0.25, 1)
     total_exercises = sum(get_exercises_for_day(d) for d in all_completed)
     total_activity = sum(20 if d > 21 else 15 for d in all_completed)
 
-    # Процентиль
-    pct_data = WEEK_PERCENTILE.get(week, ("1", "топ 1%", ""))
-    pct_num, pct_label, pct_context = pct_data
-
-    # Слово "неделя/недели/недель"
     week_word = (
         "неделя" if week == 1
         else "недели" if 2 <= week <= 4
@@ -304,21 +309,64 @@ def build_weekly_stats(day: int, week_completed: set, all_completed: set) -> str
         f"🏃 *{week_exercises}* упражнений",
         f"🚶 *{week_activity} минут* прогулок",
         f"🌙 {week_evenings} вечеров с заботой о себе",
+    ]
+
+    # ── Статистика Модуля 2 за эту неделю (дни 22–42) ──────────
+    if day >= 28 and tasks_by_day is not None:
+        week_m2_days = [d for d in range(week_start, day + 1) if d >= 22]
+        if week_m2_days:
+            week_mind = sum(1 for d in week_m2_days if 4 in tasks_by_day.get(d, set()))
+            lines.append(f"🧠 *{week_mind} из {len(week_m2_days)}* намерений / фокусов поставлено")
+
+            week_self_days = [d for d in week_m2_days if d >= 29]
+            if week_self_days:
+                week_self = sum(1 for d in week_self_days if 5 in tasks_by_day.get(d, set()))
+                lines.append(f"✨ *{week_self} из {len(week_self_days)}* вопросов о себе")
+
+    lines.extend([
         "",
         f"Всего за курс — *{total_done_count} засчитанных дней*:",
         f"└ {total_water} стаканов воды ({total_water_liters} л)",
         f"└ {total_exercises} упражнений",
         f"└ {total_activity} минут активности",
-        "",
-        f"🌍 *Ты в {pct_label} людей на планете*,",
-        f"_{pct_context}._",
-    ]
+    ])
 
-    if week < 13:
-        next_pct = WEEK_PERCENTILE.get(week + 1, (None,))[1]
-        if next_pct:
-            lines.append("")
-            lines.append(f"_Ещё одна неделя — и войдёшь в {next_pct}._")
+    # ── Накопленная статистика Модуля 2 (за все недели М2) ─────
+    if day >= 22 and tasks_by_day is not None:
+        m2_days_all = [d for d in tasks_by_day if 22 <= d <= 42]
+        total_mind = sum(1 for d in m2_days_all if 4 in tasks_by_day.get(d, set()))
+        total_self = sum(1 for d in m2_days_all if d >= 29 and 5 in tasks_by_day.get(d, set()))
+        if total_mind > 0:
+            lines.append(f"└ 🧠 {total_mind} намерений / фокусов")
+        if total_self > 0:
+            lines.append(f"└ ✨ {total_self} вопросов о себе")
+
+    lines.append("")
+
+    # ── Рейтинг ─────────────────────────────────────────────────
+    if user_rank:
+        rank = user_rank["rank"]
+        total_users = user_rank["total"]
+        if total_users >= 5:
+            lines.append(f"🏆 *Ты в ТОП {rank} из {total_users} участников программы*")
+            lines.append(f"_{total_done_count} засчитанных дней — каждый поднимает тебя выше._")
+        elif total_users >= 2:
+            lines.append(f"🌍 *Ты среди первых {total_users} участников программы*")
+            lines.append(f"_Первопроходцы — те, на кого потом равняются._")
+        else:
+            lines.append(f"🌍 *Ты первый участник программы*")
+            lines.append(f"_Именно так начинается всё важное._")
+    else:
+        # Запасной вариант — хардкод процентиля
+        pct_data = WEEK_PERCENTILE.get(week, ("1", "топ 1%", ""))
+        pct_num, pct_label, pct_context = pct_data
+        lines.append(f"🌍 *Ты в {pct_label} людей на планете*,")
+        lines.append(f"_{pct_context}._")
+        if week < 13:
+            next_pct = WEEK_PERCENTILE.get(week + 1, (None,))[1]
+            if next_pct:
+                lines.append("")
+                lines.append(f"_Ещё одна неделя — и войдёшь в {next_pct}._")
 
     return "\n".join(lines)
 

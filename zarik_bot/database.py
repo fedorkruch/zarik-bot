@@ -291,3 +291,54 @@ def get_stats(user_id: int) -> dict:
         "days_remaining": 91 - current_day,
         "streak": get_streak(user_id),
     }
+
+
+def get_completed_tasks_for_days(user_id: int, days: list) -> dict:
+    """
+    Возвращает {day_number: set_of_task_indices} для указанных дней.
+    Нужно для расчёта статистики задач по трекам (Мышление, Самореализация и т.д.)
+    """
+    if not days:
+        return {}
+    placeholders = ",".join("?" * len(days))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT day_number, task_index FROM task_completions "
+            f"WHERE user_id = ? AND day_number IN ({placeholders})",
+            [user_id] + list(days)
+        ).fetchall()
+    result = {d: set() for d in days}
+    for row in rows:
+        result[row["day_number"]].add(row["task_index"])
+    return result
+
+
+def get_leaderboard_rank(user_id: int, my_days_done: int) -> dict:
+    """
+    Считает реальный рейтинг участника среди всех активных пользователей.
+    Ранжирование по количеству засчитанных дней (≥4 отметок за день).
+    Возвращает {'rank': int, 'total': int}.
+    """
+    with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM users WHERE onboarding_complete = 1 AND is_active = 1"
+        ).fetchone()["cnt"]
+
+        if total == 0:
+            return {"rank": 1, "total": 1}
+
+        # Пользователи с БОЛЬШИМ числом засчитанных дней — они впереди
+        ahead = conn.execute("""
+            SELECT COUNT(*) as cnt FROM (
+                SELECT tc.user_id
+                FROM task_completions tc
+                JOIN users u ON tc.user_id = u.user_id
+                WHERE u.onboarding_complete = 1
+                  AND u.is_active = 1
+                  AND tc.user_id != ?
+                GROUP BY tc.user_id
+                HAVING COUNT(DISTINCT tc.day_number) > ?
+            )
+        """, (user_id, my_days_done)).fetchone()["cnt"]
+
+        return {"rank": ahead + 1, "total": total}
