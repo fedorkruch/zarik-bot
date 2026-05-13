@@ -297,6 +297,13 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not db.get_user(user.id) or not db.is_onboarding_complete(user.id):
         await update.message.reply_text("Сначала напиши /start чтобы начать программу.")
         return
+    if not db.is_program_started(user.id):
+        await update.message.reply_text(
+            "🦥 Всё готово! Завтра в 8:00 пришлю первые задания.\n\n"
+            "Используй кнопки меню внизу 👇",
+            reply_markup=MAIN_MENU
+        )
+        return
     day = db.get_current_day(user.id)
     completed = db.get_completed_tasks(user.id, day)
     await update.message.reply_text(
