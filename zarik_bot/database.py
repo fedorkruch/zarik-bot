@@ -17,8 +17,9 @@ TASKS_PER_DAY = 5 # Количество задач в день
 
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")  # безопасная запись из двух потоков
     return conn
 
 
