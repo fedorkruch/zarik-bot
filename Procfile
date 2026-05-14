@@ -1,1 +1,1 @@
-worker: python zarik_bot/bot.py
+worker: python zarik_bot/run_bots.py

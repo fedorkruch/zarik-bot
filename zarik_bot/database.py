@@ -177,6 +177,12 @@ def is_program_started(user_id: int) -> bool:
         return False
 
 
+def is_payment_confirmed(user_id: int) -> bool:
+    """True если пользователь оплатил участие (payment_charge_id заполнен)."""
+    user = get_user(user_id)
+    return bool(user and user["payment_charge_id"])
+
+
 def is_onboarding_complete(user_id: int) -> bool:
     user = get_user(user_id)
     if not user:
