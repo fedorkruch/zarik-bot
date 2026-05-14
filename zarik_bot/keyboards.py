@@ -1,14 +1,16 @@
 """
-keyboards.py — inline-клавиатуры бота Зарик
+keyboards.py — inline-клавиатуры бота Зарик (77-дневный челлендж)
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 
+# 5 задач: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
 TASK_LABELS = [
-    ("💧", "Вода"),
-    ("🏃", "Зарядка"),
-    ("🚶", "Активность"),
-    ("🌙", "Вечер"),
+    ("💪", "Тренировка"),
+    ("💧", "Вода · 2 литра / 8 стаканов"),
+    ("📚", "Чтение · 10 страниц"),
+    ("🥗", "Без фастфуда, чипсов и снеков"),
+    ("🚫", "День без алкоголя"),
 ]
 
 # Часовые пояса СНГ и ближнего зарубежья
@@ -28,31 +30,32 @@ TIMEZONES = [
     ("UTC+12 · Камчатка",        "Asia/Kamchatka"),
 ]
 
+# Цифровая клавиатура для ввода количества повторений
+DIGIT_ROWS = [
+    ["1", "2", "3", "4", "5"],
+    ["6", "7", "8", "9", "10"],
+    ["12", "15", "20", "25", "30"],
+    ["35", "40", "50", "60", "75"],
+]
 
-def tasks_keyboard(day: int, completed: set, task_labels: list = None) -> InlineKeyboardMarkup:
-    """
-    Клавиатура с кнопками задач (количество зависит от модуля).
-    task_labels: список (icon, label). Если None — используется дефолтный TASK_LABELS.
-    Выполненные — зелёные ✅, невыполненные — серые ☐
-    """
-    if task_labels is None:
-        task_labels = TASK_LABELS
 
-    total = len(task_labels)
+def tasks_keyboard(day: int, completed: set) -> InlineKeyboardMarkup:
+    """
+    Клавиатура с 5 кнопками задач + строка прогресса.
+    Выполненные — ✅, невыполненные — ⬜
+    """
+    total = len(TASK_LABELS)
     buttons = []
-    for i, (icon, label) in enumerate(task_labels):
-        if i in completed:
-            text = f"✅ {icon} {label}"
-        else:
-            text = f"☐ {icon} {label}"
+    for i, (icon, label) in enumerate(TASK_LABELS):
+        mark = "✅" if i in completed else "⬜"
         buttons.append([
             InlineKeyboardButton(
-                text=text,
+                text=f"{mark} {icon} {label}",
                 callback_data=f"task:{day}:{i}"
             )
         ])
 
-    # Кнопка прогресса внизу
+    # Прогресс-строка
     done = len(completed)
     progress = "▓" * done + "░" * (total - done)
     buttons.append([
@@ -65,11 +68,33 @@ def tasks_keyboard(day: int, completed: set, task_labels: list = None) -> Inline
     return InlineKeyboardMarkup(buttons)
 
 
+def reps_keyboard(exercise_key: str) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для выбора количества повторений при онбординге.
+    exercise_key: 'pushup' | 'squat' | 'abs'
+    """
+    buttons = []
+    for row in DIGIT_ROWS:
+        buttons.append([
+            InlineKeyboardButton(str(n), callback_data=f"reps:{exercise_key}:{n}")
+            for n in row
+        ])
+    return InlineKeyboardMarkup(buttons)
+
+
+def timezone_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора часового пояса"""
+    buttons = [
+        [InlineKeyboardButton(label, callback_data=f"tz:{tz}")]
+        for label, tz in TIMEZONES
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 def progress_keyboard() -> InlineKeyboardMarkup:
-    """Кнопка для просмотра прогресса"""
+    """Кнопка просмотра прогресса"""
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("📊 Мой прогресс", callback_data="progress"),
-        InlineKeyboardButton("🗓 Программа", callback_data="program"),
     ]])
 
 
@@ -80,10 +105,12 @@ def all_done_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
-def timezone_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора часового пояса"""
-    buttons = [
-        [InlineKeyboardButton(label, callback_data=f"tz:{tz}")]
-        for label, tz in TIMEZONES
-    ]
-    return InlineKeyboardMarkup(buttons)
+# Главное меню (Reply-кнопки)
+MAIN_MENU = ReplyKeyboardMarkup(
+    [
+        ["📋 Мои задачи на сегодня"],
+        ["📊 Мой прогресс", "❓ Помощь"],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
