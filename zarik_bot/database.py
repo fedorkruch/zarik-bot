@@ -502,6 +502,14 @@ def has_dropout_warning(user_id: int) -> bool:
 
 # ── Тестирование ──────────────────────────────────────────────
 
+def reset_user(user_id: int):
+    """Полный сброс участника — удаляет все записи, как будто он никогда не регистрировался"""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM task_completions WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+
+
 def set_day_for_testing(user_id: int, target_day: int):
     """Сдвигает дату старта для тестирования"""
     new_start = date.today() - timedelta(days=target_day - 1)

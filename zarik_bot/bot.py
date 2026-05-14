@@ -937,6 +937,22 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[ТЕСТ ADMIN] /reset_user [user_id] — полный сброс пользователя до нового старта"""
+    if not is_admin(update.effective_user.id):
+        return
+    # Если передан user_id — сбрасываем его, иначе — себя
+    args = context.args
+    if args and args[0].isdigit():
+        target_id = int(args[0])
+    else:
+        target_id = update.effective_user.id
+    db.reset_user(target_id)
+    await update.message.reply_text(
+        f"🛠 Пользователь {target_id} сброшен. Можно заново /start"
+    )
+
+
 # ── Запуск ────────────────────────────────────────────────────
 
 def main():
@@ -954,7 +970,8 @@ def main():
     app.add_handler(CommandHandler("admin",   cmd_admin))
     app.add_handler(CommandHandler("users",   cmd_users))
     app.add_handler(CommandHandler("export",  cmd_export))
-    app.add_handler(CommandHandler("setday",  cmd_setday))
+    app.add_handler(CommandHandler("setday",     cmd_setday))
+    app.add_handler(CommandHandler("reset_user", cmd_reset_user))
 
     # Оплата
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
