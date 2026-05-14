@@ -2,5 +2,5 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python zarik_bot/bot.py"
+startCommand = "python zarik_bot/run_bots.py"
 restartPolicyType = "always"
