@@ -16,11 +16,15 @@ logger = logging.getLogger(__name__)
 def run_bot(build_func, name: str):
     """Запускает бота в отдельном потоке с собственным event loop."""
     async def _run():
-        app = build_func()
-        async with app:
-            await app.updater.start_polling(drop_pending_updates=True)
-            logger.info(f"🦥 {name} запущен")
-            await asyncio.Event().wait()  # ждём вечно — Railway сам остановит контейнер
+        try:
+            app = build_func()
+            async with app:
+                await app.start()                                           # ← запускает диспетчер
+                await app.updater.start_polling(drop_pending_updates=True)  # ← получаем апдейты
+                logger.info(f"🦥 {name} запущен")
+                await asyncio.Event().wait()                                # ← держим поток живым
+        except Exception:
+            logger.exception(f"❌ {name} упал с ошибкой")
 
     asyncio.run(_run())
 
