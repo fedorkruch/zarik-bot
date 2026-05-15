@@ -147,6 +147,13 @@ def photo_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+def photos_done_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка завершения отправки фото."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Готово, фото отправил(а)", callback_data="photos_done")],
+    ])
+
+
 def reps_keyboard(exercise_key: str) -> InlineKeyboardMarkup:
     buttons = []
     for row in DIGIT_ROWS:

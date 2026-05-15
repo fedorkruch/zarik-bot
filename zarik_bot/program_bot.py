@@ -33,6 +33,7 @@ from keyboards import (
     webapp_keyboard,
     welcome_keyboard,
     photo_keyboard,
+    photos_done_keyboard,
     MAIN_MENU,
     START_MENU,
     TIMEZONES,
@@ -292,6 +293,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Хочешь делиться результатами до/после? Это поможет увидеть прогресс за 77 дней.",
             reply_markup=photo_keyboard()
         )
+    elif step == "awaiting_photos":
+        count = db.count_user_photos(user_id, "before")
+        saved = f" Уже сохранено: {count} фото." if count else ""
+        await update.message.reply_text(
+            f"📸 Жду твои фото «до».{saved}\n\nКогда всё отправишь — нажми кнопку 👇",
+            reply_markup=photos_done_keyboard()
+        )
     elif step == "done":
         if not db.is_program_started(user.id):
             await update.message.reply_text(
@@ -464,9 +472,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "photo_yes":
         await query.answer()
         db.set_share_photos(user_id, True)
-        db.complete_onboarding(user_id)
-        user_row = db.get_user(user_id)
-        workout  = get_workout(dict(user_row), 1)
+        db.set_onboarding_step(user_id, "awaiting_photos")
         await query.edit_message_text(
             "📸 Отлично! Вот что нужно сделать:\n\n"
             "Сделай 2 фото «до»:\n"
@@ -477,13 +483,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🩳 Парни — шорты или трусы\n\n"
             "Надевайте что вам комфортнее, но в рамках приличия "
             "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
-            f"💪 Кстати, твоя тренировка на День 1:\n{workout['description']}"
-        )
-        await query.message.reply_text(
-            "Отлично, твоя программа сформирована под тебя 🎯\n\n"
-            "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
-            "А пока — отдыхай)",
-            reply_markup=MAIN_MENU
+            "Отправляй фото сюда — я сохраню 👇\n"
+            "Когда закончишь — нажми кнопку ниже.",
+            reply_markup=photos_done_keyboard()
         )
         return
 
@@ -496,6 +498,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"👌 Понял, без фото — тоже отлично!\n\n"
             f"💪 Твоя тренировка на День 1:\n{workout['description']}"
+        )
+        await query.message.reply_text(
+            "Отлично, твоя программа сформирована под тебя 🎯\n\n"
+            "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
+            "А пока — отдыхай)",
+            reply_markup=MAIN_MENU
+        )
+        return
+
+    if data == "photos_done":
+        await query.answer()
+        count = db.count_user_photos(user_id, "before")
+        db.complete_onboarding(user_id)
+        user_row = db.get_user(user_id)
+        workout  = get_workout(dict(user_row), 1)
+        photo_summary = f"Сохранил {count} фото 📸\n\n" if count > 0 else "Фото не пришло — окей, бывает 🦥\n\n"
+        await query.edit_message_text(
+            f"{photo_summary}💪 Твоя тренировка на День 1:\n{workout['description']}"
         )
         await query.message.reply_text(
             "Отлично, твоя программа сформирована под тебя 🎯\n\n"
@@ -661,6 +681,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🦥 Используй кнопки меню 👇",
             reply_markup=MAIN_MENU
         )
+
+
+# ── Входящие фото (онбординг: шаг awaiting_photos) ──────────
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not db.is_payment_confirmed(user_id):
+        return
+    step = db.get_onboarding_step(user_id)
+    if step != "awaiting_photos":
+        return
+    # Берём наибольшее разрешение из списка (последний элемент)
+    photo = update.message.photo[-1]
+    db.save_user_photo(user_id, "before", photo.file_id)
+    count = db.count_user_photos(user_id, "before")
+    await update.message.reply_text(
+        f"✅ Фото {count} сохранено! Пришли ещё или нажми «Готово».",
+        reply_markup=photos_done_keyboard()
+    )
 
 
 # ── Планировщик ──────────────────────────────────────────────
@@ -942,6 +981,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("debug",      cmd_debug))
     app.add_handler(CommandHandler("screen",     cmd_screen))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     jq = app.job_queue

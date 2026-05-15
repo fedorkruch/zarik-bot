@@ -66,6 +66,15 @@ def init_db():
                 earned_at      TEXT DEFAULT (datetime('now')),
                 UNIQUE(user_id, achievement_id)
             );
+
+            CREATE TABLE IF NOT EXISTS user_photos (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL,
+                photo_type   TEXT NOT NULL DEFAULT 'before',
+                file_id      TEXT NOT NULL,
+                created_at   TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            );
         """)
 
         # Миграции для существующих баз данных
@@ -535,6 +544,35 @@ def set_miniapp_mode(user_id: int, use_mini: bool):
             "UPDATE users SET use_miniapp = ? WHERE user_id = ?",
             (1 if use_mini else 0, user_id)
         )
+
+
+# ── Фото пользователей ────────────────────────────────────────
+
+def save_user_photo(user_id: int, photo_type: str, file_id: str):
+    """Сохраняет file_id фото с привязкой к пользователю и типу (before/after)."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO user_photos (user_id, photo_type, file_id) VALUES (?, ?, ?)",
+            (user_id, photo_type, file_id)
+        )
+
+def get_user_photos(user_id: int, photo_type: str = "before") -> list:
+    """Возвращает список file_id фото пользователя по типу."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT file_id FROM user_photos WHERE user_id = ? AND photo_type = ? ORDER BY created_at",
+            (user_id, photo_type)
+        ).fetchall()
+    return [r["file_id"] for r in rows]
+
+def count_user_photos(user_id: int, photo_type: str = "before") -> int:
+    """Количество сохранённых фото."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM user_photos WHERE user_id = ? AND photo_type = ?",
+            (user_id, photo_type)
+        ).fetchone()
+    return row["cnt"] if row else 0
 
 
 # ── Тестирование ──────────────────────────────────────────────
