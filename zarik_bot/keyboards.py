@@ -1,7 +1,7 @@
 """
 keyboards.py — клавиатуры бота Зарик (77-дневный челлендж)
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 # 5 задач: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
 TASK_LABELS = [
@@ -10,6 +10,15 @@ TASK_LABELS = [
     ("📚", "Чтение · 10 страниц"),
     ("🥗", "Без фастфуда и снеков"),
     ("🚫", "День без алкоголя"),
+]
+
+# Короткие подписи для задач 3 и 4 (показываются рядом в одной строке)
+TASK_SHORT = [
+    "💪 Тренировка",
+    "💧 Вода",
+    "📚 Чтение",
+    "🥗 Питание",
+    "🚫 Алкоголь",
 ]
 
 # Часовые пояса СНГ и ближнего зарубежья
@@ -67,35 +76,50 @@ def tab_only_keyboard(active: str) -> InlineKeyboardMarkup:
 
 def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """
-    Таб-бар сверху (всегда виден) + кнопки 5 задач + прогресс-строка.
-    Выполненные — ✅, невыполненные — ⬜.
+    Макет как в мокапе:
+      Задачи 0-2 — на всю ширину (полный лейбл)
+      Задачи 3-4 — рядом в одну строку (короткий лейбл)
+      Кнопка «Закрыть день»
+      Таб-бар снизу
     """
-    buttons = [tab_bar(active_tab)]  # таб-бар первым — всегда виден
+    buttons = []
 
-    for i, (icon, label) in enumerate(TASK_LABELS):
+    # Задачи 0, 1, 2 — каждая на всю строку
+    for i in range(3):
+        icon, label = TASK_LABELS[i]
         mark = "✅" if i in completed else "⬜"
         buttons.append([InlineKeyboardButton(
             text=f"{mark}  {icon}  {label}",
             callback_data=f"task:{day}:{i}"
         )])
 
+    # Задачи 3 и 4 — в одну строку с короткими подписями
+    row_34 = []
+    for i in range(3, 5):
+        mark = "✅" if i in completed else "⬜"
+        row_34.append(InlineKeyboardButton(
+            text=f"{mark}  {TASK_SHORT[i]}",
+            callback_data=f"task:{day}:{i}"
+        ))
+    buttons.append(row_34)
+
+    # Кнопка «Закрыть день»
     done = len(completed)
-    progress = "●" * done + "·" * (5 - done)
-    buttons.append([InlineKeyboardButton(
-        text=f"{progress}  {done} / 5",
-        callback_data="noop"
-    )])
+    close_text = "🎉  День завершён!" if done >= 5 else "✅  Закрыть день"
+    buttons.append([InlineKeyboardButton(close_text, callback_data=f"close_day:{day}")])
+
+    # Таб-бар всегда снизу
+    buttons.append(tab_bar(active_tab))
 
     return InlineKeyboardMarkup(buttons)
 
 
 def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
-    """Клавиатура после выполнения всех задач — только прогресс + таб-бар."""
-    buttons = [
-        [InlineKeyboardButton("●●●●●  5 / 5  ✅", callback_data="noop")],
+    """Клавиатура после закрытия дня — подтверждение + таб-бар."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎉  День завершён!", callback_data="noop")],
         tab_bar(active_tab),
-    ]
-    return InlineKeyboardMarkup(buttons)
+    ])
 
 
 # ── Онбординг ────────────────────────────────────────────────

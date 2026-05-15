@@ -108,44 +108,31 @@ def not_paid_message() -> str:
 # ── Построители экранов (HTML) ────────────────────────────────
 
 def build_today_screen(user_row, day: int, completed: set) -> str:
-    """Экран «Сегодня» — утреннее послание + чеклист."""
-    morning_text = h(ct.get_morning(day))
-    workout = get_workout(dict(user_row), day)
-    done = len(completed)
+    """Экран «Сегодня» — минималистичный: заголовок + прогресс + призыв к действию."""
     percentile, _ = ct.get_planet_percentile(day - 1)
     bar = make_progress_bar(day - 1)
-    task_bar = "●" * done + "·" * (5 - done)
-
-    task_items = [
-        ("💪", "Тренировка"),
-        ("💧", "Вода · 2 л / 8 стаканов"),
-        ("📚", "Чтение · 10 страниц"),
-        ("🥗", "Без фастфуда и снеков"),
-        ("🚫", "День без алкоголя"),
-    ]
+    done = len(completed)
 
     lines = [
-        f"<b>☀️  День {day} из {TOTAL_DAYS}</b>  ·  {h(percentile)} планеты",
+        f"<b>☀️  День {day} из {TOTAL_DAYS}  ·  {h(percentile)} планеты</b>",
         bar,
         "",
-        f"<i>{morning_text}</i>",
-        "",
         DIV,
+        "",
         "<b>📋  Отметь что выполнил сегодня 👇</b>",
-        "",
     ]
+    return "\n".join(lines)
 
-    for i, (icon, label) in enumerate(task_items):
-        mark = "✅" if i in completed else "⬜"
-        lines.append(f"{mark}  {icon}  {label}")
-        if i == 0:
-            for wline in h(workout["description"]).split("\n"):
-                lines.append(f"      <i>{wline}</i>")
 
-    lines += [
+def build_morning_text(user_row, day: int) -> str:
+    """Утреннее мотивационное сообщение с деталями тренировки (отправляется отдельно)."""
+    morning = ct.get_morning(day)
+    workout = get_workout(dict(user_row), day)
+    lines = [
+        morning,
         "",
-        DIV,
-        f"Прогресс дня:  {task_bar}  {done} / 5",
+        f"💪 Тренировка на сегодня:",
+        workout["description"],
     ]
     return "\n".join(lines)
 
@@ -426,6 +413,48 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
+    # ── Закрыть день ──────────────────────────────────────────
+    if data.startswith("close_day:"):
+        day = int(data.split(":")[1])
+        current_day = db.get_current_day(user_id)
+        if day != current_day:
+            await query.answer("Это задание уже не актуально.", show_alert=True)
+            return
+        completed = db.get_completed_tasks(user_id, day)
+        done = len(completed)
+        if done < 5:
+            remaining = 5 - done
+            noun = "задача" if remaining == 1 else "задачи" if remaining < 5 else "задач"
+            await query.answer(
+                f"Осталось {remaining} {noun}. Отметь все — и закроем день! 💪",
+                show_alert=True
+            )
+            return
+        # Все 5 выполнены — закрываем день
+        await query.answer()
+        user_row = db.get_user(user_id)
+        await query.edit_message_text(
+            build_today_screen(user_row, day, completed),
+            parse_mode=ParseMode.HTML,
+            reply_markup=all_done_keyboard(active_tab="tasks")
+        )
+        evening_text = ct.get_evening(day, all_done=True)
+        await query.message.reply_text(
+            f"{evening_text}\n\n<i>День {day} засчитан! 🎉</i>",
+            parse_mode=ParseMode.HTML
+        )
+        if day == TOTAL_DAYS:
+            await query.message.reply_text(ct.FINAL_MESSAGE, parse_mode=ParseMode.MARKDOWN)
+        stats = db.get_stats(user_id)
+        new_achievements = ct.check_achievements(stats["days_completed"])
+        for ach_id in new_achievements:
+            if not db.has_achievement(user_id, ach_id):
+                db.award_achievement(user_id, ach_id)
+                await query.message.reply_text(
+                    ct.get_achievement_text(ach_id), parse_mode=ParseMode.MARKDOWN
+                )
+        return
+
     # ── Отметка задач ─────────────────────────────────────────
     if data.startswith("task:"):
         _, day_str, task_str = data.split(":")
@@ -563,14 +592,20 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
                 db.set_dropout_warning_sent(user["user_id"])
                 continue
 
-            text = build_today_screen(user, day, completed)
+            # Сначала мотивационное сообщение + тренировка
+            user_row = db.get_user(user["user_id"])
+            morning_msg = build_morning_text(user_row, day)
             if 1 <= missed <= 2:
                 last_day = db.get_last_completed_day(user["user_id"])
-                text += f"\n\n{ct.get_miss_message(missed, last_day)}"
-
+                morning_msg += f"\n\n{ct.get_miss_message(missed, last_day)}"
             await context.bot.send_message(
                 chat_id=user["user_id"],
-                text=text,
+                text=morning_msg,
+            )
+            # Затем экран задач (живое сообщение)
+            await context.bot.send_message(
+                chat_id=user["user_id"],
+                text=build_today_screen(user_row, day, completed),
                 parse_mode=ParseMode.HTML,
                 reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
             )
