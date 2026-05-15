@@ -58,17 +58,17 @@ DIV = "· · · · · · · · · · · ·"
 
 def make_progress_bar(day: int, total: int = TOTAL_DAYS, width: int = BAR_WIDTH) -> str:
     if total == 0:
-        return "░" * width + " 0%"
+        return "·" * width + "  0%"
     pct = round(day / total * 100)
     filled = round(day / total * width)
-    return "▓" * filled + "░" * (width - filled) + f" {pct}%"
+    return "●" * filled + "·" * (width - filled) + f"  {pct}%"
 
 
 def make_mini_bar(value: int, total: int, width: int = 10) -> str:
     if total == 0:
-        return "░" * width
+        return "·" * width
     filled = round(value / total * width)
-    return "▓" * filled + "░" * (width - filled)
+    return "●" * filled + "·" * (width - filled)
 
 
 def day_word(n: int) -> str:
@@ -114,7 +114,7 @@ def build_today_screen(user_row, day: int, completed: set) -> str:
     done = len(completed)
     percentile, _ = ct.get_planet_percentile(day - 1)
     bar = make_progress_bar(day - 1)
-    task_bar = "▓" * done + "░" * (5 - done)
+    task_bar = "●" * done + "·" * (5 - done)
 
     task_items = [
         ("💪", "Тренировка"),

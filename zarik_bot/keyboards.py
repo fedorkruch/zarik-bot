@@ -67,10 +67,11 @@ def tab_only_keyboard(active: str) -> InlineKeyboardMarkup:
 
 def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """
-    Кнопки 5 задач + прогресс-строка + таб-бар.
+    Таб-бар сверху (всегда виден) + кнопки 5 задач + прогресс-строка.
     Выполненные — ✅, невыполненные — ⬜.
     """
-    buttons = []
+    buttons = [tab_bar(active_tab)]  # таб-бар первым — всегда виден
+
     for i, (icon, label) in enumerate(TASK_LABELS):
         mark = "✅" if i in completed else "⬜"
         buttons.append([InlineKeyboardButton(
@@ -79,20 +80,19 @@ def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> Inlin
         )])
 
     done = len(completed)
-    progress = "▓" * done + "░" * (5 - done)
+    progress = "●" * done + "·" * (5 - done)
     buttons.append([InlineKeyboardButton(
         text=f"{progress}  {done} / 5",
         callback_data="noop"
     )])
 
-    buttons.append(tab_bar(active_tab))
     return InlineKeyboardMarkup(buttons)
 
 
 def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """Клавиатура после выполнения всех задач — только прогресс + таб-бар."""
     buttons = [
-        [InlineKeyboardButton("▓▓▓▓▓  5 / 5  ✅", callback_data="noop")],
+        [InlineKeyboardButton("●●●●●  5 / 5  ✅", callback_data="noop")],
         tab_bar(active_tab),
     ]
     return InlineKeyboardMarkup(buttons)
