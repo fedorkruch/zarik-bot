@@ -478,6 +478,21 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 # ── Административные команды ──────────────────────────────────
 
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сбрасывает лида — удаляет из таблицы leads (только для администратора)."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+    args = context.args
+    if not args or not args[0].isdigit():
+        await update.message.reply_text("Использование: /reset <user_id>")
+        return
+    user_id = int(args[0])
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
+    await update.message.reply_text(f"✅ Лид {user_id} удалён из CRM. Теперь он пройдёт воронку заново.")
+    logger.info(f"Лид {user_id} сброшен администратором {update.effective_user.id}")
+
+
 async def cmd_leads(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает CRM-статистику по лидам (только для администратора)."""
     if update.effective_user.id != ADMIN_ID:
@@ -527,6 +542,7 @@ def build_app() -> Application:
     )
 
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("leads", cmd_leads))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
