@@ -30,7 +30,7 @@ import database as db
 
 # ── Конфигурация ──────────────────────────────────────────────
 LEAD_BOT_TOKEN       = os.environ["SHAGOV77_BOT_TOKEN"]           # токен @Shagov77_bot
-PROVIDER_TOKEN       = os.environ["PROVIDER_TOKEN"]
+PROVIDER_TOKEN       = os.environ.get("LEAD_PROVIDER_TOKEN") or os.environ["PROVIDER_TOKEN"]
 PARTICIPATION_FEE    = int(os.environ.get("PARTICIPATION_FEE_KOPECKS", "1000"))  # 10₽
 STAKE_MIN_RUB        = int(os.environ.get("STAKE_MIN_RUB", "500"))
 CHANNEL_USERNAME     = os.environ.get("CHANNEL_USERNAME", "")   # @zarik_channel
@@ -277,30 +277,6 @@ async def send_invoice_for_stake(chat_id: int, stake: int, context: ContextTypes
         )
     )
 
-    provider_data = {
-        "receipt": {
-            "items": [
-                {
-                    "description": "Участие в программе Зарик 77 дней",
-                    "quantity": "1.00",
-                    "amount": {"value": f"{participation_rub}.00", "currency": "RUB"},
-                    "vat_code": 1,
-                    "payment_mode": "full_payment",
-                    "payment_subject": "service",
-                },
-                {
-                    "description": "Ставка участника",
-                    "quantity": "1.00",
-                    "amount": {"value": f"{stake_rub}.00", "currency": "RUB"},
-                    "vat_code": 1,
-                    "payment_mode": "full_payment",
-                    "payment_subject": "service",
-                },
-            ],
-            "tax_system_code": 2,
-        }
-    }
-
     try:
         await context.bot.send_invoice(
             chat_id=chat_id,
@@ -314,12 +290,6 @@ async def send_invoice_for_stake(chat_id: int, stake: int, context: ContextTypes
             currency="RUB",
             start_parameter="pay",
             prices=prices,
-            need_email=True,
-            send_email_to_provider=True,
-            need_phone_number=True,
-            send_phone_number_to_provider=True,
-            need_name=True,
-            provider_data=json.dumps(provider_data, ensure_ascii=False),
         )
         logger.info(f"Инвойс отправлен: user={chat_id}, ставка={stake_rub}₽")
     except Exception as e:
