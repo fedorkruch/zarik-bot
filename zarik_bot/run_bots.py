@@ -1,5 +1,5 @@
 """
-run_bots.py — запускает лид-бот и программный бот в отдельных потоках.
+run_bots.py — запускает лид-бот, программный бот и Mini App сервер в отдельных потоках.
 Каждый бот получает собственный asyncio event loop — это надёжнее чем shared loop.
 """
 import asyncio
@@ -29,6 +29,18 @@ def run_bot(build_func, name: str):
     asyncio.run(_run())
 
 
+def run_webapp():
+    """Запускает aiohttp Mini App сервер в отдельном потоке."""
+    async def _run():
+        try:
+            from webapp_server import run_server
+            await run_server()
+        except Exception:
+            logger.exception("❌ Mini App сервер упал с ошибкой")
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     from lead_bot import build_app as build_lead
     from program_bot import build_app as build_program
@@ -45,11 +57,18 @@ if __name__ == "__main__":
         daemon=True,
         name="program-bot",
     )
+    webapp_thread = threading.Thread(
+        target=run_webapp,
+        daemon=True,
+        name="webapp-server",
+    )
 
     lead_thread.start()
     prog_thread.start()
+    webapp_thread.start()
 
-    logger.info("🦥 Оба потока запущены")
+    logger.info("🦥 Боты и Mini App сервер запущены")
 
     lead_thread.join()
     prog_thread.join()
+    webapp_thread.join()

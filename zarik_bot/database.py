@@ -83,6 +83,7 @@ def init_db():
             "ALTER TABLE users ADD COLUMN squat_start INTEGER DEFAULT 10",
             "ALTER TABLE users ADD COLUMN abs_start INTEGER DEFAULT 10",
             "ALTER TABLE users ADD COLUMN dropout_warning_sent_at TEXT DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
         ]
         for migration in migrations:
             try:
@@ -505,6 +506,25 @@ def award_achievement(user_id: int, achievement_id: str):
 def has_dropout_warning(user_id: int) -> bool:
     user = get_user(user_id)
     return bool(user and user["dropout_warning_sent_at"])
+
+
+# ── Режим отображения (Mini App / инлайн-клавиатура) ─────────
+
+def get_use_miniapp(user_id: int) -> bool:
+    """Вернёт True если пользователь использует Mini App (по умолчанию True)."""
+    user = get_user(user_id)
+    if user is None:
+        return True
+    val = user["use_miniapp"]
+    return val != 0  # NULL тоже считаем True
+
+def set_miniapp_mode(user_id: int, use_mini: bool):
+    """Переключает режим: True = Mini App, False = инлайн-клавиатура."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET use_miniapp = ? WHERE user_id = ?",
+            (1 if use_mini else 0, user_id)
+        )
 
 
 # ── Тестирование ──────────────────────────────────────────────

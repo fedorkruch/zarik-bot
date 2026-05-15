@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Зарик Ленивец</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--tg-theme-bg-color,#1c1c1e);
+  color:var(--tg-theme-text-color,#fff);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  overflow-x:hidden;
+}
+
+/* ── Шапка ── */
+.topbar{
+  background:var(--tg-theme-bg-color,#1c1c1e);
+  padding:10px 14px 8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border-bottom:0.5px solid #2c2c2e;
+  flex-shrink:0;
+}
+.avatar{
+  width:34px;height:34px;border-radius:50%;
+  background:#3a3a3c;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+.botname{font-size:14px;font-weight:600;color:var(--tg-theme-text-color,#fff)}
+.online{font-size:11px;color:#30d158}
+
+/* ── Чат ── */
+.chat{
+  flex:1;
+  padding:12px 10px 6px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  overflow-y:auto;
+  padding-bottom:80px;
+}
+
+/* ── Сообщение бота ── */
+.msg-wrap{display:flex;gap:8px;align-items:flex-end}
+.msg-avatar{
+  width:26px;height:26px;border-radius:50%;
+  background:#3a3a3c;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;
+}
+.bubble{
+  background:#2c2c2e;
+  border-radius:16px 16px 16px 4px;
+  padding:10px 13px;
+  flex:1;
+  max-width:calc(100% - 34px);
+}
+.bubble-title{
+  font-size:14px;font-weight:700;
+  color:var(--tg-theme-text-color,#fff);
+  line-height:1.3;
+}
+.bubble-text{
+  font-size:12px;color:#ebebf599;
+  line-height:1.5;margin-top:3px;
+}
+.progress-line{
+  font-family:monospace;
+  color:#30d158;
+  font-size:12px;
+  margin-top:5px;
+  letter-spacing:0.5px;
+}
+.progress-pct{color:#ebebf599;font-size:11px;margin-left:6px}
+.divider-line{
+  border:none;border-top:0.5px solid #3a3a3c;
+  margin:8px 0;
+}
+.section-title{
+  font-size:12px;font-weight:600;
+  color:#ebebf5cc;
+  margin-bottom:2px;
+}
+
+/* ── Кнопки задач ── */
+.tasks-wrap{
+  margin-left:34px;
+  display:flex;flex-direction:column;gap:5px;
+}
+.task-btn{
+  background:#2c2c2e;
+  border-radius:11px;
+  padding:10px 13px;
+  font-size:13px;
+  color:var(--tg-theme-text-color,#fff);
+  display:flex;align-items:center;gap:7px;
+  cursor:pointer;
+  user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  transition:background 0.15s, opacity 0.15s;
+  border:none;width:100%;text-align:left;
+}
+.task-btn:active{opacity:0.7}
+.task-btn.done{color:#30d158}
+.task-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.task-btn-sm{
+  background:#2c2c2e;
+  border-radius:11px;
+  padding:10px 10px;
+  font-size:12px;
+  color:var(--tg-theme-text-color,#fff);
+  display:flex;align-items:center;gap:6px;
+  cursor:pointer;
+  user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  transition:background 0.15s, opacity 0.15s;
+  border:none;width:100%;text-align:left;
+}
+.task-btn-sm:active{opacity:0.7}
+.task-btn-sm.done{color:#30d158}
+
+.close-btn{
+  background:#1c7c3c;
+  border-radius:11px;
+  padding:12px;
+  font-size:13px;font-weight:700;
+  color:#fff;
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  transition:opacity 0.15s;
+  border:none;width:100%;
+}
+.close-btn:active{opacity:0.7}
+.close-btn.disabled{background:#3a3a3c;color:#636366;cursor:default}
+.close-btn.completed{background:#1a5c2c}
+
+/* ── Инлайн вкладки под сообщением ── */
+.itabs-row{
+  margin-left:34px;
+  display:flex;gap:4px;margin-top:2px;
+}
+.itab{
+  flex:1;
+  background:#2c2c2e;
+  border-radius:9px;
+  padding:6px 4px;
+  font-size:10px;
+  color:#636366;
+  text-align:center;
+  cursor:pointer;
+  transition:all 0.15s;
+  border:none;
+}
+.itab.active{
+  background:#0a84ff22;
+  color:#0a84ff;
+  font-weight:600;
+  border:1px solid #0a84ff44;
+}
+
+/* ── Статистика ── */
+.stat-card{
+  background:#2c2c2e;
+  border-radius:14px;
+  padding:14px;
+  margin-left:34px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.stat-row{
+  display:flex;align-items:baseline;gap:6px;
+  font-size:13px;
+}
+.stat-label{color:#ebebf599}
+.stat-value{font-weight:700;color:var(--tg-theme-text-color,#fff)}
+.stat-value.green{color:#30d158}
+.stat-hint{font-size:11px;color:#636366;margin-top:2px;padding-left:20px}
+
+/* ── Ачивки ── */
+.ach-list{margin-left:34px;display:flex;flex-direction:column;gap:6px}
+.ach-item{
+  background:#2c2c2e;
+  border-radius:11px;
+  padding:10px 13px;
+  display:flex;align-items:center;gap:10px;
+  font-size:12px;
+}
+.ach-item.unlocked .ach-name{color:#30d158;font-weight:600}
+.ach-item.locked .ach-name{color:#636366}
+.ach-day{font-size:10px;color:#636366;margin-top:1px}
+
+/* ── Нижний таб-бар (iOS-стиль) ── */
+.tab-bar{
+  position:fixed;
+  bottom:0;left:0;right:0;
+  background:rgba(28,28,30,0.95);
+  border-top:0.5px solid #2c2c2e;
+  display:flex;
+  padding:8px 0 env(safe-area-inset-bottom,10px);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  z-index:100;
+}
+.tab{
+  flex:1;
+  display:flex;flex-direction:column;
+  align-items:center;gap:2px;
+  cursor:pointer;
+  padding:4px 0;
+  -webkit-tap-highlight-color:transparent;
+}
+.tab-icon{font-size:22px;line-height:1}
+.tab-label{font-size:9px;color:#636366;transition:color 0.15s}
+.tab.active .tab-label{color:#0a84ff}
+.tab-dot{
+  width:4px;height:4px;border-radius:50%;
+  background:#0a84ff;
+  margin-top:2px;
+  display:none;
+}
+.tab.active .tab-dot{display:block}
+
+/* ── Загрузка / Ошибка ── */
+.loading{
+  flex:1;display:flex;
+  align-items:center;justify-content:center;
+  flex-direction:column;gap:12px;
+  color:#636366;font-size:14px;
+}
+.spinner{
+  width:28px;height:28px;
+  border:2px solid #3a3a3c;
+  border-top-color:#0a84ff;
+  border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="avatar">🦥</div>
+  <div>
+    <div class="botname">Зарик Ленивец</div>
+    <div class="online">онлайн</div>
+  </div>
+</div>
+
+<div class="chat" id="chat">
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div>Загружаю данные…</div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('tasks')" id="tab-tasks">
+    <div class="tab-icon">☀️</div>
+    <div class="tab-label">Сегодня</div>
+    <div class="tab-dot"></div>
+  </div>
+  <div class="tab" onclick="switchTab('progress')" id="tab-progress">
+    <div class="tab-icon">📊</div>
+    <div class="tab-label">Итоги</div>
+    <div class="tab-dot"></div>
+  </div>
+  <div class="tab" onclick="switchTab('week')" id="tab-week">
+    <div class="tab-icon">📅</div>
+    <div class="tab-label">Неделя</div>
+    <div class="tab-dot"></div>
+  </div>
+  <div class="tab" onclick="switchTab('achievements')" id="tab-achievements">
+    <div class="tab-icon">🏆</div>
+    <div class="tab-label">Ачивки</div>
+    <div class="tab-dot"></div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+let state = null;
+let currentTab = 'tasks';
+
+// ── Загрузка данных ───────────────────────────────────────
+
+async function loadState() {
+  try {
+    const res = await fetch('/api/state', {
+      headers: { 'X-Init-Data': tg.initData }
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showError(err.error === 'not_paid'
+        ? '🦥 Участие не оплачено.\nВернись в бот регистрации.'
+        : 'Ошибка загрузки. Попробуй ещё раз.');
+      return;
+    }
+    state = await res.json();
+    render();
+  } catch(e) {
+    showError('Не удалось подключиться к серверу.\nПроверь соединение.');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('loading').innerHTML =
+    `<div style="text-align:center;padding:20px;color:#636366;white-space:pre-line">${msg}</div>`;
+}
+
+// ── Переключение вкладок ──────────────────────────────────
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.itab').forEach(el => el.classList.remove('active'));
+  const it = document.getElementById('itab-' + tab);
+  if (it) it.classList.add('active');
+  render();
+}
+
+// ── Рендер ───────────────────────────────────────────────
+
+function render() {
+  if (!state) return;
+  const chat = document.getElementById('chat');
+  chat.innerHTML = '';
+
+  if (!state.started) {
+    chat.innerHTML = `<div class="loading" style="flex:1;color:#636366">
+      🦥 Программа начнётся завтра в 6:00.<br>Отдыхай!
+    </div>`;
+    return;
+  }
+
+  if (currentTab === 'tasks')        renderTasks(chat);
+  else if (currentTab === 'progress') renderProgress(chat);
+  else if (currentTab === 'week')     renderWeek(chat);
+  else if (currentTab === 'achievements') renderAchievements(chat);
+}
+
+// ── Экран «Сегодня» ──────────────────────────────────────
+
+function renderTasks(chat) {
+  const { day, total_days, bar, pct_num, completed_tasks } = state;
+  const done = completed_tasks.length;
+  const allDone = done >= 5;
+
+  // Пузырёк с инфо о дне
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-wrap';
+  bubble.innerHTML = `
+    <div class="msg-avatar">🦥</div>
+    <div class="bubble">
+      <div class="bubble-title">☀️ День ${day} из ${total_days} · ${esc(state.percentile)} планеты</div>
+      <div class="progress-line">${bar}<span class="progress-pct">${pct_num}%</span></div>
+      <hr class="divider-line">
+      <div class="section-title">📋 Отметь что выполнил сегодня 👇</div>
+    </div>`;
+  chat.appendChild(bubble);
+
+  // Кнопки задач
+  const FULL = [
+    ['💪', 'Тренировка'],
+    ['💧', 'Вода · 2 л / 8 стаканов'],
+    ['📚', 'Чтение · 10 страниц'],
+  ];
+  const HALF = [
+    ['🥗', 'Питание'],
+    ['🚫', 'Алкоголь'],
+  ];
+  const TASK_ALL = [...FULL, ['🥗', 'Без фастфуда и снеков'], ['🚫', 'День без алкоголя']];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'tasks-wrap';
+
+  FULL.forEach((t, i) => {
+    const isDone = completed_tasks.includes(i);
+    const btn = document.createElement('button');
+    btn.className = 'task-btn' + (isDone ? ' done' : '');
+    btn.innerHTML = `${isDone ? '✅' : '⬜'} ${t[0]} ${t[1]}`;
+    btn.onclick = () => toggleTask(i);
+    wrap.appendChild(btn);
+  });
+
+  // 4 и 5 — рядом
+  const row = document.createElement('div');
+  row.className = 'task-row';
+  HALF.forEach((t, j) => {
+    const i = j + 3;
+    const isDone = completed_tasks.includes(i);
+    const btn = document.createElement('button');
+    btn.className = 'task-btn-sm' + (isDone ? ' done' : '');
+    btn.innerHTML = `${isDone ? '✅' : '⬜'} ${t[0]} ${t[1]}`;
+    btn.onclick = () => toggleTask(i);
+    row.appendChild(btn);
+  });
+  wrap.appendChild(row);
+
+  // Кнопка «Закрыть день»
+  const closeBtn = document.createElement('button');
+  if (allDone) {
+    closeBtn.className = 'close-btn completed';
+    closeBtn.textContent = '🎉 День завершён!';
+    closeBtn.onclick = () => {};
+  } else {
+    closeBtn.className = 'close-btn';
+    closeBtn.textContent = `✅ Закрыть день`;
+    closeBtn.onclick = () => closeDay(closeBtn);
+  }
+  wrap.appendChild(closeBtn);
+
+  chat.appendChild(wrap);
+
+  // Инлайн-табы
+  chat.appendChild(makeItabsRow());
+  chat.scrollTop = 0;
+}
+
+async function toggleTask(idx) {
+  if (!state) return;
+  const day = state.day;
+  const already = state.completed_tasks.includes(idx);
+  if (already) return; // повторное нажатие — ничего
+
+  tg.HapticFeedback.impactOccurred('light');
+  try {
+    const res = await fetch('/api/task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Init-Data': tg.initData },
+      body: JSON.stringify({ task_index: idx })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      state.completed_tasks = data.completed_tasks;
+      renderTasks(document.getElementById('chat'));
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function closeDay(btn) {
+  const done = state.completed_tasks.length;
+  if (done < 5) {
+    const left = 5 - done;
+    tg.showAlert(`Осталось ${left} ${taskWord(left)}. Отметь все — и закроем день! 💪`);
+    return;
+  }
+  tg.HapticFeedback.notificationOccurred('success');
+  btn.textContent = '⏳ Закрываю…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Init-Data': tg.initData },
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.new_achievements && data.new_achievements.length > 0) {
+        const names = data.new_achievements.map(a => `${a.icon} ${a.name}`).join('\n');
+        tg.showAlert(`🏆 Новые ачивки!\n${names}`);
+      }
+      // Обновить состояние
+      await loadState();
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ── Экран «Итоги» ────────────────────────────────────────
+
+function renderProgress(chat) {
+  const { day, total_days, bar, pct_num, days_done, streak, percentile, pct_ctx, next_days, next_pct } = state;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-wrap';
+  bubble.innerHTML = `
+    <div class="msg-avatar">🦥</div>
+    <div class="bubble">
+      <div class="bubble-title">📊 Прогресс · День ${day} из ${total_days}</div>
+      <div class="progress-line">${bar}<span class="progress-pct">${pct_num}%</span></div>
+    </div>`;
+  chat.appendChild(bubble);
+
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+  card.innerHTML = `
+    <div class="stat-row"><span class="stat-label">✅ Засчитано:</span><span class="stat-value">${days_done} ${dayWord(days_done)}</span></div>
+    <div class="stat-row"><span class="stat-label">🔥 Серия:</span><span class="stat-value">${streak} ${dayWord(streak)} подряд</span></div>
+    <div class="stat-row"><span class="stat-label">🌍 Рейтинг:</span><span class="stat-value green">${esc(percentile)} планеты</span></div>
+    ${next_days ? `<div class="stat-hint">ещё ${next_days} ${dayWord(next_days)} → ${esc(next_pct)}</div>` : ''}
+    <hr class="divider-line">
+    <div class="bubble-text" style="font-size:11px">${esc(pct_ctx)}</div>
+  `;
+  chat.appendChild(card);
+  chat.appendChild(makeItabsRow());
+}
+
+// ── Экран «Неделя» ───────────────────────────────────────
+
+function renderWeek(chat) {
+  const { day, days_done, week_num, week_done, week_bar, week_header, group_total, group_active,
+    percentile, next_days, next_pct } = state;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-wrap';
+  bubble.innerHTML = `
+    <div class="msg-avatar">🦥</div>
+    <div class="bubble">
+      <div class="bubble-title">📅 Неделя ${week_num} · ${week_done} из 7 дней</div>
+      <div class="bubble-text" style="margin-top:6px">${mdToHtml(week_header)}</div>
+    </div>`;
+  chat.appendChild(bubble);
+
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+  card.innerHTML = `
+    <div class="stat-row"><span class="stat-label">Эта неделя:</span><span class="stat-value" style="font-family:monospace;color:#30d158">${week_bar}</span><span class="stat-label">${week_done} / 7</span></div>
+    <div class="stat-row"><span class="stat-label">Всего засчитано:</span><span class="stat-value">${days_done}</span><span class="stat-label">из ${day} дней</span></div>
+    <div class="stat-row"><span class="stat-label">🌍</span><span class="stat-value green">${esc(percentile)} планеты</span></div>
+    ${next_days ? `<div class="stat-hint">ещё ${next_days} ${dayWord(next_days)} → ${esc(next_pct)}</div>` : ''}
+    ${group_total > 0 ? `
+    <hr class="divider-line">
+    <div class="stat-row"><span class="stat-label">👥 Группа:</span><span class="stat-value">${group_total} участников</span></div>
+    <div class="stat-row"><span class="stat-label">🏃 Продолжают:</span><span class="stat-value">${group_active}</span></div>` : ''}
+  `;
+  chat.appendChild(card);
+  chat.appendChild(makeItabsRow());
+}
+
+// ── Экран «Ачивки» ───────────────────────────────────────
+
+function renderAchievements(chat) {
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-wrap';
+  bubble.innerHTML = `
+    <div class="msg-avatar">🦥</div>
+    <div class="bubble">
+      <div class="bubble-title">🏆 Твои ачивки</div>
+      <div class="bubble-text">Открывай достижения каждые 7 дней</div>
+    </div>`;
+  chat.appendChild(bubble);
+
+  const list = document.createElement('div');
+  list.className = 'ach-list';
+  (state.achievements || []).forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'ach-item ' + (a.unlocked ? 'unlocked' : 'locked');
+    item.innerHTML = `
+      <div style="font-size:22px">${a.unlocked ? '✅' : '⬜'}</div>
+      <div style="font-size:20px">${a.icon}</div>
+      <div>
+        <div class="ach-name">${esc(a.name)}</div>
+        <div class="ach-day">День ${a.threshold}</div>
+      </div>`;
+    list.appendChild(item);
+  });
+  chat.appendChild(list);
+  chat.appendChild(makeItabsRow());
+}
+
+// ── Инлайн-табы ──────────────────────────────────────────
+
+function makeItabsRow() {
+  const tabs = [
+    ['tasks', '☀️ Сегодня'],
+    ['progress', '📊 Итоги'],
+    ['week', '📅 Неделя'],
+    ['achievements', '🏆 Ачивки'],
+  ];
+  const row = document.createElement('div');
+  row.className = 'itabs-row';
+  tabs.forEach(([key, label]) => {
+    const btn = document.createElement('button');
+    btn.className = 'itab' + (key === currentTab ? ' active' : '');
+    btn.id = 'itab-' + key;
+    btn.textContent = label;
+    btn.onclick = () => switchTab(key);
+    row.appendChild(btn);
+  });
+  return row;
+}
+
+// ── Утилиты ──────────────────────────────────────────────
+
+function esc(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+function mdToHtml(s) {
+  // *text* → <b>text</b>, остальное экранируется
+  return esc(s).replace(/\*([^*]+)\*/g, '<b>$1</b>').replace(/\n/g,'<br>');
+}
+
+function dayWord(n) {
+  if (n % 10 === 1 && n % 100 !== 11) return 'день';
+  if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'дня';
+  return 'дней';
+}
+
+function taskWord(n) {
+  if (n === 1) return 'задача';
+  if ([2,3,4].includes(n)) return 'задачи';
+  return 'задач';
+}
+
+// ── Старт ────────────────────────────────────────────────
+loadState();
+</script>
+</body>
+</html>

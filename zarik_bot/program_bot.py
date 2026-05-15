@@ -30,6 +30,7 @@ from keyboards import (
     tab_bar,
     timezone_keyboard,
     reps_keyboard,
+    webapp_keyboard,
     MAIN_MENU,
     START_MENU,
     TIMEZONES,
@@ -40,8 +41,9 @@ from workout import get_workout
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ["BOT_TOKEN"]
 LEAD_BOT_USERNAME = os.environ.get("LEAD_BOT_USERNAME", "Shagov77_bot")
 ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
+WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.app
 TOTAL_DAYS        = 77
-VERSION           = "v2.0-mockup"  # меняй чтобы проверить версию деплоя
+VERSION           = "v2.1-miniapp"  # меняй чтобы проверить версию деплоя
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -104,6 +106,19 @@ def not_paid_message() -> str:
         "Вернись к боту регистрации, пройди воронку и оплати участие — "
         f"после этого возвращайся сюда.{lead}"
     )
+
+
+# ── Выбор клавиатуры для экрана «Сегодня» ────────────────────
+
+def today_markup(user_id: int, day: int, completed: set):
+    """
+    Если WEBAPP_URL задан и пользователь в Mini App режиме — возвращает
+    кнопку «Открыть задания» + «Не открылось?».
+    Иначе — обычную инлайн-клавиатуру с задачами.
+    """
+    if WEBAPP_URL and db.get_use_miniapp(user_id):
+        return webapp_keyboard(WEBAPP_URL)
+    return tasks_keyboard(day, completed, active_tab="tasks")
 
 
 # ── Построители экранов (HTML) ────────────────────────────────
@@ -275,7 +290,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 build_today_screen(user_row, day, completed),
                 parse_mode=ParseMode.HTML,
-                reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+                reply_markup=today_markup(user.id, day, completed)
             )
     else:
         await update.message.reply_text(
@@ -307,7 +322,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_today_screen(user_row, day, completed),
         parse_mode=ParseMode.HTML,
-        reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+        reply_markup=today_markup(user.id, day, completed)
     )
 
 
@@ -513,6 +528,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "noop":
         await query.answer()
 
+    # ── Фоллбек: Mini App не открылся → переключаем на инлайн ─
+    if data == "miniapp_fallback":
+        await query.answer("Переключаю на режим кнопок 👇")
+        db.set_miniapp_mode(user_id, False)
+        if not db.is_program_started(user_id):
+            await query.answer("Программа ещё не началась — ждём завтра 🦥", show_alert=True)
+            return
+        day       = db.get_current_day(user_id)
+        completed = db.get_completed_tasks(user_id, day)
+        user_row  = db.get_user(user_id)
+        await query.edit_message_text(
+            build_today_screen(user_row, day, completed),
+            parse_mode=ParseMode.HTML,
+            reply_markup=tasks_keyboard(day, completed, active_tab="tasks"),
+        )
+        return
+
 
 # ── Текстовые сообщения ──────────────────────────────────────
 
@@ -608,7 +640,7 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=user["user_id"],
                 text=build_today_screen(user_row, day, completed),
                 parse_mode=ParseMode.HTML,
-                reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+                reply_markup=today_markup(user["user_id"], day, completed)
             )
         except Exception as e:
             logger.warning(f"Утро {user['user_id']}: {e}")
@@ -631,7 +663,7 @@ async def job_afternoon(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=user["user_id"],
                 text=ct.get_afternoon(day, all_done),
-                reply_markup=None if all_done else tasks_keyboard(day, completed, active_tab="tasks")
+                reply_markup=None if all_done else today_markup(user["user_id"], day, completed)
             )
         except Exception as e:
             logger.warning(f"День {user['user_id']}: {e}")
@@ -664,7 +696,7 @@ async def job_evening(context: ContextTypes.DEFAULT_TYPE):
                     chat_id=user["user_id"],
                     text=build_today_screen(user_row, day, completed),
                     parse_mode=ParseMode.HTML,
-                    reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+                    reply_markup=today_markup(user["user_id"], day, completed)
                 )
         except Exception as e:
             logger.warning(f"Вечер {user['user_id']}: {e}")
@@ -732,7 +764,7 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🛠 Тест: день {target} установлен\n\n"
         + build_today_screen(user_row, target, completed),
         parse_mode=ParseMode.HTML,
-        reply_markup=tasks_keyboard(target, completed, active_tab="tasks")
+        reply_markup=today_markup(update.effective_user.id, target, completed)
     )
 
 
@@ -801,7 +833,7 @@ async def cmd_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_today_screen(user_row, day, completed),
         parse_mode=ParseMode.HTML,
-        reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+        reply_markup=today_markup(uid, day, completed)
     )
 
 

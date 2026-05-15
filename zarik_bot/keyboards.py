@@ -1,7 +1,7 @@
 """
 keyboards.py — клавиатуры бота Зарик (77-дневный челлендж)
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, WebAppInfo
 
 # 5 задач: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
 TASK_LABELS = [
@@ -112,6 +112,14 @@ def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> Inlin
     buttons.append(tab_bar(active_tab))
 
     return InlineKeyboardMarkup(buttons)
+
+
+def webapp_keyboard(url: str) -> InlineKeyboardMarkup:
+    """Клавиатура Mini App режима: кнопка открытия + кнопка фоллбека."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 Открыть задания", web_app=WebAppInfo(url=url))],
+        [InlineKeyboardButton("🤔 Не открылось?", callback_data="miniapp_fallback")],
+    ])
 
 
 def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
