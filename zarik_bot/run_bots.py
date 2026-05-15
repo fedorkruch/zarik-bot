@@ -41,7 +41,7 @@ if __name__ == "__main__":
     )
     prog_thread = threading.Thread(
         target=run_bot,
-        args=(build_program, "Программный бот @myeasystartbot"),
+        args=(build_program, "Программный бот @Zarik_Lazy_Bot"),
         daemon=True,
         name="program-bot",
     )
