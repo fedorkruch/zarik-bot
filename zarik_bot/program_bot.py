@@ -5,6 +5,7 @@ program_bot.py — Программный бот Зарика (@Zarik_Lazy_Bot):
 import html
 import logging
 import os
+import re
 import time as _time
 from datetime import datetime as dt
 import pytz
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 _last_start: dict[int, float] = {}
 
 BAR_WIDTH = 20
-DIV = "──────────────────────"
+DIV = "· · · · · · · · · · · ·"
 
 
 # ── Утилиты ───────────────────────────────────────────────────
@@ -83,6 +84,18 @@ def h(text: str) -> str:
     return html.escape(str(text))
 
 
+def md2html(text: str) -> str:
+    """Конвертирует *text* → <b>text</b>, остальное экранирует."""
+    parts = re.split(r'\*(.+?)\*', str(text), flags=re.DOTALL)
+    result = []
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            result.append(html.escape(part))
+        else:
+            result.append(f"<b>{html.escape(part)}</b>")
+    return "".join(result)
+
+
 def not_paid_message() -> str:
     lead = f"\n\n👉 @{LEAD_BOT_USERNAME}" if LEAD_BOT_USERNAME else ""
     return (
@@ -113,7 +126,7 @@ def build_today_screen(user_row, day: int, completed: set) -> str:
 
     lines = [
         f"<b>☀️  День {day} из {TOTAL_DAYS}</b>  ·  {h(percentile)} планеты",
-        f"<code>{bar}</code>",
+        bar,
         "",
         f"<i>{morning_text}</i>",
         "",
@@ -132,7 +145,7 @@ def build_today_screen(user_row, day: int, completed: set) -> str:
     lines += [
         "",
         DIV,
-        f"Прогресс дня:  <code>{task_bar}</code>  {done} / 5",
+        f"Прогресс дня:  {task_bar}  {done} / 5",
     ]
     return "\n".join(lines)
 
@@ -150,7 +163,7 @@ def build_progress_screen(user_id: int) -> str:
     lines = [
         f"<b>📊  Прогресс · День {day} из {TOTAL_DAYS}</b>",
         "",
-        f"<code>{bar}</code>",
+        bar,
         "",
         DIV,
         f"✅  Засчитано:      <b>{done}</b> {day_word(done)}",
@@ -176,16 +189,16 @@ def build_week_screen(user_id: int) -> str:
     week_done   = len({d for d in all_compl if week_start <= d <= day})
     percentile, ctx = ct.get_planet_percentile(done)
     week_bar    = make_mini_bar(week_done, 7)
-    header      = h(ct.get_weekly_header(week_num))
+    header      = md2html(ct.get_weekly_header(week_num))
     group       = db.get_group_stats()
 
     lines = [
         f"<b>📅  Неделя {week_num} · {week_done} из 7 дней</b>",
         "",
-        f"<i>{header}</i>",
+        header,
         "",
         DIV,
-        f"Эта неделя:  <code>{week_bar}</code>  {week_done} / 7",
+        f"Эта неделя:  {week_bar}  {week_done} / 7",
         f"Всего засчитано:  <b>{done}</b> из {day} дней",
         f"🌍  <b>{h(percentile)}</b> планеты",
     ]
