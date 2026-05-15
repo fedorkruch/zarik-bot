@@ -58,32 +58,57 @@ BAR_WIDTH = 20
 
 # ── Утилиты ───────────────────────────────────────────────────
 
-def make_progress_bar(day: int, total: int = TOTAL_DAYS) -> str:
+DIVIDER = "─" * 22
+
+
+def make_progress_bar(day: int, total: int = TOTAL_DAYS, width: int = BAR_WIDTH) -> str:
+    if total == 0:
+        return "░" * width + " 0%"
     pct = round(day / total * 100)
-    filled = round(day / total * BAR_WIDTH)
-    bar = "▓" * filled + "░" * (BAR_WIDTH - filled)
+    filled = round(day / total * width)
+    bar = "▓" * filled + "░" * (width - filled)
     return f"{bar} {pct}%"
+
+
+def make_mini_bar(value: int, total: int, width: int = 12) -> str:
+    if total == 0:
+        return "░" * width
+    filled = round(value / total * width)
+    return "▓" * filled + "░" * (width - filled)
+
+
+def day_word(n: int) -> str:
+    if n == 1:
+        return "день"
+    if 2 <= n <= 4:
+        return "дня"
+    return "дней"
 
 
 def build_checklist_message(user_row, day: int, completed: set) -> str:
     morning_text = ct.get_morning(day)
     workout = get_workout(dict(user_row), day)
-    bar = make_progress_bar(day - 1)
     done = len(completed)
+    percentile, _ = ct.get_planet_percentile(day - 1)
 
     task_items = [
         ("💪", "Тренировка"),
-        ("💧", "Вода · 2 литра / 8 стаканов"),
+        ("💧", "Вода · 2 л / 8 стаканов"),
         ("📚", "Чтение · 10 страниц"),
-        ("🥗", "Без фастфуда, чипсов и снеков"),
+        ("🥗", "Без фастфуда и снеков"),
         ("🚫", "День без алкоголя"),
     ]
 
+    task_bar = "▓" * done + "░" * (5 - done)
+
     lines = [
+        f"☀️  День {day} из {TOTAL_DAYS}   ·   {percentile} планеты",
+        make_progress_bar(day - 1),
+        "",
         morning_text,
         "",
-        f"День {day} из {TOTAL_DAYS}",
-        bar,
+        DIVIDER,
+        "📋  Задачи на сегодня:",
         "",
     ]
 
@@ -92,10 +117,13 @@ def build_checklist_message(user_row, day: int, completed: set) -> str:
         lines.append(f"{mark} {icon} {label}")
         if i == 0:
             for detail_line in workout["description"].split("\n"):
-                lines.append(f"   {detail_line}")
+                lines.append(f"      {detail_line}")
 
-    lines.append("")
-    lines.append(f"Прогресс дня: {done} из 5")
+    lines += [
+        "",
+        DIVIDER,
+        f"Прогресс дня: {task_bar}  {done}/5",
+    ]
 
     return "\n".join(lines)
 
@@ -106,30 +134,35 @@ def build_progress_text(user_id: int) -> str:
     done = stats["days_completed"]
     streak = stats["streak"]
     percentile, percentile_ctx = ct.get_planet_percentile(done)
-
-    def day_word(n):
-        if n == 1:
-            return "день"
-        if 2 <= n <= 4:
-            return "дня"
-        return "дней"
-
-    bar = make_progress_bar(day - 1)
     next_milestone = ct.get_next_percentile_milestone(done)
 
     lines = [
-        f"🦥 Прогресс · День {day} из {TOTAL_DAYS}",
-        bar,
+        f"📊  Прогресс · День {day} из {TOTAL_DAYS}",
         "",
-        f"✅ Засчитано: {done} {day_word(done)}",
-        f"🔥 Серия: {streak} {day_word(streak)} подряд",
-        f"🌍 {percentile} планеты",
+        make_progress_bar(day - 1),
+        "",
+        DIVIDER,
+        f"✅  Засчитано:   {done} {day_word(done)}",
+        f"🔥  Серия:         {streak} {day_word(streak)} подряд",
+        f"🌍  Рейтинг:      {percentile} планеты",
     ]
 
     if next_milestone:
         days_to_next, next_pct = next_milestone
-        lines.append(f"   ещё {days_to_next} {day_word(days_to_next)} — {next_pct}")
+        lines.append(f"      ещё {days_to_next} {day_word(days_to_next)} → {next_pct}")
 
+    lines += ["", DIVIDER, f"_{percentile_ctx}_"]
+
+    return "\n".join(lines)
+
+
+def build_achievements_message(user_id: int) -> str:
+    lines = ["🏆  Твои ачивки:", ""]
+    for ach_id, threshold in ct.ACHIEVEMENT_ORDER:
+        ach = ct.ACHIEVEMENTS[ach_id]
+        unlocked = db.has_achievement(user_id, ach_id)
+        mark = "✅" if unlocked else "⬜"
+        lines.append(f"{mark} {ach['icon']}  День {threshold} — {ach['name']}")
     return "\n".join(lines)
 
 
@@ -380,21 +413,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "📋 Мои задачи на сегодня":
         await cmd_today(update, context)
-    elif text == "📊 Мой прогресс":
+    elif text in ("📊 Прогресс", "📊 Мой прогресс"):
         await cmd_progress(update, context)
+    elif text == "🏆 Ачивки":
+        await update.message.reply_text(
+            build_achievements_message(user_id),
+            reply_markup=MAIN_MENU,
+        )
     elif text == "❓ Помощь":
         await update.message.reply_text(
             "🦥 Как пользоваться Зариком:\n\n"
-            "📋 Мои задачи на сегодня — открыть чеклист\n"
-            "📊 Мой прогресс — статистика и позиция в топе планеты\n\n"
+            "📋 Мои задачи — открыть чеклист и отмечать выполненные\n"
+            "📊 Прогресс — статистика и позиция в топе планеты\n"
+            "🏆 Ачивки — все достижения: открытые и ещё впереди\n\n"
             "Задачи отмечаются кнопками прямо в сообщении.\n"
-            "При любых вопросах — напиши сюда!",
-            reply_markup=MAIN_MENU
+            "При вопросах — пиши сюда!",
+            reply_markup=MAIN_MENU,
         )
     else:
         await update.message.reply_text(
             "🦥 Используй кнопки меню 👇",
-            reply_markup=MAIN_MENU
+            reply_markup=MAIN_MENU,
         )
 
 

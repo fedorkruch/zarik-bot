@@ -109,7 +109,8 @@ def all_done_keyboard() -> InlineKeyboardMarkup:
 MAIN_MENU = ReplyKeyboardMarkup(
     [
         ["📋 Мои задачи на сегодня"],
-        ["📊 Мой прогресс", "❓ Помощь"],
+        ["📊 Прогресс", "🏆 Ачивки"],
+        ["❓ Помощь"],
     ],
     resize_keyboard=True,
     is_persistent=True,
