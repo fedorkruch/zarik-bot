@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", 8080))
-MINIAPP_HTML = Path(__file__).parent / "miniapp.html"
+MINIAPP_HTML   = Path(__file__).parent / "miniapp.html"
+TRACKER_HTML   = Path(__file__).parent / "tracker.html"
 
 TASK_LABELS = [
     ("💪", "Тренировка"),
@@ -142,6 +143,12 @@ async def handle_index(request: web.Request) -> web.Response:
     return web.Response(text=html, content_type="text/html")
 
 
+async def handle_tracker(request: web.Request) -> web.Response:
+    """Публичный интерактивный трекер — подарок лидам из @Shagov77_bot."""
+    html = TRACKER_HTML.read_text(encoding="utf-8")
+    return web.Response(text=html, content_type="text/html")
+
+
 async def handle_state(request: web.Request) -> web.Response:
     uid = get_user_id_from_request(request)
     if not uid:
@@ -221,6 +228,7 @@ def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/",             handle_index)
     app.router.add_get("/app",          handle_index)
+    app.router.add_get("/tracker",      handle_tracker)
     app.router.add_get("/api/state",    handle_state)
     app.router.add_post("/api/task",    handle_task)
     app.router.add_post("/api/close",   handle_close_day)

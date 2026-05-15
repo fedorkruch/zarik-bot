@@ -75,6 +75,21 @@ def init_db():
                 created_at   TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             );
+
+            CREATE TABLE IF NOT EXISTS leads (
+                user_id              INTEGER PRIMARY KEY,
+                username             TEXT,
+                first_name           TEXT,
+                subscribed_at        TEXT,
+                tracker_sent_at      TEXT,
+                pitch_sent_at        TEXT,
+                follow_2_sent_at     TEXT,
+                follow_3_sent_at     TEXT,
+                follow_7_sent_at     TEXT,
+                final_sent_at        TEXT,
+                lead_status          TEXT DEFAULT 'new',
+                created_at           TEXT DEFAULT (datetime('now'))
+            );
         """)
 
         # Миграции для существующих баз данных
@@ -573,6 +588,80 @@ def count_user_photos(user_id: int, photo_type: str = "before") -> int:
             (user_id, photo_type)
         ).fetchone()
     return row["cnt"] if row else 0
+
+
+# ── CRM: лиды (@shagov77_bot) ────────────────────────────────
+
+def upsert_lead(user_id: int, username: str, first_name: str):
+    """Создаёт или обновляет запись лида (не меняет уже выставленные статусы)."""
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO leads (user_id, username, first_name)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                   username   = excluded.username,
+                   first_name = excluded.first_name""",
+            (user_id, username or "", first_name or "")
+        )
+
+def mark_lead_subscribed(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE leads SET subscribed_at = datetime('now'), lead_status = 'subscribed'
+               WHERE user_id = ? AND subscribed_at IS NULL""",
+            (user_id,)
+        )
+
+def mark_lead_tracker_sent(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET tracker_sent_at = datetime('now'), lead_status = 'tracker_sent' WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_pitch_sent(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET pitch_sent_at = datetime('now') WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_follow_up(user_id: int, day: int):
+    col = {2: "follow_2_sent_at", 3: "follow_3_sent_at", 7: "follow_7_sent_at"}.get(day)
+    if not col:
+        return
+    with get_conn() as conn:
+        conn.execute(f"UPDATE leads SET {col} = datetime('now') WHERE user_id = ?", (user_id,))
+
+def mark_lead_final(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET final_sent_at = datetime('now'), lead_status = 'cold' WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_purchased(user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET lead_status = 'purchased' WHERE user_id = ?",
+            (user_id,)
+        )
+
+def get_leads_for_followup() -> list:
+    """Возвращает лидов, которым нужно отправить follow-up (не купили, трекер отправлен)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM leads
+               WHERE lead_status NOT IN ('purchased', 'cold')
+               AND tracker_sent_at IS NOT NULL""",
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+def get_all_leads() -> list:
+    """Все лиды для экспорта/рассылки."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM leads ORDER BY created_at DESC").fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Тестирование ──────────────────────────────────────────────
