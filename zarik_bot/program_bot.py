@@ -34,6 +34,7 @@ from keyboards import (
     reps_keyboard,
     progress_keyboard,
     MAIN_MENU,
+    START_MENU,
     TIMEZONES,
 )
 from workout import get_workout
@@ -154,7 +155,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Проверка оплаты
     if not db.is_payment_confirmed(user.id):
-        await update.message.reply_text(not_paid_message())
+        await update.message.reply_text(not_paid_message(), reply_markup=START_MENU)
         return
 
     user_row = db.get_user(user.id)
@@ -201,13 +202,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
     else:
-        # Шаг payment — онбординг ещё не начат, но оплата есть
-        # Значит save_payment уже вызван, но onboarding_step остался 'timezone'
-        # (это нормальная ситуация при первом /start в программном боте)
+        # Оплата есть, но онбординг не начат — первый /start в программном боте
         await update.message.reply_text(
             "🦥 Привет! Оплата подтверждена — добро пожаловать в программу!\n\n"
             "Последний шаг — выбери часовой пояс, чтобы я присылал задания в 6:00 по твоему времени:",
-            reply_markup=timezone_keyboard()
+            reply_markup=timezone_keyboard(),
         )
 
 
@@ -370,8 +369,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
+    # Кнопка «Начать» работает как /start
+    if text == "🦥 Начать":
+        await cmd_start(update, context)
+        return
+
     if not db.is_payment_confirmed(user_id):
-        await update.message.reply_text(not_paid_message())
+        await update.message.reply_text(not_paid_message(), reply_markup=START_MENU)
         return
 
     if text == "📋 Мои задачи на сегодня":

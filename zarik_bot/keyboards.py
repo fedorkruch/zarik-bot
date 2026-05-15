@@ -114,3 +114,10 @@ MAIN_MENU = ReplyKeyboardMarkup(
     resize_keyboard=True,
     is_persistent=True,
 )
+
+# Кнопка старта — показывается до завершения онбординга
+START_MENU = ReplyKeyboardMarkup(
+    [["🦥 Начать"]],
+    resize_keyboard=True,
+    is_persistent=True,
+)

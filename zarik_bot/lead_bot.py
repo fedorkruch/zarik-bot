@@ -18,7 +18,7 @@ import time as _time
 
 from telegram import (
     ChatMember, InlineKeyboardButton, InlineKeyboardMarkup,
-    LabeledPrice, Update,
+    KeyboardButton, LabeledPrice, ReplyKeyboardMarkup, Update,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -102,6 +102,18 @@ FUNNEL = {
 }
 
 
+START_KEYBOARD = ReplyKeyboardMarkup(
+    [[KeyboardButton("🦥 Начать")]],
+    resize_keyboard=True,
+    one_time_keyboard=False,
+)
+
+REMOVE_KEYBOARD = ReplyKeyboardMarkup(
+    [[KeyboardButton("🦥 Начать")]],
+    resize_keyboard=True,
+)
+
+
 def funnel_keyboard(button_text: str, callback_data: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton(button_text, callback_data=callback_data)
@@ -149,7 +161,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Твоя оплата уже подтверждена!\n\n"
             f"Переходи к боту программы и начинай:\n\n"
-            f"👉 @{PROGRAM_BOT_USERNAME}"
+            f"👉 @{PROGRAM_BOT_USERNAME}",
+            reply_markup=START_KEYBOARD,
         )
         return
 
@@ -160,7 +173,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Для начала подпишись на наш канал {CHANNEL_USERNAME} — "
             f"там всё о программе и полезные материалы.\n\n"
             f"Как подпишешься — нажми кнопку ниже 👇",
-            reply_markup=channel_keyboard()
+            reply_markup=channel_keyboard(),
         )
         return
 
@@ -169,7 +182,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         step["text"],
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=funnel_keyboard(*step["button"])
+        reply_markup=funnel_keyboard(*step["button"]),
     )
 
 
@@ -230,7 +243,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
+    # Кнопка «Начать» или любое сообщение вне контекста ввода ставки
     if user_id not in _awaiting_stake:
+        if text == "🦥 Начать":
+            await cmd_start(update, context)
+        else:
+            await update.message.reply_text(
+                "Нажми кнопку ниже чтобы начать 👇",
+                reply_markup=START_KEYBOARD,
+            )
         return
 
     clean = text.replace(" ", "").replace(",", "").replace("₽", "").replace("руб", "")
