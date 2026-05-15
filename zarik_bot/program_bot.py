@@ -41,6 +41,7 @@ PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ["BOT_TOKEN
 LEAD_BOT_USERNAME = os.environ.get("LEAD_BOT_USERNAME", "Shagov77_bot")
 ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
 TOTAL_DAYS        = 77
+VERSION           = "v2.0-mockup"  # меняй чтобы проверить версию деплоя
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -760,6 +761,50 @@ async def cmd_grant(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Оплата подтверждена для {target_id}. /start — онбординг.")
 
 
+async def cmd_debug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает состояние пользователя и версию бота."""
+    if not is_admin(update.effective_user.id):
+        return
+    uid = update.effective_user.id
+    paid = db.is_payment_confirmed(uid)
+    step = db.get_onboarding_step(uid)
+    started = db.is_program_started(uid)
+    day = db.get_current_day(uid) if started else "—"
+    completed = db.get_completed_tasks(uid, day) if started and day != "—" else set()
+
+    lines = [
+        f"🛠 Debug · <b>{VERSION}</b>",
+        f"user_id: <code>{uid}</code>",
+        f"paid: {paid}",
+        f"onboarding: {step}",
+        f"started: {started}",
+        f"day: {day}",
+        f"completed tasks: {sorted(completed)}",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+
+async def cmd_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает экран задач принудительно (для проверки дизайна)."""
+    if not is_admin(update.effective_user.id):
+        return
+    uid = update.effective_user.id
+    if not db.is_payment_confirmed(uid):
+        await update.message.reply_text("Сначала /grant")
+        return
+    if not db.is_program_started(uid):
+        await update.message.reply_text("Программа не началась. Используй /setday 1")
+        return
+    day = db.get_current_day(uid)
+    user_row = db.get_user(uid)
+    completed = db.get_completed_tasks(uid, day)
+    await update.message.reply_text(
+        build_today_screen(user_row, day, completed),
+        parse_mode=ParseMode.HTML,
+        reply_markup=tasks_keyboard(day, completed, active_tab="tasks")
+    )
+
+
 # ── Сборка приложения ────────────────────────────────────────
 
 async def _post_init(application: Application) -> None:
@@ -786,6 +831,8 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("setday",     cmd_setday))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("grant",      cmd_grant))
+    app.add_handler(CommandHandler("debug",      cmd_debug))
+    app.add_handler(CommandHandler("screen",     cmd_screen))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
