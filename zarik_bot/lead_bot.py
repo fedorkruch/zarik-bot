@@ -34,7 +34,7 @@ PROVIDER_TOKEN       = os.environ.get("LEAD_PROVIDER_TOKEN") or os.environ["PROV
 PARTICIPATION_FEE    = int(os.environ.get("PARTICIPATION_FEE_KOPECKS", "1000"))  # 10₽
 STAKE_MIN_RUB        = int(os.environ.get("STAKE_MIN_RUB", "500"))
 CHANNEL_USERNAME     = os.environ.get("CHANNEL_USERNAME", "")   # @zarik_channel
-PROGRAM_BOT_USERNAME = os.environ.get("PROGRAM_BOT_USERNAME", "myeasystartbot")  # программный бот
+PROGRAM_BOT_USERNAME = os.environ.get("PROGRAM_BOT_USERNAME", "Zarik_Lazy_Bot")  # программный бот
 ADMIN_ID             = int(os.environ.get("ADMIN_ID", "283760217"))
 
 logging.basicConfig(
