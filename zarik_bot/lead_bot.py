@@ -17,7 +17,7 @@ import os
 import time as _time
 
 from telegram import (
-    ChatMember, InlineKeyboardButton, InlineKeyboardMarkup,
+    BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, LabeledPrice, ReplyKeyboardMarkup, Update,
 )
 from telegram.constants import ParseMode
@@ -244,15 +244,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Кнопка «Начать» или любое сообщение вне контекста ввода ставки
+    # Любое сообщение вне контекста ввода ставки → запускаем воронку
     if user_id not in _awaiting_stake:
-        if text == "🦥 Начать":
-            await cmd_start(update, context)
-        else:
-            await update.message.reply_text(
-                "Нажми кнопку ниже чтобы начать 👇",
-                reply_markup=START_KEYBOARD,
-            )
+        await cmd_start(update, context)
         return
 
     clean = text.replace(" ", "").replace(",", "").replace("₽", "").replace("руб", "")
@@ -408,14 +402,27 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 # ── Сборка приложения ────────────────────────────────────────
 
+async def _post_init(application: Application) -> None:
+    """Регистрирует команды бота — кнопка / в поле ввода всегда покажет 'Начать'."""
+    await application.bot.set_my_commands([
+        BotCommand("start", "🦥 Начать"),
+    ])
+
+
 def build_app() -> Application:
     db.init_db()
-    app = Application.builder().token(LEAD_BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(LEAD_BOT_TOKEN)
+        .post_init(_post_init)
+        .build()
+    )
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    # Любое текстовое сообщение — включая первый контакт после очистки истории
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     return app
