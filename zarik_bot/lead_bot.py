@@ -489,7 +489,8 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = int(args[0])
     with db.get_conn() as conn:
         conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
-    await update.message.reply_text(f"✅ Лид {user_id} удалён из CRM. Теперь он пройдёт воронку заново.")
+        conn.execute("UPDATE users SET payment_charge_id = NULL WHERE user_id = ?", (user_id,))
+    await update.message.reply_text(f"✅ Лид {user_id} сброшен: удалён из CRM + оплата очищена. Теперь он пройдёт воронку заново.")
     logger.info(f"Лид {user_id} сброшен администратором {update.effective_user.id}")
 
 
