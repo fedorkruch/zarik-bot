@@ -161,7 +161,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Твоя оплата уже подтверждена!\n\n"
             f"Переходи к боту программы и начинай:\n\n"
-            f"👉 @{PROGRAM_BOT_USERNAME}",
+            f'👉 <a href="https://t.me/{PROGRAM_BOT_USERNAME}">Зарик Ленивец</a>',
+            parse_mode=ParseMode.HTML,
             reply_markup=START_KEYBOARD,
         )
         return
@@ -399,8 +400,9 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         f"Ставка: {stake_rub} ₽ — вернётся когда пройдёшь 77 дней\n\n"
         f"Теперь — последний шаг.\n"
         f"Переходи к боту Зарика и начинай программу:\n\n"
-        f"👉 @{PROGRAM_BOT_USERNAME}\n\n"
-        f"Напиши там /start — он тебя встретит 🦥"
+        f'👉 <a href="https://t.me/{PROGRAM_BOT_USERNAME}">Зарик Ленивец</a>\n\n'
+        f"Нажми кнопку — он тебя встретит 🦥",
+        parse_mode=ParseMode.HTML,
     )
 
 
