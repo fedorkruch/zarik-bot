@@ -84,6 +84,7 @@ def init_db():
             "ALTER TABLE users ADD COLUMN abs_start INTEGER DEFAULT 10",
             "ALTER TABLE users ADD COLUMN dropout_warning_sent_at TEXT DEFAULT NULL",
             "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN share_photos INTEGER DEFAULT NULL",
         ]
         for migration in migrations:
             try:
@@ -242,11 +243,20 @@ def save_squat_start(user_id: int, reps: int):
 
 
 def save_abs_start(user_id: int, reps: int):
-    """Сохраняет стартовый пресс"""
+    """Сохраняет стартовый пресс, переходит к шагу photo."""
     with get_conn() as conn:
         conn.execute(
-            "UPDATE users SET abs_start = ?, onboarding_step = 'done' WHERE user_id = ?",
+            "UPDATE users SET abs_start = ?, onboarding_step = 'photo' WHERE user_id = ?",
             (reps, user_id)
+        )
+
+
+def set_share_photos(user_id: int, value: bool):
+    """Сохраняет согласие пользователя делиться фото до/после."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET share_photos = ? WHERE user_id = ?",
+            (1 if value else 0, user_id)
         )
 
 

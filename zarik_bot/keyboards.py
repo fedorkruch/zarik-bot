@@ -132,6 +132,21 @@ def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
 
 # ── Онбординг ────────────────────────────────────────────────
 
+def welcome_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка старта онбординга."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Поехали 🚀", callback_data="onboarding_start")],
+    ])
+
+
+def photo_keyboard() -> InlineKeyboardMarkup:
+    """Выбор: делиться фото до/после или нет."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Да, поделюсь 📸", callback_data="photo_yes")],
+        [InlineKeyboardButton("Нет, пропустить", callback_data="photo_no")],
+    ])
+
+
 def reps_keyboard(exercise_key: str) -> InlineKeyboardMarkup:
     buttons = []
     for row in DIGIT_ROWS:

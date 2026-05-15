@@ -31,6 +31,8 @@ from keyboards import (
     timezone_keyboard,
     reps_keyboard,
     webapp_keyboard,
+    welcome_keyboard,
+    photo_keyboard,
     MAIN_MENU,
     START_MENU,
     TIMEZONES,
@@ -256,14 +258,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_row = db.get_user(user.id)
     step     = db.get_onboarding_step(user.id)
 
-    if step == "timezone":
+    if step == "welcome":
+        # Онбординг уже начат — просто напоминаем нажать кнопку
         await update.message.reply_text(
-            "🦥 Выбери часовой пояс — буду присылать задания в 6:00 по твоему времени 👇",
+            "🦥 Нажми кнопку «Поехали» чтобы продолжить 👇",
+            reply_markup=welcome_keyboard()
+        )
+    elif step == "timezone":
+        await update.message.reply_text(
+            "🦥 Шаг 1 из 4 · Часовой пояс\n\n"
+            "Выбери свой часовой пояс — буду присылать задания в 6:00 по твоему времени 👇",
             reply_markup=timezone_keyboard()
         )
     elif step == "pushup":
         await update.message.reply_text(
-            "🦥 Давай подберём тренировку под тебя.\n\n"
+            "🦥 Шаг 2 из 4 · Тренировка\n\n"
             "Сколько отжиманий можешь сделать прямо сейчас?",
             reply_markup=reps_keyboard("pushup")
         )
@@ -276,6 +285,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🦥 Сколько раз пресс?",
             reply_markup=reps_keyboard("abs")
+        )
+    elif step == "photo":
+        await update.message.reply_text(
+            "🦥 Шаг 4 из 4 · Фото до/после\n\n"
+            "Хочешь делиться результатами до/после? Это поможет увидеть прогресс за 77 дней.",
+            reply_markup=photo_keyboard()
         )
     elif step == "done":
         if not db.is_program_started(user.id):
@@ -293,11 +308,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=today_markup(user.id, day, completed)
             )
     else:
+        # Первый визит — приветствие и описание программы
         await update.message.reply_text(
-            "🦥 Привет! Оплата подтверждена — добро пожаловать в программу!\n\n"
-            "Выбери часовой пояс, чтобы я присылал задания в 6:00 по твоему времени:",
-            reply_markup=timezone_keyboard()
+            "🦥 Привет! Я Зарик — твой ленивый наставник на ближайшие 77 дней.\n\n"
+            "Вот что мы будем делать каждый день:\n"
+            "💪 Тренировка (подобрана под тебя)\n"
+            "💧 2 литра воды\n"
+            "📚 10 страниц чтения\n"
+            "🥗 День без фастфуда\n"
+            "🚫 День без алкоголя\n\n"
+            "Каждый выполненный день поднимает тебя в топ планеты. "
+            "77 дней — и ты в другой жизни.\n\n"
+            "Сейчас задам несколько вопросов, чтобы собрать нужную информацию "
+            "для комфортного старта. Займёт меньше минуты 🦥",
+            reply_markup=welcome_keyboard()
         )
+        db.set_onboarding_step(user.id, "welcome")
 
 
 # ── Команды меню ──────────────────────────────────────────────
@@ -380,6 +406,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # ── Старт онбординга (кнопка «Поехали») ──────────────────
+    if data == "onboarding_start":
+        await query.answer()
+        db.set_onboarding_step(user_id, "timezone")
+        await query.edit_message_text(
+            "🦥 Шаг 1 из 4 · Часовой пояс\n\n"
+            "Выбери свой часовой пояс — буду присылать задания в 6:00 по твоему времени 👇",
+            reply_markup=timezone_keyboard()
+        )
+        return
+
     # ── Выбор часового пояса ──────────────────────────────────
     if data.startswith("tz:"):
         await query.answer()
@@ -413,20 +450,59 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reps_keyboard("abs")
             )
         elif exercise == "abs":
-            db.save_abs_start(user_id, reps)
-            db.complete_onboarding(user_id)
-            user_row = db.get_user(user_id)
-            workout  = get_workout(dict(user_row), 1)
+            db.save_abs_start(user_id, reps)  # устанавливает step='photo'
             await query.edit_message_text(
                 f"🔥 Пресс: {reps} — красава!\n\n"
-                f"Всё записано. Вот твоя тренировка на День 1:\n\n"
-                f"{workout['description']}\n\n"
-                f"Завтра в 6:00 пришлю первое задание. Отдыхай 🦥"
+                f"🦥 Шаг 4 из 4 · Фото до/после\n\n"
+                f"Хочешь делиться результатами до/после? "
+                f"Это поможет увидеть свой прогресс за 77 дней.",
+                reply_markup=photo_keyboard()
             )
-            await query.message.reply_text(
-                "Меню всегда под рукой 👇",
-                reply_markup=MAIN_MENU
-            )
+        return
+
+    # ── Фото до/после ─────────────────────────────────────────
+    if data == "photo_yes":
+        await query.answer()
+        db.set_share_photos(user_id, True)
+        db.complete_onboarding(user_id)
+        user_row = db.get_user(user_id)
+        workout  = get_workout(dict(user_row), 1)
+        await query.edit_message_text(
+            "📸 Отлично! Вот что нужно сделать:\n\n"
+            "Сделай 2 фото «до»:\n"
+            "• Фронтальное (анфас)\n"
+            "• Боковое (профиль)\n\n"
+            "На фото закрой лицо листом бумаги с датой старта и надписью «Для Зарика» ✍️\n\n"
+            "👗 Девушки — купальник или нижнее бельё\n"
+            "🩳 Парни — шорты или трусы\n\n"
+            "Надевайте что вам комфортнее, но в рамках приличия "
+            "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
+            f"💪 Кстати, твоя тренировка на День 1:\n{workout['description']}"
+        )
+        await query.message.reply_text(
+            "Отлично, твоя программа сформирована под тебя 🎯\n\n"
+            "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
+            "А пока — отдыхай)",
+            reply_markup=MAIN_MENU
+        )
+        return
+
+    if data == "photo_no":
+        await query.answer()
+        db.set_share_photos(user_id, False)
+        db.complete_onboarding(user_id)
+        user_row = db.get_user(user_id)
+        workout  = get_workout(dict(user_row), 1)
+        await query.edit_message_text(
+            f"👌 Понял, без фото — тоже отлично!\n\n"
+            f"💪 Твоя тренировка на День 1:\n{workout['description']}"
+        )
+        await query.message.reply_text(
+            "Отлично, твоя программа сформирована под тебя 🎯\n\n"
+            "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
+            "А пока — отдыхай)",
+            reply_markup=MAIN_MENU
+        )
         return
 
     # ── Закрыть день ──────────────────────────────────────────
