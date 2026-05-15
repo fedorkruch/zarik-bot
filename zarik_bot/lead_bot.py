@@ -277,6 +277,37 @@ async def send_invoice_for_stake(chat_id: int, stake: int, context: ContextTypes
         )
     )
 
+    # Чек по 54-ФЗ — обязателен для ЮКасса.
+    # Суммы в items ДОЛЖНЫ совпадать с суммами в prices (в рублях с копейками).
+    receipt_items = [
+        {
+            "description": "Участие в программе Зарик 77 дней",
+            "quantity": "1.00",
+            "amount": {
+                "value": f"{participation_rub}.00",
+                "currency": "RUB",
+            },
+            "vat_code": 1,            # 1 = без НДС
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        },
+        {
+            "description": "Ставка участника (возврат при завершении)",
+            "quantity": "1.00",
+            "amount": {
+                "value": f"{stake_rub}.00",
+                "currency": "RUB",
+            },
+            "vat_code": 1,
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        },
+    ]
+    provider_data = json.dumps(
+        {"receipt": {"items": receipt_items, "tax_system_code": 2}},
+        ensure_ascii=False,
+    )
+
     try:
         await context.bot.send_invoice(
             chat_id=chat_id,
@@ -290,6 +321,12 @@ async def send_invoice_for_stake(chat_id: int, stake: int, context: ContextTypes
             currency="RUB",
             start_parameter="pay",
             prices=prices,
+            need_name=True,
+            need_email=True,
+            send_email_to_provider=True,
+            need_phone_number=True,
+            send_phone_number_to_provider=True,
+            provider_data=provider_data,
         )
         logger.info(f"Инвойс отправлен: user={chat_id}, ставка={stake_rub}₽")
     except Exception as e:
