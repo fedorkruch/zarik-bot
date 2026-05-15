@@ -46,6 +46,8 @@ LEAD_BOT_USERNAME = os.environ.get("LEAD_BOT_USERNAME", "Shagov77_bot")
 ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
 WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.app
 TOTAL_DAYS        = 77
+# Тест-пользователи: обходят проверку оплаты и сбрасываются при каждом /start
+TEST_USER_IDS     = {283760217, 262479340}
 VERSION           = "v2.1-miniapp"  # меняй чтобы проверить версию деплоя
 
 logging.basicConfig(
@@ -251,6 +253,34 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if now - _last_start.get(user.id, 0) < 5:
         return
     _last_start[user.id] = now
+
+    # ── Тест-пользователи: сброс + обход оплаты ──────────────
+    if user.id in TEST_USER_IDS:
+        db.register_user(user.id, user.username or "", user.first_name or "Тест")
+        if not db.is_payment_confirmed(user.id):
+            db.save_payment(
+                user_id=user.id,
+                charge_id=f"test_{user.id}",
+                participation_fee=0,
+                stake_amount=0,
+            )
+        db.reset_to_onboarding(user.id)
+        await update.message.reply_text(
+            "🦥 Привет! Я Зарик — твой ленивый наставник на ближайшие 77 дней.\n\n"
+            "Вот что мы будем делать каждый день:\n"
+            "💪 Тренировка (подобрана под тебя)\n"
+            "💧 2 литра воды\n"
+            "📚 10 страниц чтения\n"
+            "🥗 День без фастфуда\n"
+            "🚫 День без алкоголя\n\n"
+            "Каждый выполненный день поднимает тебя в топ планеты. "
+            "77 дней — и ты в другой жизни.\n\n"
+            "Сейчас задам несколько вопросов, чтобы собрать нужную информацию "
+            "для комфортного старта. Займёт меньше минуты 🦥",
+            reply_markup=welcome_keyboard()
+        )
+        db.set_onboarding_step(user.id, "welcome")
+        return
 
     if not db.is_payment_confirmed(user.id):
         await update.message.reply_text(not_paid_message(), reply_markup=START_MENU)

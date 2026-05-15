@@ -582,7 +582,31 @@ def reset_user(user_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM task_completions WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_photos WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+
+
+def reset_to_onboarding(user_id: int):
+    """Мягкий сброс для тест-пользователей: обнуляет прогресс и возвращает в начало онбординга.
+    Запись в users сохраняется (оплата остаётся подтверждённой)."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM task_completions WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_photos WHERE user_id = ?", (user_id,))
+        conn.execute(
+            """UPDATE users SET
+                onboarding_step     = 'payment',
+                onboarding_complete = 0,
+                start_date          = '2099-01-01',
+                dropout_warning_sent_at = NULL,
+                share_photos        = NULL,
+                pushup_start        = 10,
+                squat_start         = 10,
+                abs_start           = 10,
+                is_active           = 1
+               WHERE user_id = ?""",
+            (user_id,)
+        )
 
 
 def set_day_for_testing(user_id: int, target_day: int):
