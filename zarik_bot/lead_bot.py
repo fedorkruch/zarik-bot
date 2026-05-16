@@ -46,7 +46,11 @@ WEBAPP_URL           = os.environ.get("WEBAPP_URL", "")
 
 CHANNEL              = "kabanovofficial"           # без @
 CHANNEL_URL          = "https://t.me/kabanovofficial"
-COURSE_PRICE_KOPECKS = 199_000                    # 1990 ₽
+
+# ── Цены (тестовый режим) ─────────────────────────────────────
+# TODO: перед боевым запуском заменить на 199_000 и 100_000
+COURSE_PRICE_KOPECKS = 5_000     # 50 ₽ (тест; боевой — 199_000 = 1990 ₽)
+MIN_STAKE_KOPECKS    = 1_000     # 10 ₽ (тест; боевой — от 100_000 = 1000 ₽)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -69,6 +73,21 @@ def subscribe_keyboard() -> InlineKeyboardMarkup:
 def buy_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Начать за 1990 ₽", callback_data="buy_course")],
+    ])
+
+
+def stake_keyboard() -> InlineKeyboardMarkup:
+    """Выбор размера ставки перед оплатой."""
+    min_r = MIN_STAKE_KOPECKS // 100
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"🎯 {min_r} ₽ — минималка", callback_data=f"stake_{MIN_STAKE_KOPECKS}"),
+            InlineKeyboardButton(f"🔥 {min_r * 5} ₽",         callback_data=f"stake_{MIN_STAKE_KOPECKS * 5}"),
+        ],
+        [
+            InlineKeyboardButton(f"💪 {min_r * 10} ₽",        callback_data=f"stake_{MIN_STAKE_KOPECKS * 10}"),
+            InlineKeyboardButton("Без ставки",                  callback_data="stake_0"),
+        ],
     ])
 
 
@@ -228,6 +247,10 @@ async def job_send_offer(context: ContextTypes.DEFAULT_TYPE):
         "• Трекер задач и прогресса\n"
         "• Еженедельная статистика группы\n"
         "• Ачивки за серии и достижения\n\n"
+        "🎯 *Плюс — добавь ставку на себя*\n\n"
+        "Положи любую сумму сверху стоимости программы.\n"
+        "Пройдёшь все 77 дней — получишь её обратно.\n\n"
+        "_Это не штраф. Это твой личный договор с собой._\n\n"
         "Нажми кнопку — оплата прямо в Telegram 👇"
     )
 
@@ -509,7 +532,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # ── Покупка курса ─────────────────────────────────────────
+    # ── Покупка курса → выбор ставки ─────────────────────────
     if data == "buy_course":
         await query.answer()
         if db.is_payment_confirmed(user_id):
@@ -522,7 +545,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
             return
-        await send_course_invoice(user_id, context)
+        min_r = MIN_STAKE_KOPECKS // 100
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"🎯 *Выбери размер ставки на себя*\n\n"
+                f"Ставка добавляется к стоимости программы.\n"
+                f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
+                f"_Минимальная ставка — {min_r} ₽._"
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=stake_keyboard(),
+        )
+        return
+
+    # ── Выбор ставки → инвойс ────────────────────────────────
+    if data.startswith("stake_"):
+        await query.answer()
+        if db.is_payment_confirmed(user_id):
+            return
+        stake_kopecks = int(data.split("_")[1])
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await send_course_invoice(user_id, context, stake_kopecks=stake_kopecks)
         return
 
 
@@ -533,28 +580,38 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Оплата ───────────────────────────────────────────────────
 
-async def send_course_invoice(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет счёт на оплату курса 1990 ₽."""
+async def send_course_invoice(
+    chat_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+    stake_kopecks: int = 0,
+):
+    """Отправляет счёт на оплату: стоимость программы + ставка."""
     prices = [LabeledPrice("Программа «Зарик 77 дней»", COURSE_PRICE_KOPECKS)]
+    if stake_kopecks > 0:
+        prices.append(LabeledPrice("Ставка на себя (вернём при завершении)", stake_kopecks))
+
+    total_rub = (COURSE_PRICE_KOPECKS + stake_kopecks) // 100
+    description = (
+        f"Доступ к программе 77 дней + ставка {stake_kopecks // 100} ₽"
+        if stake_kopecks > 0
+        else "Полный доступ к программе на 77 дней."
+    )
 
     try:
         await context.bot.send_invoice(
             chat_id=chat_id,
             title="Зарик 77 дней",
-            description=(
-                "Полный доступ к программе на 77 дней. "
-                "Персональный наставник-бот, трекер задач и прогресса."
-            ),
-            payload=f"course_{chat_id}",
+            description=description,
+            payload=f"course_{chat_id}_stake_{stake_kopecks}",
             provider_token=PROVIDER_TOKEN,
             currency="RUB",
             start_parameter="pay",
             prices=prices,
-            need_name=False,
-            need_email=False,
-            need_phone_number=False,
+            need_name=True,
+            need_email=True,
+            need_phone_number=True,
         )
-        logger.info(f"Инвойс отправлен: user={chat_id}")
+        logger.info(f"Инвойс отправлен: user={chat_id}, итого={total_rub}₽, ставка={stake_kopecks // 100}₽")
     except Exception as e:
         logger.error(f"Ошибка send_invoice user={chat_id}: {e}")
         await context.bot.send_message(
@@ -573,15 +630,22 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     user = update.effective_user
     payment = update.message.successful_payment
 
+    # Извлекаем ставку из payload: "course_{uid}_stake_{kopecks}"
+    payload = payment.invoice_payload
+    try:
+        stake_kopecks = int(payload.split("_stake_")[-1])
+    except Exception:
+        stake_kopecks = 0
+
     db.register_user(user.id, user.username or "", user.first_name or "")
     db.save_payment(
         user_id=user.id,
         charge_id=payment.telegram_payment_charge_id,
         participation_fee=COURSE_PRICE_KOPECKS,
-        stake_amount=0,
+        stake_amount=stake_kopecks,
     )
     db.mark_lead_purchased(user.id)
-    logger.info(f"Новый участник: {user.id} | {user.first_name}")
+    logger.info(f"Новый участник: {user.id} | {user.first_name} | ставка={stake_kopecks // 100}₽")
 
     await update.message.reply_text(
         f"🎉 *Оплата подтверждена! Добро пожаловать в программу.*\n\n"
