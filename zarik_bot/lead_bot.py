@@ -798,6 +798,24 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Лид {user_id} сброшен администратором {update.effective_user.id}")
 
 
+DEV_USER_IDS = {283760217, 262479340}
+
+
+async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сбрасывает себя — для тестирования воронки заново. Доступно dev-пользователям."""
+    user_id = update.effective_user.id
+    if user_id not in DEV_USER_IDS:
+        return
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
+        conn.execute("UPDATE users SET payment_charge_id = NULL WHERE user_id = ?", (user_id,))
+    # Сбрасываем in-memory состояние
+    _user_last.pop(user_id, None)
+    context.user_data.clear()
+    await update.message.reply_text("✅ Твой аккаунт сброшен. Отправь /start — начнём с начала.")
+    logger.info(f"DEV сброс: user={user_id}")
+
+
 async def cmd_leads(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает CRM-статистику по лидам (только для администратора)."""
     if update.effective_user.id != ADMIN_ID:
@@ -848,6 +866,7 @@ def build_app() -> Application:
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("leads", cmd_leads))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
