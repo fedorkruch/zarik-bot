@@ -3,12 +3,14 @@ lead_bot.py — @Shagov77_bot: воронка продаж
 Флоу:
   1. /start → проверка подписки на @kabanovofficial
   2. Подписан → отправляем трекер-подарок + добавляем в CRM
-  3. +3 сек → описание курса
-  4. +10 сек → цена 1990 (вместо 4990) + кнопка «Начать»
-  5. +60 сек без клика → «без давления» сообщение
-  6. Day 2 (24h) / Day 3 (48h) / Day 7 (168h) → follow-up с кнопкой
-  7. После Day 7 без покупки → прощальное сообщение
-  8. Оплата → ссылка на @Zarik_Lazy_Bot + CRM обновление
+  3. +20 сек → «Ну как? Всё получилось с трекером?» [Да / Нет]
+  4a. Нет → инструкция iOS/Android → +20 сек → снова вопрос (макс. 2 раза)
+  4b. Да (или 2-й раз нет → авто) → «Супер!» → +2 сек → знакомство с программой
+  5. +10 сек → оффер 1990 ₽ + кнопка «Начать»
+  6. +60 сек без клика → «без давления»
+  7. Day 2 (24h) / Day 3 (48h) / Day 7 (168h) → follow-up с кнопкой
+  8. После Day 7 без покупки → прощальное сообщение
+  9. Оплата → ссылка на @Zarik_Lazy_Bot + CRM обновление
 
 Переменные окружения:
   SHAGOV77_BOT_TOKEN     — токен @Shagov77_bot
@@ -80,6 +82,14 @@ def tracker_keyboard() -> InlineKeyboardMarkup | None:
     return None
 
 
+def tracker_check_keyboard(attempt: int = 1) -> InlineKeyboardMarkup:
+    """Кнопки ответа на вопрос «Всё получилось с трекером?»."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да, всё отлично!", callback_data="tracker_ok")],
+        [InlineKeyboardButton("😕 Нет, не получилось", callback_data=f"tracker_fail_{attempt}")],
+    ])
+
+
 # ── Проверка подписки ─────────────────────────────────────────
 
 async def is_subscribed(user_id: int, bot) -> bool:
@@ -101,10 +111,9 @@ async def is_subscribed(user_id: int, bot) -> bool:
 
 async def do_send_tracker(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
-    Шаг 2: финальная проверка подписки, отправляем трекер-подарок, пишем в CRM,
-    затем запускаем цепочку отложенных сообщений.
+    Шаг 2: финальная проверка подписки, отправляем трекер-подарок,
+    затем через 20 сек спрашиваем «Всё получилось?».
     """
-    # Повторная проверка — на случай если пользователь отписался между нажатием кнопки и отправкой
     if not await is_subscribed(user_id, context.bot):
         await context.bot.send_message(
             chat_id=user_id,
@@ -141,31 +150,52 @@ async def do_send_tracker(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     db.mark_lead_tracker_sent(user_id)
 
-    # +3 сек → описание курса
+    # +20 сек → спрашиваем про трекер
     context.job_queue.run_once(
-        job_send_description,
-        when=3,
-        data=user_id,
-        name=f"desc_{user_id}",
+        job_ask_tracker_check,
+        when=20,
+        data={"user_id": user_id, "attempt": 1},
+        name=f"tracker_check_{user_id}",
     )
 
 
-async def job_send_description(context: ContextTypes.DEFAULT_TYPE):
-    """Шаг 3: описание курса (+3 сек после трекера)."""
+async def job_ask_tracker_check(context: ContextTypes.DEFAULT_TYPE):
+    """Шаг 3: спрашиваем, всё ли получилось с трекером."""
+    data = context.job.data
+    user_id = data["user_id"]
+    attempt = data.get("attempt", 1)
+
+    if db.is_payment_confirmed(user_id):
+        return
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text="🦥 Ну как? Всё получилось с трекером? Нравится? 👇",
+        reply_markup=tracker_check_keyboard(attempt),
+    )
+
+
+async def job_send_intro(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Шаг 4: знакомство с программой 77 дней.
+    Запускается после ответа «Да» или после двух «Нет».
+    """
     user_id = context.job.data
 
+    if db.is_payment_confirmed(user_id):
+        return
+
     text = (
-        "🦥 *77 дней. 5 задач. Каждый день.*\n\n"
-        "Не нужна сила воли.\n"
-        "Не нужны часовые тренировки.\n"
-        "Не нужна идеальная диета.\n\n"
-        "Нужен только *следующий шаг*.\n\n"
-        "💪 Отжимания / приседания / пресс — с нагрузкой под тебя\n"
-        "💧 2 литра воды в день\n"
-        "📚 10 страниц полезной книги\n"
-        "🥗 День без фастфуда и снеков\n"
-        "🚫 День без алкоголя\n\n"
-        "_Маленькое, но своё — всегда сильнее большого чужого._"
+        "🦥 Кстати, мы уже собрали *программу 77 дней* — "
+        "для тех, кто хочет реальных изменений без надрыва.\n\n"
+        "Каждое утро твой личный бот-наставник присылает тебе задачи дня. "
+        "Ты отмечаешь что выполнил — и видишь как растёт прогресс.\n\n"
+        "Никакого жёсткого расписания.\n"
+        "Никаких часовых тренировок.\n"
+        "Никакого «начну с понедельника».\n\n"
+        "Просто маленькие шаги каждый день — "
+        "и через 77 дней ты не узнаешь себя.\n\n"
+        "_Это работает, потому что не требует героизма — только привычки._"
     )
 
     await context.bot.send_message(
@@ -184,7 +214,7 @@ async def job_send_description(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_send_offer(context: ContextTypes.DEFAULT_TYPE):
-    """Шаг 4: цена 1990 ₽ + кнопка «Начать» (+10 сек после описания)."""
+    """Шаг 5: цена 1990 ₽ + кнопка «Начать»."""
     user_id = context.job.data
 
     if db.is_payment_confirmed(user_id):
@@ -219,7 +249,7 @@ async def job_send_offer(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job_no_pressure(context: ContextTypes.DEFAULT_TYPE):
-    """Шаг 5: без давления — если не нажал за 60 сек."""
+    """Шаг 6: без давления — если не нажал за 60 сек."""
     user_id = context.job.data
 
     if db.is_payment_confirmed(user_id):
@@ -304,12 +334,10 @@ async def job_followup_check(context: ContextTypes.DEFAULT_TYPE):
 
         hours = (now - pitch_dt).total_seconds() / 3600
 
-        # Если купил — обновляем статус и пропускаем
         if db.is_payment_confirmed(user_id):
             db.mark_lead_purchased(user_id)
             continue
 
-        # Day 7 (168h+) — финальный follow-up + прощание
         if hours >= 168 and not lead.get("follow_7_sent_at") and not lead.get("final_sent_at"):
             await _send_followup(context, user_id, day=7)
             context.job_queue.run_once(
@@ -320,7 +348,6 @@ async def job_followup_check(context: ContextTypes.DEFAULT_TYPE):
             )
             continue
 
-        # Day 3 (48h+)
         if (hours >= 48
                 and not lead.get("follow_3_sent_at")
                 and not lead.get("follow_7_sent_at")
@@ -328,7 +355,6 @@ async def job_followup_check(context: ContextTypes.DEFAULT_TYPE):
             await _send_followup(context, user_id, day=3)
             continue
 
-        # Day 2 (24h+)
         if hours >= 24 and not lead.get("follow_2_sent_at"):
             await _send_followup(context, user_id, day=2)
             continue
@@ -360,16 +386,13 @@ async def job_farewell(context: ContextTypes.DEFAULT_TYPE):
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # Защита от спама
     now = _time.time()
     if now - _last_start.get(user.id, 0) < 5:
         return
     _last_start[user.id] = now
 
-    # Фиксируем лида в CRM
     db.upsert_lead(user.id, user.username or "", user.first_name or "")
 
-    # Уже оплатил — напоминаем про программный бот
     if db.is_payment_confirmed(user.id):
         await update.message.reply_text(
             f"✅ Ты уже в программе!\n\n"
@@ -379,7 +402,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Всегда показываем приветствие + предложение подписаться
     await update.message.reply_text(
         f"🦥 Привет, {user.first_name}!\n\n"
         f"Я подготовил тебе подарок — универсальный интерактивный трекер для достижения твоих задач.\n\n"
@@ -395,11 +417,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     logger.info(f"[CB] user={user_id} data={data}")
 
-    # Проверка подписки на канал
+    # ── Проверка подписки на канал ────────────────────────────
     if data == "check_sub":
-        # Сначала проверяем подписку, потом отвечаем на callback
         subscribed = await is_subscribed(user_id, context.bot)
-
         if subscribed:
             await query.answer("✅ Подписка подтверждена!")
             db.upsert_lead(user_id, query.from_user.username or "", query.from_user.first_name or "")
@@ -410,10 +430,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"[CB] edit_markup error (ignored): {e}")
             await do_send_tracker(user_id, context)
         else:
-            await query.answer(
-                "Подписка не обнаружена. Подпишись и нажми снова.",
-                show_alert=True,
-            )
+            await query.answer("Подписка не обнаружена. Подпишись и нажми снова.", show_alert=True)
             try:
                 await query.edit_message_text(
                     "🦥 Я не обнаружил подписки на канал.\n\n"
@@ -425,7 +442,73 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"[CB] edit_text error (ignored): {e}")
         return
 
-    # Покупка курса
+    # ── «Да, всё отлично!» ────────────────────────────────────
+    if data == "tracker_ok":
+        await query.answer()
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎉 Супер, я очень рад что всё получилось!",
+        )
+        context.job_queue.run_once(
+            job_send_intro,
+            when=2,
+            data=user_id,
+            name=f"intro_{user_id}",
+        )
+        return
+
+    # ── «Нет, не получилось» ──────────────────────────────────
+    if data.startswith("tracker_fail"):
+        await query.answer()
+        attempt = int(data.split("_")[-1])
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+
+        # Инструкция для iOS и Android
+        instructions = (
+            "📱 *Как открыть трекер и сохранить на экран:*\n\n"
+            "*Если у тебя iPhone (iOS):*\n"
+            "1️⃣ Нажми кнопку «📊 Открыть трекер» выше\n"
+            "2️⃣ Нажми *···* (три точки) вверху браузера\n"
+            "3️⃣ Выбери *Открыть в Safari*\n"
+            "4️⃣ В Safari: *Поделиться* → *На экран Домой*\n\n"
+            "*Если у тебя Android:*\n"
+            "1️⃣ Нажми кнопку «📊 Открыть трекер» выше\n"
+            "2️⃣ Chrome покажет баннер — нажми *Добавить*\n"
+            "Или: меню *⋮* → *Добавить на главный экран*\n\n"
+            "Сделай это — и трекер будет работать как отдельное приложение 👆"
+        )
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=instructions,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+        if attempt < 2:
+            # Спрашиваем снова через 20 секунд
+            context.job_queue.run_once(
+                job_ask_tracker_check,
+                when=20,
+                data={"user_id": user_id, "attempt": attempt + 1},
+                name=f"tracker_check_{user_id}",
+            )
+        else:
+            # Второй «нет» — всё равно двигаемся дальше через 30 сек
+            context.job_queue.run_once(
+                job_send_intro,
+                when=30,
+                data=user_id,
+                name=f"intro_{user_id}",
+            )
+        return
+
+    # ── Покупка курса ─────────────────────────────────────────
     if data == "buy_course":
         await query.answer()
         if db.is_payment_confirmed(user_id):
@@ -522,7 +605,9 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with db.get_conn() as conn:
         conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
         conn.execute("UPDATE users SET payment_charge_id = NULL WHERE user_id = ?", (user_id,))
-    await update.message.reply_text(f"✅ Лид {user_id} сброшен: удалён из CRM + оплата очищена. Теперь он пройдёт воронку заново.")
+    await update.message.reply_text(
+        f"✅ Лид {user_id} сброшен: удалён из CRM + оплата очищена. Теперь он пройдёт воронку заново."
+    )
     logger.info(f"Лид {user_id} сброшен администратором {update.effective_user.id}")
 
 
