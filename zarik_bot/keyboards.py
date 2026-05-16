@@ -165,7 +165,7 @@ def progress_keyboard() -> InlineKeyboardMarkup:
 def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
     """Главное меню. Если webapp_url задан — кнопка «Трекер» открывает Mini App."""
     bottom_row = (
-        [KeyboardButton("📱 Трекер", web_app=WebAppInfo(url=webapp_url))]
+        [KeyboardButton("📱 МиниАПП", web_app=WebAppInfo(url=webapp_url))]
         if webapp_url
         else ["❓ Помощь"]
     )
