@@ -21,7 +21,7 @@ PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_T
 PORT = int(os.environ.get("PORT", 8080))
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
-ZARIK_JPG           = Path(__file__).parent.parent / "zarik.jpg"
+SHAGI_PNG           = Path(__file__).parent.parent / "Shagi.png"
 
 TASK_LABELS = [
     ("💪", "Тренировка"),
@@ -153,8 +153,8 @@ async def handle_tracker(request: web.Request) -> web.Response:
 async def handle_manifest(request: web.Request) -> web.Response:
     """PWA manifest.json для трекера."""
     manifest = {
-        "name": "Трекер · Зарик",
-        "short_name": "Зарик",
+        "name": "Трекер задач · Зарик",
+        "short_name": "Трекер задач",
         "description": "Трекер целей от Зарика-Ленивца",
         "start_url": "/tracker",
         "display": "standalone",
@@ -209,10 +209,10 @@ self.addEventListener('fetch', e => {
 
 
 async def handle_apple_icon(request: web.Request) -> web.Response:
-    """Apple Touch Icon — zarik.jpg как иконка для сохранения на экран."""
-    if ZARIK_JPG.exists():
-        data = ZARIK_JPG.read_bytes()
-        return web.Response(body=data, content_type="image/jpeg")
+    """Apple Touch Icon — Shagi.png как иконка для сохранения на экран."""
+    if SHAGI_PNG.exists():
+        data = SHAGI_PNG.read_bytes()
+        return web.Response(body=data, content_type="image/png")
     # Фоллбэк — пустой 1×1 PNG
     import base64
     png1x1 = base64.b64decode(
