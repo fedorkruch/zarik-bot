@@ -48,9 +48,10 @@ CHANNEL              = "kabanovofficial"           # без @
 CHANNEL_URL          = "https://t.me/kabanovofficial"
 
 # ── Цены (тестовый режим) ─────────────────────────────────────
-# TODO: перед боевым запуском заменить на 199_000 и 100_000
-COURSE_PRICE_KOPECKS = 5_000     # 50 ₽ (тест; боевой — 199_000 = 1990 ₽)
-MIN_STAKE_KOPECKS    = 1_000     # 10 ₽ (тест; боевой — от 100_000 = 1000 ₽)
+# TODO: перед боевым запуском заменить на 199_000
+COURSE_PRICE_KOPECKS  = 5_000    # 50 ₽ (тест; боевой — 199_000 = 1990 ₽)
+RECEIPT_PRICE_KOPECKS = 6_000    # 60 ₽ — цена в чеке ЮКасса (54-ФЗ)
+MIN_STAKE_KOPECKS     = 1_000    # минимальная ставка 10 ₽
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -76,18 +77,11 @@ def buy_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def stake_keyboard() -> InlineKeyboardMarkup:
-    """Выбор размера ставки перед оплатой."""
-    min_r = MIN_STAKE_KOPECKS // 100
+def stake_confirm_keyboard() -> InlineKeyboardMarkup:
+    """Выбор: ставить или нет."""
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(f"🎯 {min_r} ₽ — минималка", callback_data=f"stake_{MIN_STAKE_KOPECKS}"),
-            InlineKeyboardButton(f"🔥 {min_r * 5} ₽",         callback_data=f"stake_{MIN_STAKE_KOPECKS * 5}"),
-        ],
-        [
-            InlineKeyboardButton(f"💪 {min_r * 10} ₽",        callback_data=f"stake_{MIN_STAKE_KOPECKS * 10}"),
-            InlineKeyboardButton("Без ставки",                  callback_data="stake_0"),
-        ],
+        [InlineKeyboardButton("✅ Да, хочу поставить", callback_data="stake_yes")],
+        [InlineKeyboardButton("➡️ Нет, перейти к оплате", callback_data="stake_no")],
     ])
 
 
@@ -532,7 +526,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # ── Покупка курса → выбор ставки ─────────────────────────
+    # ── Покупка курса → предложение ставки ───────────────────
     if data == "buy_course":
         await query.answer()
         if db.is_payment_confirmed(user_id):
@@ -549,32 +543,75 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=user_id,
             text=(
-                f"🎯 *Выбери размер ставки на себя*\n\n"
+                f"🎯 *Хочешь добавить ставку на себя?*\n\n"
                 f"Ставка добавляется к стоимости программы.\n"
                 f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
-                f"_Минимальная ставка — {min_r} ₽._"
+                f"_Минимальная сумма — {min_r} ₽._"
             ),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=stake_keyboard(),
+            reply_markup=stake_confirm_keyboard(),
         )
         return
 
-    # ── Выбор ставки → инвойс ────────────────────────────────
-    if data.startswith("stake_"):
+    # ── Да, хочу ставку → просим ввести сумму ────────────────
+    if data == "stake_yes":
         await query.answer()
         if db.is_payment_confirmed(user_id):
             return
-        stake_kopecks = int(data.split("_")[1])
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await send_course_invoice(user_id, context, stake_kopecks=stake_kopecks)
+        context.user_data["awaiting_stake"] = True
+        min_r = MIN_STAKE_KOPECKS // 100
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):",
+        )
+        return
+
+    # ── Нет, без ставки → сразу инвойс ───────────────────────
+    if data == "stake_no":
+        await query.answer()
+        if db.is_payment_confirmed(user_id):
+            return
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await send_course_invoice(user_id, context, stake_kopecks=0)
         return
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Любое текстовое сообщение перезапускает воронку."""
+    """Текстовые сообщения: ввод ставки или перезапуск воронки."""
+    user_id = update.effective_user.id
+
+    # Ожидаем ввод суммы ставки
+    if context.user_data.get("awaiting_stake"):
+        text = update.message.text.strip().replace(",", ".").replace(" ", "")
+        try:
+            amount_rub = float(text)
+        except ValueError:
+            await update.message.reply_text(
+                f"⚠️ Введи число, например: 100\n"
+                f"Минимальная сумма — {MIN_STAKE_KOPECKS // 100} ₽."
+            )
+            return
+
+        amount_kopecks = int(amount_rub * 100)
+        if amount_kopecks < MIN_STAKE_KOPECKS:
+            await update.message.reply_text(
+                f"⚠️ Минимальная ставка — {MIN_STAKE_KOPECKS // 100} ₽. Введи другую сумму:"
+            )
+            return
+
+        context.user_data.pop("awaiting_stake", None)
+        if db.is_payment_confirmed(user_id):
+            return
+        await send_course_invoice(user_id, context, stake_kopecks=amount_kopecks)
+        return
+
     await cmd_start(update, context)
 
 
@@ -597,7 +634,7 @@ def _build_receipt(stake_kopecks: int = 0) -> str:
         {
             "description": "Программа «Зарик 77 дней»",
             "quantity": "1.00",
-            "amount": {"value": _rub(COURSE_PRICE_KOPECKS), "currency": "RUB"},
+            "amount": {"value": _rub(RECEIPT_PRICE_KOPECKS), "currency": "RUB"},
             "vat_code": 1,
             "payment_mode": "full_payment",
             "payment_subject": "service",
