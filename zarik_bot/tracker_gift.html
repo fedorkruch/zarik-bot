@@ -345,8 +345,7 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="card-title">Задачи</div>
     <div id="set-tasks"></div>
   </div>
-  <button class="btn btn-secondary" id="set-export">Экспорт данных (JSON)</button>
-  <button class="btn btn-danger" id="set-reset" style="margin-top:8px">Сбросить трекер</button>
+  <button class="btn btn-danger" id="set-reset">Сбросить трекер</button>
   <div style="height:10px"></div>
 </div>
 
@@ -588,7 +587,8 @@ function renderSettings(){
   $('set-info').textContent=cfg.days+' дней · начат '+cfg.start;
   $('set-tasks').innerHTML=cfg.tasks.map((t,i)=>`<div class="set-task"><span style="color:var(--muted);font-size:12px;min-width:20px">${i+1}.</span><span>${esc(t)}</span></div>`).join('');
 }
-$('set-export').onclick=()=>{
+// export removed
+if(false){
   const b=new Blob([JSON.stringify({cfg,data},null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tracker.json';a.click();
 };
