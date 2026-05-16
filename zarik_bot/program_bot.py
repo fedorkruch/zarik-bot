@@ -130,20 +130,8 @@ def today_markup(user_id: int, day: int, completed: set):
 # ── Построители экранов (HTML) ────────────────────────────────
 
 def build_today_screen(user_row, day: int, completed: set) -> str:
-    """Экран «Сегодня» — минималистичный: заголовок + прогресс + призыв к действию."""
-    percentile, _ = ct.get_planet_percentile(day - 1)
-    bar = make_progress_bar(day - 1)
-    done = len(completed)
-
-    lines = [
-        f"<b>☀️  День {day} из {TOTAL_DAYS}  ·  {h(percentile)} планеты</b>",
-        bar,
-        "",
-        DIV,
-        "",
-        "<b>📋  Отметь что выполнил сегодня 👇</b>",
-    ]
-    return "\n".join(lines)
+    """Экран трекера — только призыв к действию, без заголовка и прогресс-бара."""
+    return "<b>📋  Отметь что выполнил сегодня 👇</b>"
 
 
 def build_morning_text(user_row, day: int) -> str:

@@ -17,8 +17,8 @@ TASK_SHORT = [
     "💪 Тренировка",
     "💧 Вода",
     "📚 Чтение",
-    "🥗 Питание",
-    "🚫 Алкоголь",
+    "🥗 Без фастфуда",
+    "🚫 Без алкоголя сегодня",
 ]
 
 # Часовые пояса СНГ и ближнего зарубежья
@@ -76,32 +76,16 @@ def tab_only_keyboard(active: str) -> InlineKeyboardMarkup:
 
 def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """
-    Трекер задач:
-      Задачи 0-2 — на всю ширину (полный лейбл)
-      Задачи 3-4 — рядом в одну строку (короткий лейбл)
-      День закрывается автоматически при 5 галочках — кнопки «Закрыть» нет.
+    Трекер задач: все 5 кнопок — каждая на отдельной строке.
+    День закрывается автоматически при 5 галочках.
     """
     buttons = []
-
-    # Задачи 0, 1, 2 — каждая на всю строку
-    for i in range(3):
-        icon, label = TASK_LABELS[i]
+    for i in range(5):
         mark = "✅" if i in completed else "⬜"
         buttons.append([InlineKeyboardButton(
-            text=f"{mark}  {icon}  {label}",
-            callback_data=f"task:{day}:{i}"
-        )])
-
-    # Задачи 3 и 4 — в одну строку с короткими подписями
-    row_34 = []
-    for i in range(3, 5):
-        mark = "✅" if i in completed else "⬜"
-        row_34.append(InlineKeyboardButton(
             text=f"{mark}  {TASK_SHORT[i]}",
             callback_data=f"task:{day}:{i}"
-        ))
-    buttons.append(row_34)
-
+        )])
     return InlineKeyboardMarkup(buttons)
 
 
