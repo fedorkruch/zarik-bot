@@ -76,11 +76,10 @@ def tab_only_keyboard(active: str) -> InlineKeyboardMarkup:
 
 def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """
-    Макет как в мокапе:
+    Трекер задач:
       Задачи 0-2 — на всю ширину (полный лейбл)
       Задачи 3-4 — рядом в одну строку (короткий лейбл)
-      Кнопка «Закрыть день»
-      Таб-бар снизу
+      День закрывается автоматически при 5 галочках — кнопки «Закрыть» нет.
     """
     buttons = []
 
@@ -103,14 +102,6 @@ def tasks_keyboard(day: int, completed: set, active_tab: str = "tasks") -> Inlin
         ))
     buttons.append(row_34)
 
-    # Кнопка «Закрыть день»
-    done = len(completed)
-    close_text = "🎉  День завершён!" if done >= 5 else "✅  Закрыть день"
-    buttons.append([InlineKeyboardButton(close_text, callback_data=f"close_day:{day}")])
-
-    # Таб-бар всегда снизу
-    buttons.append(tab_bar(active_tab))
-
     return InlineKeyboardMarkup(buttons)
 
 
@@ -123,10 +114,9 @@ def webapp_keyboard(url: str) -> InlineKeyboardMarkup:
 
 
 def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
-    """Клавиатура после закрытия дня — подтверждение + таб-бар."""
+    """Клавиатура после закрытия дня — только подтверждение."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎉  День завершён!", callback_data="noop")],
-        tab_bar(active_tab),
     ])
 
 

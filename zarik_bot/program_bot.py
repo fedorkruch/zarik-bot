@@ -147,14 +147,22 @@ def build_today_screen(user_row, day: int, completed: set) -> str:
 
 
 def build_morning_text(user_row, day: int) -> str:
-    """Утреннее мотивационное сообщение с деталями тренировки (отправляется отдельно)."""
-    morning = ct.get_morning(day)
+    """Утреннее мотивационное послание — только текст, без тренировки."""
+    return ct.get_morning(day)
+
+
+def build_tasks_list(user_row, day: int) -> str:
+    """Задания на день — отдельное сообщение после мотивации."""
     workout = get_workout(dict(user_row), day)
     lines = [
-        morning,
+        f"<b>📋 Задания на день {day}:</b>",
         "",
-        f"💪 Тренировка на сегодня:",
-        workout["description"],
+        f"💪 <b>Тренировка на сегодня:</b>\n{workout['description']}",
+        "",
+        "💧 <b>Цель по воде:</b> 2 литра / 8 стаканов",
+        "📚 <b>Цель по чтению:</b> 10 страниц",
+        "🥗 Без фастфуда сегодня",
+        "🚫 Без алкоголя",
     ]
     return "\n".join(lines)
 
@@ -775,7 +783,7 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
                 db.set_dropout_warning_sent(user["user_id"])
                 continue
 
-            # Сначала мотивационное сообщение + тренировка
+            # 1. Мотивационное послание
             user_row = db.get_user(user["user_id"])
             morning_msg = build_morning_text(user_row, day)
             if 1 <= missed <= 2:
@@ -785,7 +793,13 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=user["user_id"],
                 text=morning_msg,
             )
-            # Затем экран задач (живое сообщение)
+            # 2. Задания на день
+            await context.bot.send_message(
+                chat_id=user["user_id"],
+                text=build_tasks_list(user_row, day),
+                parse_mode=ParseMode.HTML,
+            )
+            # 3. Трекер с галочками
             await context.bot.send_message(
                 chat_id=user["user_id"],
                 text=build_today_screen(user_row, day, completed),
@@ -919,14 +933,20 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 6:00 — Утреннее послание + тренировка ─────────────────
+    # ── 6:00 — Мотивационное послание ─────────────────────────
     morning_text = build_morning_text(user_row, target)
     await update.message.reply_text(
-        f"<b>☀️ 6:00 — утро</b>\n\n{morning_text}",
+        f"<b>☀️ 6:00 — утро (мотивация)</b>\n\n{morning_text}",
         parse_mode=ParseMode.HTML,
     )
 
-    # ── Экран задач ───────────────────────────────────────────
+    # ── 6:00 — Задания на день ────────────────────────────────
+    await update.message.reply_text(
+        f"<b>📋 6:00 — задания на день</b>\n\n" + build_tasks_list(user_row, target),
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── Трекер с галочками ────────────────────────────────────
     await update.message.reply_text(
         build_today_screen(user_row, target, completed),
         parse_mode=ParseMode.HTML,
@@ -940,10 +960,17 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 21:00 — Вечернее сообщение ────────────────────────────
+    # ── 21:00 — Вечер (не все выполнено) ─────────────────────
     evening = ct.get_evening(target, all_done=False)
     await update.message.reply_text(
-        f"<b>🌙 21:00 — вечер</b>\n\n{evening}",
+        f"<b>🌙 21:00 — вечер (не все выполнено)</b>\n\n{evening}",
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── 🎉 — Вечер (все галочки закрыты) ─────────────────────
+    evening_done = ct.get_evening(target, all_done=True)
+    await update.message.reply_text(
+        f"<b>🎉 При закрытии всех галочек</b>\n\n{evening_done}",
         parse_mode=ParseMode.HTML,
     )
 
