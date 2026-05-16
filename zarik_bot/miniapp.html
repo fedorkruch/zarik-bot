@@ -311,7 +311,7 @@ function getUnsafeUid() { return getTg()?.initDataUnsafe?.user?.id || 0; }
 
 let _tgReady = false;
 function ensureTg() {
-  const tg = getTg();
+  tg = getTg();
   if (tg && !_tgReady) { tg.ready(); tg.expand(); _tgReady = true; }
 }
 
@@ -324,6 +324,7 @@ const BOT_AUTH = {
 };
 function hasBotAuth() { return !!(BOT_AUTH.uid && BOT_AUTH.ts && BOT_AUTH.sig); }
 
+let tg = null;
 let STATE = null, CUR_VIEW = 'main', MSG_TAB = 'morning', SEL_SHARE = 0;
 
 const TASK_DEFS = [
@@ -545,6 +546,7 @@ function fallbackCopy(txt, cb) {
 }
 
 (async () => {
+  ensureTg();
   await loadState();
   document.getElementById('loader').style.display = 'none';
 
