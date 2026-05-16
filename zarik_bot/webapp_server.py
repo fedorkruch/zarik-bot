@@ -133,7 +133,7 @@ def _make_week_bar(week_done: int, total: int = 7, width: int = 7) -> str:
     return "●" * filled + "·" * (width - filled)
 
 
-def _make_progress_bar(day: int, total: int = 77, width: int = 20) -> str:
+def _make_progress_bar(day: int, total: int = 77, width: int = 20) -> tuple[str, int]:
     if total == 0:
         return "·" * width
     pct = round(day / total * 100)

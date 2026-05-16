@@ -1,7 +1,7 @@
 """
 keyboards.py — клавиатуры бота Зарик (77-дневный челлендж)
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, WebAppInfo
 
 # 5 задач: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
 TASK_LABELS = [
@@ -154,14 +154,6 @@ def timezone_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-# ── Вспомогательные ───────────────────────────────────────────
-
-def progress_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📊 Итоги", callback_data="tab:progress"),
-    ]])
-
-
 def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
     """Главное меню. «МиниАПП» — текстовая кнопка; бот ответит inline WebApp-кнопкой."""
     bottom_row = ["📱 МиниАПП"] if webapp_url else ["❓ Помощь"]
@@ -174,13 +166,6 @@ def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         is_persistent=True,
     )
-
-
-def miniapp_open_keyboard(webapp_url: str) -> InlineKeyboardMarkup:
-    """Inline-кнопка для открытия Mini App — только она передаёт initData с user_id."""
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📱 Открыть МиниАПП", web_app=WebAppInfo(url=webapp_url))
-    ]])
 
 
 # Обратная совместимость: без URL — обычное меню с «Помощью»

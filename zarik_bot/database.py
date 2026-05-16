@@ -168,12 +168,6 @@ def get_all_active_users():
         ).fetchall()
 
 
-def get_all_users():
-    """Все пользователи включая незавершивших онбординг"""
-    with get_conn() as conn:
-        return conn.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
-
-
 def get_user_count() -> int:
     """Количество завершивших онбординг участников"""
     with get_conn() as conn:
@@ -208,13 +202,6 @@ def is_payment_confirmed(user_id: int) -> bool:
     """True если пользователь оплатил участие (payment_charge_id заполнен)."""
     user = get_user(user_id)
     return bool(user and user["payment_charge_id"])
-
-
-def is_onboarding_complete(user_id: int) -> bool:
-    user = get_user(user_id)
-    if not user:
-        return False
-    return bool(user["onboarding_complete"])
 
 
 # ── Онбординг (пошаговый) ────────────────────────────────────
@@ -371,25 +358,6 @@ def get_stats(user_id: int) -> dict:
         "days_remaining": TOTAL_DAYS - current_day,
         "streak": get_streak(user_id),
     }
-
-
-def get_completed_tasks_for_days(user_id: int, days: list) -> dict:
-    """
-    Возвращает {day_number: set_of_task_indices} для указанных дней.
-    """
-    if not days:
-        return {}
-    placeholders = ",".join("?" * len(days))
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"SELECT day_number, task_index FROM task_completions "
-            f"WHERE user_id = ? AND day_number IN ({placeholders})",
-            [user_id] + list(days)
-        ).fetchall()
-    result = {d: set() for d in days}
-    for row in rows:
-        result[row["day_number"]].add(row["task_index"])
-    return result
 
 
 # ── Статистика группы ─────────────────────────────────────────
@@ -570,15 +538,6 @@ def save_user_photo(user_id: int, photo_type: str, file_id: str):
             "INSERT INTO user_photos (user_id, photo_type, file_id) VALUES (?, ?, ?)",
             (user_id, photo_type, file_id)
         )
-
-def get_user_photos(user_id: int, photo_type: str = "before") -> list:
-    """Возвращает список file_id фото пользователя по типу."""
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT file_id FROM user_photos WHERE user_id = ? AND photo_type = ? ORDER BY created_at",
-            (user_id, photo_type)
-        ).fetchall()
-    return [r["file_id"] for r in rows]
 
 def count_user_photos(user_id: int, photo_type: str = "before") -> int:
     """Количество сохранённых фото."""

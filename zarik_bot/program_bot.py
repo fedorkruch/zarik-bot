@@ -29,11 +29,9 @@ from keyboards import (
     tasks_keyboard,
     all_done_keyboard,
     tab_only_keyboard,
-    tab_bar,
     timezone_keyboard,
     reps_keyboard,
     webapp_keyboard,
-    miniapp_open_keyboard,
     welcome_keyboard,
     photo_keyboard,
     photos_done_keyboard,
@@ -76,19 +74,24 @@ def make_miniapp_url(user_id: int) -> str:
     ).hexdigest()[:20]
     return f"{WEBAPP_URL}?uid={user_id}&ts={ts}&sig={sig}"
 
-BAR_WIDTH = 20
 DIV = "· · · · · · · · · · · ·"
+
+WELCOME_TEXT = (
+    "🦥 Привет! Я Зарик — твой ленивый наставник на ближайшие 77 дней.\n\n"
+    "Вот что мы будем делать каждый день:\n"
+    "💪 Тренировка (подобрана под тебя)\n"
+    "💧 Вода — будем восстанавливать и удерживать баланс\n"
+    "📚 Чтение — качнем мозги\n"
+    "🥗 Питание — уберем лишнее\n"
+    "🚫 Алкоголь — разберемся и с этим)\n\n"
+    "Каждый выполненный день поднимает тебя в топ планеты. "
+    "77 дней — и ты в другой жизни.\n\n"
+    "Сейчас задам несколько вопросов, чтобы собрать нужную информацию "
+    "для комфортного старта. Займёт меньше минуты 🦥"
+)
 
 
 # ── Утилиты ───────────────────────────────────────────────────
-
-def make_progress_bar(day: int, total: int = TOTAL_DAYS, width: int = BAR_WIDTH) -> str:
-    if total == 0:
-        return "·" * width + "  0%"
-    pct = round(day / total * 100)
-    filled = round(day / total * width)
-    return "●" * filled + "·" * (width - filled) + f"  {pct}%"
-
 
 def make_mini_bar(value: int, total: int, width: int = 10) -> str:
     if total == 0:
@@ -445,20 +448,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 stake_amount=0,
             )
         db.reset_to_onboarding(user.id)
-        await update.message.reply_text(
-            "🦥 Привет! Я Зарик — твой ленивый наставник на ближайшие 77 дней.\n\n"
-            "Вот что мы будем делать каждый день:\n"
-            "💪 Тренировка (подобрана под тебя)\n"
-            "💧 Вода — будем восстанавливать и удерживать баланс\n"
-            "📚 Чтение — качнем мозги\n"
-            "🥗 Питание — уберем лишнее\n"
-            "🚫 Алкоголь — разберемся и с этим)\n\n"
-            "Каждый выполненный день поднимает тебя в топ планеты. "
-            "77 дней — и ты в другой жизни.\n\n"
-            "Сейчас задам несколько вопросов, чтобы собрать нужную информацию "
-            "для комфортного старта. Займёт меньше минуты 🦥",
-            reply_markup=welcome_keyboard()
-        )
+        await update.message.reply_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
         db.set_onboarding_step(user.id, "welcome")
         return
 
@@ -504,7 +494,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=photo_keyboard()
         )
     elif step == "awaiting_photos":
-        count = db.count_user_photos(user_id, "before")
+        count = db.count_user_photos(user.id, "before")
         saved = f" Уже сохранено: {count} фото." if count else ""
         await update.message.reply_text(
             f"📸 Жду твои фото «до».{saved}\n\nКогда всё отправишь — нажми кнопку 👇",
@@ -527,20 +517,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     else:
         # Первый визит — приветствие и описание программы
-        await update.message.reply_text(
-            "🦥 Привет! Я Зарик — твой ленивый наставник на ближайшие 77 дней.\n\n"
-            "Вот что мы будем делать каждый день:\n"
-            "💪 Тренировка (подобрана под тебя)\n"
-            "💧 Вода — будем восстанавливать и удерживать баланс\n"
-            "📚 Чтение — качнем мозги\n"
-            "🥗 Питание — уберем лишнее\n"
-            "🚫 Алкоголь — разберемся и с этим)\n\n"
-            "Каждый выполненный день поднимает тебя в топ планеты. "
-            "77 дней — и ты в другой жизни.\n\n"
-            "Сейчас задам несколько вопросов, чтобы собрать нужную информацию "
-            "для комфортного старта. Займёт меньше минуты 🦥",
-            reply_markup=welcome_keyboard()
-        )
+        await update.message.reply_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
         db.set_onboarding_step(user.id, "welcome")
 
 
