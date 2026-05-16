@@ -451,7 +451,6 @@ def create_app() -> web.Application:
     app.router.add_get("/apple-touch-icon.png", handle_apple_icon)
     app.router.add_get("/icon-192.png",        handle_apple_icon)
     app.router.add_get("/icon-512.png",        handle_apple_icon)
-    app.router.add_get("/debug",               handle_debug)
     app.router.add_get("/api/state",           handle_state)
     app.router.add_post("/api/task",           handle_task)
     app.router.add_post("/api/close",          handle_close_day)

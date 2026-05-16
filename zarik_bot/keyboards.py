@@ -163,8 +163,11 @@ def progress_keyboard() -> InlineKeyboardMarkup:
 
 
 def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
-    """Главное меню. «МиниАПП» — обычная текстовая кнопка; бот ответит inline-кнопкой с WebApp."""
-    bottom_row = ["📱 МиниАПП"] if webapp_url else ["❓ Помощь"]
+    """Главное меню. «МиниАПП» — прямая WebApp-кнопка если URL задан."""
+    if webapp_url:
+        bottom_row = [KeyboardButton("📱 МиниАПП", web_app=WebAppInfo(url=webapp_url))]
+    else:
+        bottom_row = ["❓ Помощь"]
     return ReplyKeyboardMarkup(
         [
             ["📋 Мои задачи на сегодня"],
