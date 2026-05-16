@@ -25,7 +25,7 @@ from datetime import datetime
 
 from telegram import (
     BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup,
-    LabeledPrice, Update, WebAppInfo,
+    LabeledPrice, Update,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -71,11 +71,11 @@ def buy_keyboard() -> InlineKeyboardMarkup:
 
 
 def tracker_keyboard() -> InlineKeyboardMarkup | None:
-    """Кнопка открытия интерактивного трекера (Mini App)."""
+    """Кнопка открытия интерактивного трекера (обычная ссылка, поддерживает PWA)."""
     if WEBAPP_URL:
         tracker_url = WEBAPP_URL.rstrip("/") + "/tracker"
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 Открыть трекер", web_app=WebAppInfo(url=tracker_url))],
+            [InlineKeyboardButton("📊 Открыть трекер", url=tracker_url)],
         ])
     return None
 
@@ -120,7 +120,8 @@ async def do_send_tracker(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         "🎁 *Держи трекер достижений — твой подарок!*\n\n"
         "Устанавливай количество дней на пути к цели, прописывай ежедневные задачи. "
         "Отмечай каждый день выполнение и наблюдай свой путь.\n\n"
-        "Это твой личный дашборд прогресса 👇"
+        "Это твой личный дашборд прогресса 👇\n\n"
+        "📱 _Чтобы сохранить как иконку на iPhone: открой в Safari → нажми «Поделиться» → «На экран Домой»_"
     )
     tracker_kb = tracker_keyboard()
 

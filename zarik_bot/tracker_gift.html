@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Трекер целей · Зарик</title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Зарик">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0d0d12;--card:#171724;--card2:#1f1f30;--border:#272740;
+  --accent:#8875f5;--accent2:#6656e8;--done:#3ecf8e;--warn:#f5a623;
+  --danger:#e05252;--text:#eaeaf8;--muted:#7070a0;--r:16px;--p:16px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+body{display:flex;flex-direction:column}
+
+.hdr{padding:12px var(--p) 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+.hdr-info{min-width:0}
+.hdr-goal{font-size:16px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-date{font-size:11px;color:var(--muted);margin-top:1px}
+.hdr-pill{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0}
+
+.tabs{display:flex;border-top:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:8px 4px 10px;text-align:center;font-size:10px;color:var(--muted);cursor:pointer;border:none;background:none;transition:color .15s;font-family:inherit}
+.tab svg{display:block;margin:0 auto 3px;width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tab.active{color:var(--accent)}
+
+.screen{flex:1;overflow-y:auto;padding:var(--p);display:none;flex-direction:column;gap:11px}
+.screen.active{display:flex}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:15px}
+.card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:13px}
+
+/* ── Sloth hero (top) ── */
+.sloth-hero{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 15px;display:flex;align-items:center;gap:13px;text-decoration:none;color:var(--text)}
+.sloth-hero:active{background:var(--card2)}
+.sloth-av{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2.5px solid var(--accent);flex-shrink:0}
+.sloth-name{font-size:13px;font-weight:700}
+.sloth-sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
+.sloth-link{font-size:11px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:3px}
+
+/* ── Dual rings ── */
+.rings-row{display:flex;gap:10px}
+.ring-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.ring-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.ring-cont{position:relative;display:inline-block}
+.ring-svg{display:block;transform:rotate(-90deg)}
+.ring-bg{stroke:var(--border)}
+.ring-fill{stroke-linecap:round;transition:stroke-dashoffset .55s cubic-bezier(.4,0,.2,1),stroke .3s}
+.ring-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;width:100%}
+.ring-num{font-size:24px;font-weight:800;line-height:1;letter-spacing:-1px}
+.ring-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.ring-bottom{font-size:12px;color:var(--muted);text-align:center}
+
+/* ── Motivation ── */
+.motiv{background:linear-gradient(135deg,#1a1535,#13102a);border:1px solid #3a3270;border-radius:var(--r);padding:13px 14px;display:flex;align-items:center;gap:11px}
+.motiv-icon{font-size:26px;flex-shrink:0}
+.motiv-text{font-size:13px;line-height:1.5}
+.motiv-text strong{color:var(--accent)}
+
+/* ── Progress bar ── */
+.pbar-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 15px}
+.pbar-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:7px}
+.pbar-bg{height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:4px;min-width:3px;transition:width .55s cubic-bezier(.4,0,.2,1);background:linear-gradient(90deg,var(--accent2),var(--accent))}
+.milestones{display:flex;align-items:center;margin-top:10px}
+.ms-dot{width:28px;height:28px;border-radius:50%;background:var(--card2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted);transition:all .3s;flex-shrink:0}
+.ms-dot.hit{background:var(--done);border-color:var(--done);color:#fff}
+.ms-line{flex:1;height:2px;background:var(--border);margin:0 2px;transition:background .3s}
+.ms-line.hit{background:var(--done)}
+
+/* ── Tasks ── */
+.task-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;transition:opacity .15s}
+.task-item:last-child{border-bottom:none;padding-bottom:0}
+.task-item:first-child{padding-top:0}
+.chk{width:27px;height:27px;border-radius:8px;border:2px solid var(--border);background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s cubic-bezier(.34,1.56,.64,1)}
+.task-item.done .chk{background:var(--done);border-color:var(--done);transform:scale(1.1);color:#fff;font-size:14px;font-weight:700}
+.task-item.done .chk::after{content:"✓"}
+.task-lbl{font-size:15px;flex:1;transition:color .2s}
+.task-item.done .task-lbl{color:var(--muted);text-decoration:line-through}
+.task-item:active{opacity:.7}
+
+textarea{background:var(--card2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;width:100%;padding:11px;resize:none;font-family:inherit;line-height:1.55;transition:border-color .2s}
+textarea::placeholder{color:var(--muted)}
+textarea:focus{outline:none;border-color:var(--accent)}
+
+/* ── Cal ── */
+.cal-dh-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px}
+.cal-dh{text-align:center;font-size:9px;color:var(--muted);font-weight:600}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.ccell{aspect-ratio:1;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);cursor:pointer;transition:transform .1s}
+.ccell:active{transform:scale(.88)}
+.ccell.done{background:var(--done);border-color:var(--done);color:#fff;font-size:11px}
+.ccell.partial{background:#193529;border-color:#29604a;color:var(--done)}
+.ccell.today{box-shadow:0 0 0 2px var(--accent),0 0 0 4px rgba(136,117,245,.15)}
+.ccell.future{opacity:.2;cursor:default}
+
+/* ── Stats task bars ── */
+.tbar{margin-bottom:11px}
+.tbar-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.tbar-pct{color:var(--muted)}
+.tbar-bg{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.tbar-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .5s}
+
+/* ── Setup ── */
+#setup{position:fixed;inset:0;background:var(--bg);z-index:100;overflow-y:auto;padding:var(--p);display:none;flex-direction:column;gap:11px}
+#setup.active{display:flex}
+.setup-hero{text-align:center;padding:20px 0 4px}
+.setup-hero img{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);margin-bottom:10px}
+.setup-h{font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:5px}
+.setup-sub{font-size:13px;color:var(--muted);line-height:1.5}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+input[type=text],input[type=number]{background:var(--card2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;width:100%;padding:11px;font-family:inherit;transition:border-color .2s}
+input:focus{outline:none;border-color:var(--accent)}
+.days-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.dopt{background:var(--card2);border:1.5px solid var(--border);border-radius:10px;padding:11px 4px;text-align:center;cursor:pointer;font-size:14px;font-weight:700;color:var(--muted);transition:all .15s}
+.dopt.sel{border-color:var(--accent);color:var(--accent);background:#1a1438}
+.task-row-s{display:flex;gap:7px;margin-bottom:7px;align-items:center}
+.task-row-s input{flex:1}
+.btn-rm{background:none;border:1.5px solid var(--border);border-radius:8px;color:var(--muted);width:40px;height:40px;cursor:pointer;font-size:15px;flex-shrink:0;font-family:inherit;transition:all .15s}
+.btn-rm:active{border-color:var(--danger);color:var(--danger)}
+.btn-add-t{background:none;border:1.5px dashed var(--border);border-radius:10px;color:var(--muted);width:100%;padding:10px;cursor:pointer;font-size:13px;font-family:inherit;margin-top:2px;transition:all .15s}
+.btn-add-t:active{border-color:var(--accent);color:var(--accent)}
+.btn{display:block;width:100%;padding:14px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.2px}
+.btn:active{opacity:.85}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--card2);border:1.5px solid var(--border);color:var(--text)}
+.btn-danger{background:#2a1515;border:1.5px solid var(--danger);color:var(--danger)}
+
+/* ── Modal ── */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:50;display:none;align-items:flex-end}
+#modal.active{display:flex}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;padding:18px var(--p) 36px;width:100%;max-height:70vh;overflow-y:auto}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}
+.modal-ttl{font-size:16px;font-weight:700}
+.modal-x{background:var(--card2);border:none;color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.modal-task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.modal-task:last-child{border-bottom:none}
+
+#toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--card2);border:1px solid var(--accent);border-radius:10px;padding:9px 18px;font-size:13px;font-weight:500;z-index:200;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0)}
+.confetti-piece{position:fixed;width:7px;height:7px;border-radius:2px;pointer-events:none;z-index:300;animation:fall 2.2s ease-in forwards}
+@keyframes fall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+
+.set-task{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.set-task:last-child{border-bottom:none}
+.srow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.scard{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:11px 8px;text-align:center}
+.sval{font-size:22px;font-weight:800;line-height:1}
+.slbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.4px}
+.sval.green{color:var(--done)}.sval.fire{color:var(--warn)}.sval.purple{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="setup-hero">
+    <img id="si0" src="" alt="Зарик">
+    <div class="setup-h">Трекер целей</div>
+    <div class="setup-sub">Настрой за 1 минуту — и начни путь к своей цели</div>
+  </div>
+  <div class="field">
+    <label>Моя цель</label>
+    <input type="text" id="s-goal" placeholder="Например: Бегать каждый день" maxlength="60">
+  </div>
+  <div class="field">
+    <label>Количество дней</label>
+    <div class="days-grid">
+      <div class="dopt" data-d="7">7</div><div class="dopt" data-d="14">14</div>
+      <div class="dopt" data-d="21">21</div><div class="dopt" data-d="30">30</div>
+      <div class="dopt" data-d="66">66</div><div class="dopt sel" data-d="77">77</div>
+      <div class="dopt" data-d="90">90</div><div class="dopt" data-d="100">100</div>
+    </div>
+    <div style="margin-top:7px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:var(--muted)">Своё:</span>
+      <input type="number" id="s-custom" placeholder="дней" min="1" max="999" style="width:90px;padding:8px 10px;font-size:14px">
+    </div>
+  </div>
+  <div class="field">
+    <label>Ежедневные задачи <span style="color:var(--muted);font-weight:400;text-transform:none">(до 8)</span></label>
+    <div id="s-tasks"></div>
+    <button class="btn-add-t" id="s-add">+ Добавить задачу</button>
+  </div>
+  <button class="btn btn-primary" id="s-start" style="margin-top:4px">Начать трекинг →</button>
+  <div style="height:20px"></div>
+</div>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-info">
+    <div class="hdr-goal" id="hdr-goal">Трекер целей</div>
+    <div class="hdr-date" id="hdr-date"></div>
+  </div>
+  <div class="hdr-pill" id="hdr-day">День 1</div>
+</div>
+
+<!-- TODAY -->
+<div class="screen active" id="sc-today">
+
+  <!-- Sloth hero — TOP -->
+  <a class="sloth-hero" href="https://t.me/Shagov77_bot" target="_blank">
+    <img class="sloth-av" id="si1" src="" alt="Зарик">
+    <div>
+      <div class="sloth-name">Зарик-Ленивец</div>
+      <div class="sloth-sub">Официальный разработчик трекера</div>
+      <div class="sloth-link">Открыть в Telegram →</div>
+    </div>
+  </a>
+
+  <!-- Dual rings -->
+  <div class="rings-row">
+    <!-- Ring 1: Today tasks -->
+    <div class="ring-card">
+      <div class="ring-title">Сегодня</div>
+      <div class="ring-cont">
+        <svg class="ring-svg" width="110" height="110" viewBox="0 0 110 110">
+          <circle class="ring-bg" cx="55" cy="55" r="46" stroke-width="9" fill="none"/>
+          <circle class="ring-fill" id="r1-fill" cx="55" cy="55" r="46" stroke-width="9" fill="none"
+            stroke="var(--accent)" stroke-dasharray="289.0" stroke-dashoffset="289.0"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-num" id="r1-num">0</div>
+          <div class="ring-sub" id="r1-sub">задач</div>
+        </div>
+      </div>
+      <div class="ring-bottom" id="r1-bot">0 из 0</div>
+    </div>
+    <!-- Ring 2: Overall journey -->
+    <div class="ring-card">
+      <div class="ring-title">Путь</div>
+      <div class="ring-cont">
+        <svg class="ring-svg" width="110" height="110" viewBox="0 0 110 110">
+          <circle class="ring-bg" cx="55" cy="55" r="46" stroke-width="9" fill="none"/>
+          <circle class="ring-fill" id="r2-fill" cx="55" cy="55" r="46" stroke-width="9" fill="none"
+            stroke="var(--done)" stroke-dasharray="289.0" stroke-dashoffset="289.0"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-num" id="r2-num" style="color:var(--done)">0</div>
+          <div class="ring-sub" id="r2-sub">дней ✓</div>
+        </div>
+      </div>
+      <div class="ring-bottom" id="r2-bot">из 77 дней</div>
+    </div>
+  </div>
+
+  <!-- Motivation -->
+  <div class="motiv" id="motiv">
+    <div class="motiv-icon" id="m-icon">🦥</div>
+    <div class="motiv-text" id="m-text">Начни с первого шага — <strong>он самый важный</strong></div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="pbar-wrap">
+    <div class="pbar-row">
+      <span id="p-days">День 1 из 77</span>
+      <span id="p-pct" style="font-weight:600;color:var(--accent)">0%</span>
+    </div>
+    <div class="pbar-bg">
+      <div class="pbar-fill" id="p-fill" style="width:0%"></div>
+    </div>
+    <div class="milestones" style="margin-top:10px">
+      <div class="ms-dot" id="ms25" title="25%">25%</div>
+      <div class="ms-line" id="ml1"></div>
+      <div class="ms-dot" id="ms50" title="50%">50%</div>
+      <div class="ms-line" id="ml2"></div>
+      <div class="ms-dot" id="ms75" title="75%">75%</div>
+      <div class="ms-line" id="ml3"></div>
+      <div class="ms-dot" id="ms100">🏆</div>
+    </div>
+  </div>
+
+  <!-- Tasks -->
+  <div class="card">
+    <div class="card-title">Задачи на сегодня</div>
+    <div id="t-tasks"></div>
+  </div>
+
+  <!-- Note -->
+  <div class="card">
+    <div class="card-title">Заметка дня</div>
+    <textarea id="t-note" rows="3" placeholder="Как прошёл день? Что получилось, что было сложно?"></textarea>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div class="screen" id="sc-cal">
+  <div class="cal-dh-row">
+    <div class="cal-dh">Пн</div><div class="cal-dh">Вт</div><div class="cal-dh">Ср</div>
+    <div class="cal-dh">Чт</div><div class="cal-dh">Пт</div><div class="cal-dh">Сб</div><div class="cal-dh">Вс</div>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div class="card">
+    <div class="card-title">Легенда</div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+      <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:4px;background:var(--done)"></div>Все задачи выполнены</div>
+      <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:4px;background:#193529;border:1.5px solid #29604a"></div>Частично выполнено</div>
+      <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:4px;background:var(--bg);border:1.5px solid var(--border)"></div>Не отмечено / впереди</div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="screen" id="sc-stats">
+  <div class="srow">
+    <div class="scard"><div class="sval green" id="ss-done">0</div><div class="slbl">Дней ✓</div></div>
+    <div class="scard"><div class="sval fire" id="ss-streak">0</div><div class="slbl">🔥 Серия</div></div>
+    <div class="scard"><div class="sval purple" id="ss-best">0</div><div class="slbl">Рекорд</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Выполнение по задачам</div>
+    <div id="ss-tasks"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">По неделям</div>
+    <div id="ss-weeks" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+  <a class="sloth-hero" href="https://t.me/Shagov77_bot" target="_blank" style="margin-top:4px">
+    <img class="sloth-av" id="si2" src="" alt="Зарик">
+    <div>
+      <div class="sloth-name">Зарик-Ленивец</div>
+      <div class="sloth-sub">Официальный разработчик трекера</div>
+      <div class="sloth-link">Открыть в Telegram →</div>
+    </div>
+  </a>
+</div>
+
+<!-- SETTINGS -->
+<div class="screen" id="sc-settings">
+  <div class="card">
+    <div class="card-title">Цель</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px" id="set-goal"></div>
+    <div style="font-size:13px;color:var(--muted)" id="set-info"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Задачи</div>
+    <div id="set-tasks"></div>
+  </div>
+  <button class="btn btn-secondary" id="set-export">Экспорт данных (JSON)</button>
+  <button class="btn btn-danger" id="set-reset" style="margin-top:8px">Сбросить трекер</button>
+  <div style="height:10px"></div>
+</div>
+
+<!-- TABS -->
+<nav class="tabs">
+  <button class="tab active" data-sc="today">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    Сегодня
+  </button>
+  <button class="tab" data-sc="cal">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    Календарь
+  </button>
+  <button class="tab" data-sc="stats">
+    <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+    Итоги
+  </button>
+  <button class="tab" data-sc="settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Ещё
+  </button>
+</nav>
+
+<!-- MODAL -->
+<div id="modal">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="modal-ttl">День 1</div>
+      <button class="modal-x" id="modal-x">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const ZARIK = "data:image/jpeg;base64,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";
+const CIRC = 289.0;
+
+const $ = id => document.getElementById(id);
+const S = {
+  get(k){try{return JSON.parse(localStorage.getItem('ztrk_'+k))}catch{return null}},
+  set(k,v){localStorage.setItem('ztrk_'+k,JSON.stringify(v))},
+  rm(k){localStorage.removeItem('ztrk_'+k)}
+};
+
+let cfg = S.get('cfg');
+let data = S.get('data') || {c:{},n:{}};
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function today(){return new Date().toISOString().slice(0,10)}
+function dk(n){return String(n)}
+function curDay(){
+  if(!cfg)return 1;
+  const d=Math.floor((new Date(today())-new Date(cfg.start))/86400000)+1;
+  return Math.min(Math.max(d,1),cfg.days);
+}
+function isDone(d){const c=data.c[dk(d)]||[];return cfg&&c.length>=cfg.tasks.length&&cfg.tasks.length>0}
+function isPartial(d){const c=data.c[dk(d)]||[];return c.length>0&&!isDone(d)}
+function doneDays(){let n=0;for(let i=1;i<=curDay();i++)if(isDone(i))n++;return n;}
+function streak(){
+  const cur=curDay();let s=0;
+  for(let d=cur;d>=1;d--){if(isDone(d))s++;else if(d<cur)break;}
+  return s;
+}
+function bestStreak(){
+  let best=0,cur=0;
+  for(let d=1;d<=curDay();d++){if(isDone(d)){cur++;best=Math.max(best,cur);}else cur=0;}
+  return best;
+}
+function totalPct(){
+  const cur=curDay();if(!cfg||cur===0||cfg.tasks.length===0)return 0;
+  let done=0,total=0;
+  for(let d=1;d<=cur;d++){total+=cfg.tasks.length;done+=(data.c[dk(d)]||[]).length;}
+  return total>0?Math.round(done/total*100):0;
+}
+function saveData(){S.set('data',data);}
+
+const MOTIVS=[
+  {i:"🦥",t:"Начни с первого шага — <strong>он самый важный</strong>"},
+  {i:"💪",t:"Каждая выполненная задача — <strong>кирпичик в фундаменте привычки</strong>"},
+  {i:"⚡",t:"Маленькое, но своё — <strong>всегда сильнее большого чужого</strong>"},
+  {i:"🎯",t:"Ты уже лучше, чем вчера. <strong>Продолжай</strong>"},
+  {i:"🌱",t:"Привычка формируется <strong>66 дней</strong> — ты на верном пути"},
+  {i:"🔥",t:"Серия не прервётся, если ты <strong>сделаешь это сегодня</strong>"},
+  {i:"🏆",t:"Тех кто дошёл объединяет одно — <strong>они просто начали</strong>"},
+];
+const DONE_MOTIVS=[
+  {i:"🎉",t:"<strong>Все задачи выполнены!</strong> Ты сделал это сегодня"},
+  {i:"🦥",t:"<strong>День закрыт!</strong> Зарик гордится тобой"},
+  {i:"⭐",t:"<strong>Идеальный день!</strong> Продолжай в том же духе"},
+];
+
+let tT;
+function toast(msg){
+  const el=$('toast');el.textContent=msg;el.classList.add('show');
+  clearTimeout(tT);tT=setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+function confetti(){
+  const cols=['#8875f5','#3ecf8e','#f5a623','#e05252','#60c5fa'];
+  for(let i=0;i<44;i++){
+    const p=document.createElement('div');
+    p.className='confetti-piece';
+    p.style.cssText=`left:${Math.random()*100}vw;top:-10px;background:${cols[i%cols.length]};animation-delay:${Math.random()*.6}s;animation-duration:${1.6+Math.random()}s;border-radius:${Math.random()>0.5?'50%':'2px'}`;
+    document.body.appendChild(p);setTimeout(()=>p.remove(),3200);
+  }
+}
+
+function setRing(fillId, ratio, colorDone){
+  const el=$(fillId);
+  el.style.strokeDashoffset = CIRC*(1-Math.max(0,Math.min(1,ratio)));
+  if(colorDone && ratio>=1) el.style.stroke='var(--done)';
+  else el.style.stroke='';
+}
+
+function setSlothImgs(){
+  ['si0','si1','si2'].forEach(id=>{const e=$(id);if(e)e.src=ZARIK;});
+}
+
+// ── RENDER TODAY ──
+function renderToday(){
+  if(!cfg)return;
+  const day=curDay(), dd=doneDays(), str=streak(), pct=totalPct();
+  const comp=new Set(data.c[dk(day)]||[]);
+  const tDone=comp.size, tTotal=cfg.tasks.length;
+
+  $('hdr-goal').textContent=cfg.goal||'Трекер целей';
+  $('hdr-date').textContent=today();
+  $('hdr-day').textContent='День '+day+' / '+cfg.days;
+
+  // Ring 1 — today tasks
+  const r1=tTotal>0?tDone/tTotal:0;
+  setRing('r1-fill', r1, true);
+  $('r1-num').textContent=tDone;
+  $('r1-sub').textContent='задач';
+  $('r1-bot').textContent=tDone+' из '+tTotal;
+
+  // Ring 2 — journey days done
+  const r2=cfg.days>0?dd/cfg.days:0;
+  $('r2-fill').style.strokeDashoffset=CIRC*(1-r2);
+  $('r2-num').textContent=dd;
+  $('r2-sub').textContent='дней ✓';
+  $('r2-bot').textContent='из '+cfg.days+' дней';
+
+  // Motivation
+  let m=tDone>=tTotal&&tTotal>0 ? DONE_MOTIVS[Math.floor(Date.now()/3600000)%DONE_MOTIVS.length] : MOTIVS[Math.floor((day+str)%MOTIVS.length)];
+  $('m-icon').textContent=m.i; $('m-text').innerHTML=m.t;
+
+  // Progress bar — day/total (day 1 already visible)
+  const dayPct=Math.round(day/cfg.days*100);
+  $('p-days').textContent='День '+day+' из '+cfg.days;
+  $('p-pct').textContent=dayPct+'%';
+  $('p-fill').style.width=dayPct+'%';
+
+  // Milestones
+  [[25,'ms25',null],[50,'ms50','ml1'],[75,'ms75','ml2'],[100,'ms100','ml3']].forEach(([v,dot,line])=>{
+    const hit=dayPct>=v;
+    $(dot).classList.toggle('hit',hit);
+    if(line)$(line).classList.toggle('hit',hit);
+  });
+
+  // Tasks list
+  const tEl=$('t-tasks');
+  if(!tTotal){tEl.innerHTML='<div style="color:var(--muted);font-size:14px;text-align:center;padding:12px 0">Задачи не добавлены</div>';return;}
+  tEl.innerHTML=cfg.tasks.map((t,i)=>`
+    <div class="task-item ${comp.has(i)?'done':''}" data-i="${i}">
+      <div class="chk"></div>
+      <div class="task-lbl">${esc(t)}</div>
+    </div>`).join('');
+  tEl.querySelectorAll('.task-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const i=parseInt(el.dataset.i);
+      const c=new Set(data.c[dk(day)]||[]);
+      if(c.has(i))c.delete(i);
+      else{c.add(i);if(c.size===tTotal){setTimeout(confetti,200);toast('Все задачи выполнены! 🎉');}}
+      data.c[dk(day)]=[...c];saveData();renderToday();
+    });
+  });
+
+  const nEl=$('t-note');
+  nEl.value=data.n[dk(day)]||'';
+  nEl.oninput=()=>{data.n[dk(day)]=nEl.value;saveData();};
+}
+
+// ── CALENDAR ──
+function renderCal(){
+  if(!cfg)return;
+  const cur=curDay(), grid=$('cal-grid');
+  grid.innerHTML='';
+  for(let d=1;d<=cfg.days;d++){
+    const el=document.createElement('div');
+    el.className='ccell'+(d>cur?' future':'')+(d===cur?' today':'');
+    if(d<=cur){if(isDone(d))el.classList.add('done');else if(isPartial(d))el.classList.add('partial');}
+    el.textContent=isDone(d)?'✓':d;
+    if(d<=cur)el.addEventListener('click',()=>openModal(d));
+    grid.appendChild(el);
+  }
+}
+
+// ── STATS ──
+function renderStats(){
+  if(!cfg)return;
+  const cur=curDay();
+  $('ss-done').textContent=doneDays();
+  $('ss-streak').textContent=streak();
+  $('ss-best').textContent=bestStreak();
+  const tots=cfg.tasks.map(()=>0), dns=cfg.tasks.map(()=>0);
+  for(let d=1;d<=cur;d++){
+    (data.c[dk(d)]||[]).forEach(i=>{if(i<cfg.tasks.length)dns[i]++;});
+    cfg.tasks.forEach((_,i)=>tots[i]++);
+  }
+  $('ss-tasks').innerHTML=cfg.tasks.map((t,i)=>{
+    const p=tots[i]>0?Math.round(dns[i]/tots[i]*100):0;
+    return `<div class="tbar"><div class="tbar-row"><span>${esc(t)}</span><span class="tbar-pct">${dns[i]}/${tots[i]} · ${p}%</span></div><div class="tbar-bg"><div class="tbar-fill" style="width:${p}%"></div></div></div>`;
+  }).join('');
+  const wc=Math.ceil(cfg.days/7);
+  let wh='';
+  for(let w=1;w<=wc;w++){
+    const ws=(w-1)*7+1,we=Math.min(w*7,cfg.days);
+    let wd=0,wt=0;
+    for(let d=ws;d<=we&&d<=cur;d++){wt++;if(isDone(d))wd++;}
+    const wp=wt>0?Math.round(wd/wt*100):0;
+    wh+=`<div style="display:flex;align-items:center;gap:10px;font-size:13px"><span style="color:var(--muted);min-width:66px">Неделя ${w}</span><div class="tbar-bg" style="flex:1;height:6px"><div class="tbar-fill" style="width:${wp}%"></div></div><span style="min-width:34px;text-align:right;color:var(--muted)">${wp}%</span></div>`;
+  }
+  $('ss-weeks').innerHTML=wh||'<span style="color:var(--muted);font-size:14px">Нет данных</span>';
+}
+
+// ── SETTINGS ──
+function renderSettings(){
+  if(!cfg)return;
+  $('set-goal').textContent=cfg.goal||'—';
+  $('set-info').textContent=cfg.days+' дней · начат '+cfg.start;
+  $('set-tasks').innerHTML=cfg.tasks.map((t,i)=>`<div class="set-task"><span style="color:var(--muted);font-size:12px;min-width:20px">${i+1}.</span><span>${esc(t)}</span></div>`).join('');
+}
+$('set-export').onclick=()=>{
+  const b=new Blob([JSON.stringify({cfg,data},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tracker.json';a.click();
+};
+$('set-reset').onclick=()=>{if(confirm('Сбросить трекер? Все данные будут удалены.')){S.rm('cfg');S.rm('data');location.reload();}};
+
+// ── MODAL ──
+function openModal(d){
+  const comp=new Set(data.c[dk(d)]||[]);
+  $('modal-ttl').textContent='День '+d+(isDone(d)?' ✅':'');
+  $('modal-body').innerHTML=cfg.tasks.map((t,i)=>`<div class="modal-task"><span style="font-size:16px">${comp.has(i)?'✅':'⬜'}</span><span style="${comp.has(i)?'color:var(--muted);text-decoration:line-through':''}">${esc(t)}</span></div>`).join('')+(data.n[dk(d)]?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">📝 ${esc(data.n[dk(d)])}</div>`:'');
+  $('modal').classList.add('active');
+}
+$('modal-x').onclick=()=>$('modal').classList.remove('active');
+$('modal').onclick=e=>{if(e.target===$('modal'))$('modal').classList.remove('active');};
+
+// ── TABS ──
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    $('sc-'+t.dataset.sc).classList.add('active');
+    const sc=t.dataset.sc;
+    if(sc==='cal')renderCal();
+    if(sc==='stats')renderStats();
+    if(sc==='settings')renderSettings();
+  });
+});
+
+// ── SETUP ──
+let setupDays=77;
+document.querySelectorAll('.dopt').forEach(el=>{
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.dopt').forEach(x=>x.classList.remove('sel'));
+    el.classList.add('sel');setupDays=parseInt(el.dataset.d);$('s-custom').value='';
+  });
+});
+$('s-custom').addEventListener('input',function(){
+  const v=parseInt(this.value);
+  if(v>0&&v<=999){setupDays=v;document.querySelectorAll('.dopt').forEach(x=>x.classList.remove('sel'));}
+});
+function addTaskRow(val=''){
+  const n=$('s-tasks').querySelectorAll('.task-row-s').length;
+  if(n>=8)return;
+  const row=document.createElement('div');row.className='task-row-s';
+  row.innerHTML=`<input type="text" placeholder="Задача ${n+1}" value="${esc(val)}" maxlength="60"><button class="btn-rm">✕</button>`;
+  row.querySelector('.btn-rm').onclick=()=>row.remove();
+  $('s-tasks').appendChild(row);
+}
+$('s-add').onclick=()=>addTaskRow();
+$('s-start').onclick=()=>{
+  const goal=$('s-goal').value.trim()||'Моя цель';
+  const tasks=[...$('s-tasks').querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean);
+  if(!tasks.length){toast('Добавь хотя бы одну задачу');return;}
+  cfg={goal,days:setupDays,start:today(),tasks};
+  data={c:{},n:{}};
+  S.set('cfg',cfg);S.set('data',data);
+  $('setup').classList.remove('active');
+  renderToday();
+};
+addTaskRow('');addTaskRow('');addTaskRow('');
+
+// ── INIT ──
+setSlothImgs();
+if(!cfg){$('setup').classList.add('active');}
+else{renderToday();}
+
+// ── PWA: Service Worker ──
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+
+// ── PWA: iOS Install Banner ──
+(function(){
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = ('standalone' in navigator) && navigator.standalone;
+  const dismissed = localStorage.getItem('pwa_banner_dismissed');
+  if(isIOS && !isStandalone && !dismissed){
+    const banner = document.createElement('div');
+    banner.id = 'pwa-banner';
+    banner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+        <span style="font-size:22px;flex-shrink:0">🦥</span>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Сохрани на экран!</div>
+          <div style="font-size:11px;color:#a0a0c0;line-height:1.4">Нажми <b style="color:#eaeaf8">Поделиться</b> <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8875f5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> → <b style="color:#eaeaf8">На экран Домой</b></div>
+        </div>
+      </div>
+      <button id="pwa-close" style="background:none;border:none;color:#7070a0;font-size:20px;cursor:pointer;padding:4px;line-height:1;flex-shrink:0">✕</button>
+    `;
+    Object.assign(banner.style,{
+      position:'fixed',bottom:'0',left:'0',right:'0',
+      background:'#1a1a2e',borderTop:'1px solid #3a3270',
+      padding:'12px 14px',display:'flex',alignItems:'center',gap:'10px',
+      zIndex:'9999',fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif',
+      boxShadow:'0 -4px 20px rgba(0,0,0,0.5)',
+    });
+    document.body.appendChild(banner);
+    document.getElementById('pwa-close').onclick=()=>{
+      banner.remove();
+      localStorage.setItem('pwa_banner_dismissed','1');
+    };
+  }
+})();
+</script>
+</body>
+</html>

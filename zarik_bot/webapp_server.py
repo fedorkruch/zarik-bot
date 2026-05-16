@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", 8080))
-MINIAPP_HTML   = Path(__file__).parent / "miniapp.html"
-TRACKER_HTML   = Path(__file__).parent / "tracker.html"
+MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
+TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
+ZARIK_JPG           = Path(__file__).parent.parent / "zarik.jpg"
 
 TASK_LABELS = [
     ("💪", "Тренировка"),
@@ -144,9 +145,80 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_tracker(request: web.Request) -> web.Response:
-    """Публичный интерактивный трекер — подарок лидам из @Shagov77_bot."""
-    html = TRACKER_HTML.read_text(encoding="utf-8")
+    """Публичный интерактивный трекер — подарок лидам из @Shagov77_bot (PWA)."""
+    html = TRACKER_GIFT_HTML.read_text(encoding="utf-8")
     return web.Response(text=html, content_type="text/html")
+
+
+async def handle_manifest(request: web.Request) -> web.Response:
+    """PWA manifest.json для трекера."""
+    manifest = {
+        "name": "Трекер · Зарик",
+        "short_name": "Зарик",
+        "description": "Трекер целей от Зарика-Ленивца",
+        "start_url": "/tracker",
+        "display": "standalone",
+        "background_color": "#0d0d12",
+        "theme_color": "#0d0d12",
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"},
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    }
+    import json as _json
+    return web.Response(
+        text=_json.dumps(manifest, ensure_ascii=False),
+        content_type="application/manifest+json",
+    )
+
+
+async def handle_sw(request: web.Request) -> web.Response:
+    """Service Worker для офлайн-кэширования трекера."""
+    sw_js = """
+const CACHE = 'zarik-tracker-v1';
+const URLS  = ['/tracker'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(URLS)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  if (e.request.url.includes('/api/')) return;
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request))
+  );
+});
+""".strip()
+    return web.Response(
+        text=sw_js,
+        content_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
+
+async def handle_apple_icon(request: web.Request) -> web.Response:
+    """Apple Touch Icon — zarik.jpg как иконка для сохранения на экран."""
+    if ZARIK_JPG.exists():
+        data = ZARIK_JPG.read_bytes()
+        return web.Response(body=data, content_type="image/jpeg")
+    # Фоллбэк — пустой 1×1 PNG
+    import base64
+    png1x1 = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    return web.Response(body=png1x1, content_type="image/png")
 
 
 async def handle_state(request: web.Request) -> web.Response:
@@ -226,13 +298,18 @@ async def handle_set_mode(request: web.Request) -> web.Response:
 
 def create_app() -> web.Application:
     app = web.Application()
-    app.router.add_get("/",             handle_index)
-    app.router.add_get("/app",          handle_index)
-    app.router.add_get("/tracker",      handle_tracker)
-    app.router.add_get("/api/state",    handle_state)
-    app.router.add_post("/api/task",    handle_task)
-    app.router.add_post("/api/close",   handle_close_day)
-    app.router.add_post("/api/mode",    handle_set_mode)
+    app.router.add_get("/",                    handle_index)
+    app.router.add_get("/app",                 handle_index)
+    app.router.add_get("/tracker",             handle_tracker)
+    app.router.add_get("/manifest.json",       handle_manifest)
+    app.router.add_get("/sw.js",               handle_sw)
+    app.router.add_get("/apple-touch-icon.png", handle_apple_icon)
+    app.router.add_get("/icon-192.png",        handle_apple_icon)
+    app.router.add_get("/icon-512.png",        handle_apple_icon)
+    app.router.add_get("/api/state",           handle_state)
+    app.router.add_post("/api/task",           handle_task)
+    app.router.add_post("/api/close",          handle_close_day)
+    app.router.add_post("/api/mode",           handle_set_mode)
     return app
 
 
