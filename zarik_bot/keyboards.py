@@ -163,12 +163,8 @@ def progress_keyboard() -> InlineKeyboardMarkup:
 
 
 def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
-    """Главное меню. Если webapp_url задан — кнопка «Трекер» открывает Mini App."""
-    bottom_row = (
-        [KeyboardButton("📱 МиниАПП", web_app=WebAppInfo(url=webapp_url))]
-        if webapp_url
-        else ["❓ Помощь"]
-    )
+    """Главное меню. «МиниАПП» — обычная текстовая кнопка; бот ответит inline-кнопкой с WebApp."""
+    bottom_row = ["📱 МиниАПП"] if webapp_url else ["❓ Помощь"]
     return ReplyKeyboardMarkup(
         [
             ["📋 Мои задачи на сегодня"],
@@ -178,6 +174,13 @@ def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         is_persistent=True,
     )
+
+
+def miniapp_open_keyboard(webapp_url: str) -> InlineKeyboardMarkup:
+    """Inline-кнопка для открытия Mini App — только она передаёт initData с user_id."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("📱 Открыть МиниАПП", web_app=WebAppInfo(url=webapp_url))
+    ]])
 
 
 # Обратная совместимость: без URL — обычное меню с «Помощью»

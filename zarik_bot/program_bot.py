@@ -31,6 +31,7 @@ from keyboards import (
     timezone_keyboard,
     reps_keyboard,
     webapp_keyboard,
+    miniapp_open_keyboard,
     welcome_keyboard,
     photo_keyboard,
     photos_done_keyboard,
@@ -864,6 +865,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             build_achievements_screen(user_id),
             parse_mode=ParseMode.HTML,
         )
+    elif text == "📱 МиниАПП":
+        if WEBAPP_URL:
+            await update.message.reply_text(
+                "📱 Нажми кнопку ниже — откроется твой трекер:",
+                reply_markup=miniapp_open_keyboard(WEBAPP_URL),
+            )
+        else:
+            await update.message.reply_text("МиниАПП пока недоступен.")
     elif text == "❓ Помощь":
         await update.message.reply_text(
             "🦥 Как пользоваться Зариком:\n\n"
