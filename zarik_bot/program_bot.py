@@ -1092,7 +1092,7 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
+    if update.effective_user.id not in TEST_USER_IDS:
         return
     args = context.args
     if not args or not args[0].isdigit():
