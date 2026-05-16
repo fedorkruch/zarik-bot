@@ -1127,6 +1127,14 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML,
     )
 
+    # ── 20:00 — Недельный итог (если milestone день) ──────────
+    if target in WEEKLY_MILESTONE_DAYS:
+        milestone_text = build_weekly_milestone_screen(uid)
+        await update.message.reply_text(
+            f"<b>📊 20:00 — недельный итог (день {target})</b>\n\n{milestone_text}",
+            parse_mode=ParseMode.HTML,
+        )
+
 
 async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
