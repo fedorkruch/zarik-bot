@@ -907,14 +907,44 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not 1 <= target <= TOTAL_DAYS:
         await update.message.reply_text(f"День должен быть от 1 до {TOTAL_DAYS}")
         return
-    db.set_day_for_testing(update.effective_user.id, target)
-    user_row  = db.get_user(update.effective_user.id)
-    completed = db.get_completed_tasks(update.effective_user.id, target)
+
+    uid = update.effective_user.id
+    db.set_day_for_testing(uid, target)
+    user_row  = db.get_user(uid)
+    completed = db.get_completed_tasks(uid, target)
+
+    # ── Шапка режима разработчика ─────────────────────────────
     await update.message.reply_text(
-        f"🛠 Тест: день {target} установлен\n\n"
-        + build_today_screen(user_row, target, completed),
+        f"🛠 <b>DEV MODE · День {target} из {TOTAL_DAYS}</b>",
         parse_mode=ParseMode.HTML,
-        reply_markup=today_markup(update.effective_user.id, target, completed)
+    )
+
+    # ── 6:00 — Утреннее послание + тренировка ─────────────────
+    morning_text = build_morning_text(user_row, target)
+    await update.message.reply_text(
+        f"<b>☀️ 6:00 — утро</b>\n\n{morning_text}",
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── Экран задач ───────────────────────────────────────────
+    await update.message.reply_text(
+        build_today_screen(user_row, target, completed),
+        parse_mode=ParseMode.HTML,
+        reply_markup=today_markup(uid, target, completed),
+    )
+
+    # ── 14:00 — Дневное сообщение ─────────────────────────────
+    afternoon = ct.get_afternoon(target, all_done=False)
+    await update.message.reply_text(
+        f"<b>🌤 14:00 — день</b>\n\n{afternoon}",
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── 21:00 — Вечернее сообщение ────────────────────────────
+    evening = ct.get_evening(target, all_done=False)
+    await update.message.reply_text(
+        f"<b>🌙 21:00 — вечер</b>\n\n{evening}",
+        parse_mode=ParseMode.HTML,
     )
 
 
