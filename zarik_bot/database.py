@@ -664,6 +664,64 @@ def get_all_leads() -> list:
     return [dict(r) for r in rows]
 
 
+# ── Статистика по задачам ─────────────────────────────────────
+
+def get_task_completion_counts(user_id: int) -> dict:
+    """
+    Возвращает {task_index: count} — сколько раз каждая задача выполнена пользователем.
+    task_index: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
+    """
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT task_index, COUNT(*) as cnt
+            FROM task_completions
+            WHERE user_id = ?
+            GROUP BY task_index
+        """, (user_id,)).fetchall()
+    return {row["task_index"]: row["cnt"] for row in rows}
+
+
+def get_all_task_completion_rates() -> dict:
+    """
+    Возвращает {task_index: [rates]} — список долей выполнения каждой задачи
+    по всем активным участникам (cnt_task / days_in_program).
+    Используется для расчёта перцентиля пользователя.
+    """
+    today = date.today()
+    with get_conn() as conn:
+        users = conn.execute("""
+            SELECT user_id, start_date FROM users
+            WHERE onboarding_complete = 1 AND is_active = 1
+        """).fetchall()
+        all_tc = conn.execute("""
+            SELECT user_id, task_index, COUNT(*) as cnt
+            FROM task_completions
+            GROUP BY user_id, task_index
+        """).fetchall()
+
+    # {user_id: {task_index: count}}
+    user_task_counts: dict = {}
+    for row in all_tc:
+        uid = row["user_id"]
+        user_task_counts.setdefault(uid, {})[row["task_index"]] = row["cnt"]
+
+    result = {i: [] for i in range(5)}
+    for u in users:
+        try:
+            start = date.fromisoformat(u["start_date"])
+            days_in = min((today - start).days + 1, TOTAL_DAYS)
+        except Exception:
+            continue
+        if days_in <= 0:
+            continue
+        counts = user_task_counts.get(u["user_id"], {})
+        for idx in range(5):
+            rate = counts.get(idx, 0) / days_in
+            result[idx].append(rate)
+
+    return result
+
+
 # ── Тестирование ──────────────────────────────────────────────
 
 def reset_user(user_id: int):

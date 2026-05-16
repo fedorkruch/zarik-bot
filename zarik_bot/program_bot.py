@@ -282,6 +282,116 @@ def build_week_screen(user_id: int) -> str:
     return "\n".join(lines)
 
 
+WEEKLY_MILESTONE_DAYS = {7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77}
+
+# Ккал на одно повторение (усреднённо)
+_KCAL_PUSHUP = 0.5
+_KCAL_SQUAT  = 0.5
+_KCAL_ABS    = 0.3
+_KCAL_SESSION = 50  # базовые калории за сессию (разминка, кардио-эффект)
+
+TASK_LABELS_WEEKLY = [
+    "💪 Тренировка",
+    "💧 Вода",
+    "📚 Чтение",
+    "🥗 Питание",
+    "🚫 Алкоголь",
+]
+
+
+def _calc_task_percentile(user_rate: float, all_rates: list) -> int:
+    """Возвращает % участников с более низким показателем (чем выше — тем лучше)."""
+    if len(all_rates) < 2:
+        return 50
+    below = sum(1 for r in all_rates if r < user_rate)
+    return round(below / len(all_rates) * 100)
+
+
+def build_weekly_milestone_screen(user_id: int) -> str:
+    """
+    Расширенный итог недели для дней 7, 14, 21 ... 77.
+    Показывает: мотивационный заголовок, накопленные повторения + калории,
+    перцентиль по каждой задаче относительно всех участников, статистику группы.
+    """
+    stats    = db.get_stats(user_id)
+    day      = stats["current_day"]
+    done     = stats["days_completed"]
+    week_num = (day - 1) // 7 + 1
+
+    user_row      = db.get_user(user_id)
+    all_compl     = db.get_completed_days_set(user_id)
+
+    # ── Накопленные повторения (только за дни с выполненной тренировкой) ──
+    total_pushups = total_squats = total_abs = workout_days = 0
+    for d in all_compl:
+        tasks = db.get_completed_tasks(user_id, d)
+        if 0 in tasks:   # task 0 = тренировка
+            w = get_workout(dict(user_row), d)
+            total_pushups += w["pushup"]["total"]
+            total_squats  += w["squat"]["total"]
+            total_abs     += w["abs"]["total"]
+            workout_days  += 1
+
+    kcal = round(
+        total_pushups * _KCAL_PUSHUP
+        + total_squats  * _KCAL_SQUAT
+        + total_abs     * _KCAL_ABS
+        + workout_days  * _KCAL_SESSION
+    )
+
+    # ── Перцентили по задачам ──────────────────────────────────
+    user_counts = db.get_task_completion_counts(user_id)
+    all_rates   = db.get_all_task_completion_rates()   # один запрос на все задачи
+
+    task_lines = []
+    for i in range(5):
+        user_cnt  = user_counts.get(i, 0)
+        user_rate = user_cnt / day if day > 0 else 0
+        pct_below = _calc_task_percentile(user_rate, all_rates.get(i, []))
+        top_pct   = 100 - pct_below
+        top_label = f"топ {top_pct}%" if top_pct < 100 else "💯 выполнено каждый день!"
+        task_lines.append(
+            f"{TASK_LABELS_WEEKLY[i]}  —  <b>{user_cnt}</b> из {day} дней  ·  {top_label}"
+        )
+
+    # ── Заголовок недели ──────────────────────────────────────
+    header = md2html(ct.get_weekly_header(week_num))
+
+    # ── Группа ────────────────────────────────────────────────
+    group = db.get_group_stats()
+
+    lines = [
+        f"<b>📅 Итоги недели {week_num}</b>",
+        "",
+        header,
+        "",
+        "─────────────────────",
+        "",
+        "<b>🏋️ За всё время программы ты сделал:</b>",
+        f"   Отжимания    <b>{total_pushups:,}</b> раз".replace(",", " "),
+        f"   Приседания   <b>{total_squats:,}</b> раз".replace(",", " "),
+        f"   Пресс         <b>{total_abs:,}</b> раз".replace(",", " "),
+        f"",
+        f"   🔥 Сожжено примерно <b>{kcal:,}</b> ккал".replace(",", " "),
+        "",
+        "─────────────────────",
+        "",
+        "<b>📊 Твой рейтинг среди участников:</b>",
+    ] + task_lines + [
+        "",
+        "─────────────────────",
+    ]
+
+    if group and group.get("total", 0) > 0:
+        lines += [
+            "",
+            f"👥  Группа:      {group['total']} участников",
+            f"🏃  Продолжают:  <b>{group['active']}</b>",
+        ]
+
+    return "\n".join(lines)
+
+
 def build_achievements_screen(user_id: int) -> str:
     """Экран «Ачивки» — все достижения с ✅/⬜."""
     lines = ["<b>🏆  Твои ачивки</b>", ""]
@@ -914,23 +1024,22 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
     users = db.get_all_active_users()
     for user in users:
         try:
-            user_tz  = pytz.timezone(user["timezone"] or "Europe/Moscow")
+            user_tz   = pytz.timezone(user["timezone"] or "Europe/Moscow")
             local_now = dt.now(user_tz)
-            if local_now.weekday() != 6 or local_now.hour != 20:
+            if local_now.hour != 20:
                 continue
             if not db.is_program_started(user["user_id"]):
                 continue
             day = db.get_current_day(user["user_id"])
-            if day < 1:
+            if day not in WEEKLY_MILESTONE_DAYS:
                 continue
             await context.bot.send_message(
                 chat_id=user["user_id"],
-                text=build_week_screen(user["user_id"]),
+                text=build_weekly_milestone_screen(user["user_id"]),
                 parse_mode=ParseMode.HTML,
-                reply_markup=tab_only_keyboard("week")
             )
         except Exception as e:
-            logger.warning(f"Неделя {user['user_id']}: {e}")
+            logger.warning(f"Недельный итог {user['user_id']}: {e}")
 
 
 # ── Админ-команды ─────────────────────────────────────────────
