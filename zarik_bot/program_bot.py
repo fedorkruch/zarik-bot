@@ -396,6 +396,9 @@ async def cmd_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not db.is_payment_confirmed(user.id):
         await update.message.reply_text(not_paid_message(), reply_markup=START_MENU)
         return
+    if not db.is_program_started(user.id):
+        await update.message.reply_text("Ишь хитрюга)) Вот завтра начнем, тогда и прогресс появится 😄")
+        return
     await update.message.reply_text(
         build_progress_screen(user.id),
         parse_mode=ParseMode.HTML,
@@ -425,6 +428,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             markup    = tasks_keyboard(day, completed, active_tab="tasks")
 
         elif tab == "progress":
+            if not db.is_program_started(user_id):
+                await query.answer("Ишь хитрюга)) Вот завтра начнем, тогда и прогресс появится 😄", show_alert=True)
+                return
             text   = build_progress_screen(user_id)
             markup = None
 
