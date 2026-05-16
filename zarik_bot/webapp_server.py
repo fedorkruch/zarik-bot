@@ -19,7 +19,9 @@ from workout import get_workout
 logger = logging.getLogger(__name__)
 
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
-PORT = int(os.environ.get("PORT", 8080))
+PORT              = int(os.environ.get("PORT", 8080))
+ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
+TEST_USER_IDS     = {283760217, 262479340}   # те же что в program_bot
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
@@ -260,7 +262,8 @@ async def handle_state(request: web.Request) -> web.Response:
     uid = get_user_id_from_request(request)
     if not uid:
         return web.json_response({"error": "unauthorized"}, status=401)
-    if not db.is_payment_confirmed(uid):
+    # Тест-юзеры и админ проходят без проверки оплаты
+    if uid not in TEST_USER_IDS and not db.is_payment_confirmed(uid):
         return web.json_response({"error": "not_paid"}, status=403)
     try:
         state = build_full_state(uid)

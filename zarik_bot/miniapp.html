@@ -339,12 +339,14 @@ async function api(method, path, body) {
   return r.json();
 }
 
+let LOAD_ERROR = '';
+
 async function loadState() {
   try {
     const data = await api('GET', '/api/state');
-    if (data.error) throw new Error(data.error);
+    if (data.error) { LOAD_ERROR = data.error; throw new Error(data.error); }
     STATE = data;
-  } catch(e) { STATE = null; }
+  } catch(e) { if (!LOAD_ERROR) LOAD_ERROR = e.message || 'network_error'; STATE = null; }
 }
 
 function nav(view) {
@@ -521,12 +523,17 @@ function fallbackCopy(txt, cb) {
   document.getElementById('loader').style.display = 'none';
 
   if (!STATE) {
+    const msgs = {
+      unauthorized: ['🔒 Нет доступа', 'Открой миниапп через кнопку в боте, а не по прямой ссылке'],
+      not_paid:     ['💳 Нет доступа', 'Сначала оплати участие в @Zarik_Lazy_Bot'],
+    };
+    const [title, sub] = msgs[LOAD_ERROR] || ['⚠️ Ошибка загрузки', 'Код: ' + LOAD_ERROR + ' — перезапусти бота и попробуй снова'];
     document.body.innerHTML =
       '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
       'height:100vh;gap:16px;text-align:center;padding:24px">' +
       '<span style="font-size:48px">🦥</span>' +
-      '<div style="font-size:18px;font-weight:700">Не удалось загрузить данные</div>' +
-      '<div style="color:rgba(255,255,255,.5);font-size:14px">Открой бота @Zarik_Lazy_Bot<br>и попробуй снова</div>' +
+      '<div style="font-size:18px;font-weight:700">' + title + '</div>' +
+      '<div style="color:rgba(255,255,255,.5);font-size:14px">' + sub + '</div>' +
       '</div>';
     return;
   }
