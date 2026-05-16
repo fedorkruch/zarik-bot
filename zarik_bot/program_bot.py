@@ -34,6 +34,7 @@ from keyboards import (
     welcome_keyboard,
     photo_keyboard,
     photos_done_keyboard,
+    photos_retry_keyboard,
     MAIN_MENU,
     START_MENU,
     TIMEZONES,
@@ -514,7 +515,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Надевайте что вам комфортнее, но в рамках приличия "
             "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
             "Отправляй фото сюда — я сохраню 👇\n"
-            "Когда закончишь — нажми кнопку ниже.",
+            "Когда закончишь — нажми кнопку ниже.\n\n"
+            "🔒 Мы не делимся твоими фото, не выкладываем их никуда — это только для тебя.",
             reply_markup=photos_done_keyboard()
         )
         return
@@ -523,12 +525,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         db.set_share_photos(user_id, False)
         db.complete_onboarding(user_id)
-        user_row = db.get_user(user_id)
-        workout  = get_workout(dict(user_row), 1)
-        await query.edit_message_text(
-            f"👌 Понял, без фото — тоже отлично!\n\n"
-            f"💪 Твоя тренировка на День 1:\n{workout['description']}"
-        )
+        await query.edit_message_text("👌 Понял, без фото — тоже отлично!")
         await query.message.reply_text(
             "Отлично, твоя программа сформирована под тебя 🎯\n\n"
             "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
@@ -540,13 +537,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "photos_done":
         await query.answer()
         count = db.count_user_photos(user_id, "before")
+        if count < 2:
+            # Фото не пришло или пришло меньше 2 — просим повторить или пропустить
+            await query.edit_message_text(
+                "📸 Фото не отправлено.\n\n"
+                "Отправь фото сюда в чат (нужно 2 штуки — анфас и профиль) "
+                "или пропусти этот этап, если не хочешь делиться фото 👇",
+                reply_markup=photos_retry_keyboard()
+            )
+            return
         db.complete_onboarding(user_id)
-        user_row = db.get_user(user_id)
-        workout  = get_workout(dict(user_row), 1)
-        photo_summary = f"Сохранил {count} фото 📸\n\n" if count > 0 else "Фото не пришло — окей, бывает 🦥\n\n"
-        await query.edit_message_text(
-            f"{photo_summary}💪 Твоя тренировка на День 1:\n{workout['description']}"
-        )
+        await query.edit_message_text(f"✅ Сохранил {count} фото 📸")
         await query.message.reply_text(
             "Отлично, твоя программа сформирована под тебя 🎯\n\n"
             "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"

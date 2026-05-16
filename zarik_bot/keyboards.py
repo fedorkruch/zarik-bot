@@ -150,7 +150,15 @@ def photo_keyboard() -> InlineKeyboardMarkup:
 def photos_done_keyboard() -> InlineKeyboardMarkup:
     """Кнопка завершения отправки фото."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Готово, фото отправил(а)", callback_data="photos_done")],
+        [InlineKeyboardButton("✅ Готово, фото отправлено", callback_data="photos_done")],
+    ])
+
+
+def photos_retry_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки если фото не пришло: повторить или пропустить."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Готово, фото отправлено", callback_data="photos_done")],
+        [InlineKeyboardButton("Пропустить этот шаг", callback_data="photo_no")],
     ])
 
 
