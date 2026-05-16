@@ -660,32 +660,46 @@ if('serviceWorker' in navigator){
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = ('standalone' in navigator) && navigator.standalone;
   const dismissed = localStorage.getItem('pwa_banner_dismissed');
-  if(isIOS && !isStandalone && !dismissed){
-    const banner = document.createElement('div');
-    banner.id = 'pwa-banner';
-    banner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-        <span style="font-size:22px;flex-shrink:0">🦥</span>
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Сохрани на экран!</div>
-          <div style="font-size:11px;color:#a0a0c0;line-height:1.4">Нажми <b style="color:#eaeaf8">Поделиться</b> <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8875f5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> → <b style="color:#eaeaf8">На экран Домой</b></div>
-        </div>
-      </div>
-      <button id="pwa-close" style="background:none;border:none;color:#7070a0;font-size:20px;cursor:pointer;padding:4px;line-height:1;flex-shrink:0">✕</button>
-    `;
-    Object.assign(banner.style,{
-      position:'fixed',bottom:'0',left:'0',right:'0',
-      background:'#1a1a2e',borderTop:'1px solid #3a3270',
-      padding:'12px 14px',display:'flex',alignItems:'center',gap:'10px',
-      zIndex:'9999',fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif',
-      boxShadow:'0 -4px 20px rgba(0,0,0,0.5)',
-    });
-    document.body.appendChild(banner);
-    document.getElementById('pwa-close').onclick=()=>{
-      banner.remove();
-      localStorage.setItem('pwa_banner_dismissed','1');
-    };
-  }
+  if(!isIOS || isStandalone || dismissed) return;
+
+  // Определяем: открыт в Telegram (не Safari) или уже в Safari
+  const inTelegram = /Telegram/i.test(navigator.userAgent);
+
+  const banner = document.createElement('div');
+  banner.id = 'pwa-banner';
+
+  const text = inTelegram
+    ? `<div style="font-size:13px;font-weight:700;margin-bottom:4px">Сохрани на экран!</div>
+       <div style="font-size:11px;color:#a0a0c0;line-height:1.6">
+         1️⃣ Нажми <b style="color:#eaeaf8">···</b> (три точки) вверху<br>
+         2️⃣ Выбери <b style="color:#eaeaf8">Открыть в Safari</b><br>
+         3️⃣ В Safari: <b style="color:#eaeaf8">Поделиться</b> → <b style="color:#eaeaf8">На экран Домой</b>
+       </div>`
+    : `<div style="font-size:13px;font-weight:700;margin-bottom:4px">Сохрани на экран!</div>
+       <div style="font-size:11px;color:#a0a0c0;line-height:1.4">
+         Нажми <b style="color:#eaeaf8">Поделиться</b> <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8875f5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+         → <b style="color:#eaeaf8">На экран Домой</b>
+       </div>`;
+
+  banner.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0">
+      <span style="font-size:20px;flex-shrink:0;margin-top:1px">🦥</span>
+      <div style="min-width:0">${text}</div>
+    </div>
+    <button id="pwa-close" style="background:none;border:none;color:#7070a0;font-size:20px;cursor:pointer;padding:4px;line-height:1;flex-shrink:0;align-self:flex-start">✕</button>
+  `;
+  Object.assign(banner.style,{
+    position:'fixed',bottom:'0',left:'0',right:'0',
+    background:'#1a1a2e',borderTop:'1px solid #3a3270',
+    padding:'14px',display:'flex',alignItems:'flex-start',gap:'10px',
+    zIndex:'9999',fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif',
+    boxShadow:'0 -4px 20px rgba(0,0,0,0.5)',
+  });
+  document.body.appendChild(banner);
+  document.getElementById('pwa-close').onclick=()=>{
+    banner.remove();
+    localStorage.setItem('pwa_banner_dismissed','1');
+  };
 })();
 </script>
 </body>
