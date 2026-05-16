@@ -21,7 +21,7 @@ PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_T
 PORT = int(os.environ.get("PORT", 8080))
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
-SHAGI_PNG           = Path(__file__).parent.parent / "Shagi.png"
+APP_ICON            = Path(__file__).parent / "app_icon.jpg"
 
 TASK_LABELS = [
     ("💪", "Тренировка"),
@@ -162,9 +162,7 @@ async def handle_manifest(request: web.Request) -> web.Response:
         "theme_color": "#0d0d12",
         "orientation": "portrait",
         "icons": [
-            {"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"},
-            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/apple-touch-icon.png", "sizes": "192x192", "type": "image/jpeg"},
         ],
     }
     import json as _json
@@ -209,10 +207,10 @@ self.addEventListener('fetch', e => {
 
 
 async def handle_apple_icon(request: web.Request) -> web.Response:
-    """Apple Touch Icon — Shagi.png как иконка для сохранения на экран."""
-    if SHAGI_PNG.exists():
-        data = SHAGI_PNG.read_bytes()
-        return web.Response(body=data, content_type="image/png")
+    """Apple Touch Icon — app_icon.jpg как иконка для сохранения на экран."""
+    if APP_ICON.exists():
+        data = APP_ICON.read_bytes()
+        return web.Response(body=data, content_type="image/jpeg")
     # Фоллбэк — пустой 1×1 PNG
     import base64
     png1x1 = base64.b64decode(
