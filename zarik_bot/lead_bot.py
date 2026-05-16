@@ -51,8 +51,8 @@ CHANNEL_URL          = "https://t.me/kabanovofficial"
 
 # ── Цены (тестовый режим) ─────────────────────────────────────
 # TODO: перед боевым запуском заменить на 199_000
-COURSE_PRICE_KOPECKS  = 5_000    # 50 ₽ (тест; боевой — 199_000 = 1990 ₽)
-RECEIPT_PRICE_KOPECKS = 6_000    # 60 ₽ — цена в чеке ЮКасса (54-ФЗ)
+COURSE_PRICE_KOPECKS  = 6_000    # 60 ₽ (тест; боевой — 199_000 = 1990 ₽)
+RECEIPT_PRICE_KOPECKS = 6_000    # должна совпадать с COURSE_PRICE_KOPECKS (требование ЮКасса)
 MIN_STAKE_KOPECKS     = 1_000    # минимальная ставка 10 ₽
 
 logging.basicConfig(
