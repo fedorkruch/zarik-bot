@@ -83,22 +83,39 @@ def tracker_keyboard() -> InlineKeyboardMarkup | None:
 # ── Проверка подписки ─────────────────────────────────────────
 
 async def is_subscribed(user_id: int, bot) -> bool:
-    """Проверяет подписку на @kabanovofficial. При ошибке — пропускаем."""
+    """
+    Проверяет подписку на @kabanovofficial.
+    При любой ошибке — возвращает False (не пропускаем).
+    Бот должен быть добавлен в канал как администратор для корректной проверки.
+    """
     try:
         member = await bot.get_chat_member(f"@{CHANNEL}", user_id)
+        logger.info(f"Статус подписки {user_id} на @{CHANNEL}: {member.status}")
         return member.status not in (ChatMember.BANNED, ChatMember.LEFT)
     except Exception as e:
         logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
-        return True  # если бот не является администратором канала — пропускаем
+        return False  # при ошибке — не пропускаем
 
 
 # ── Основной флоу ────────────────────────────────────────────
 
 async def do_send_tracker(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
-    Шаг 2: отправляем трекер-подарок, пишем в CRM,
+    Шаг 2: финальная проверка подписки, отправляем трекер-подарок, пишем в CRM,
     затем запускаем цепочку отложенных сообщений.
     """
+    # Повторная проверка — на случай если пользователь отписался между нажатием кнопки и отправкой
+    if not await is_subscribed(user_id, context.bot):
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "🦥 Я не обнаружил подписки на канал.\n\n"
+                "Как только подпишешься — я сразу пришлю подарок 🎁"
+            ),
+            reply_markup=subscribe_keyboard(),
+        )
+        return
+
     tracker_text = (
         "🎁 *Держи трекер достижений — твой подарок!*\n\n"
         "Устанавливай количество дней на пути к цели, прописывай ежедневные задачи. "
