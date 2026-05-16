@@ -399,7 +399,6 @@ async def cmd_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_progress_screen(user.id),
         parse_mode=ParseMode.HTML,
-        reply_markup=tab_only_keyboard("progress")
     )
 
 
@@ -427,7 +426,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif tab == "progress":
             text   = build_progress_screen(user_id)
-            markup = tab_only_keyboard("progress")
+            markup = None
 
         elif tab == "week":
             text   = build_week_screen(user_id)
