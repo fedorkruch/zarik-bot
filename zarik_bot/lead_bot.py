@@ -20,8 +20,10 @@ lead_bot.py — @Shagov77_bot: воронка продаж
   ADMIN_ID               — Telegram ID администратора
   WEBAPP_URL             — URL мини-аппа (для трекера)
 """
+import difflib
 import logging
 import os
+import re
 import time as _time
 from datetime import datetime
 
@@ -60,6 +62,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _last_start: dict[int, float] = {}
+
+# ── Состояние диалога (last message для повтора) ──────────────
+_user_last: dict[int, dict] = {}   # user_id → {text, markup, parse_mode}
+
+
+def _remember(user_id: int, text: str, markup=None, parse_mode=ParseMode.MARKDOWN):
+    """Запоминает последнее сообщение бота — для повтора при некорректном вводе."""
+    _user_last[user_id] = {"text": text, "markup": markup, "parse_mode": parse_mode}
+
+
+def _is_discount_request(text: str) -> bool:
+    """Проверяет, есть ли в тексте слово «скидка» или близкое к нему (с учётом опечаток)."""
+    tl = text.lower()
+    if re.search(r"скид", tl):
+        return True
+    for word in re.findall(r"[а-яёa-z]+", tl):
+        if len(word) >= 5 and difflib.SequenceMatcher(None, word, "скидка").ratio() >= 0.70:
+            return True
+    return False
 
 
 # ── Клавиатуры ───────────────────────────────────────────────
@@ -182,9 +203,11 @@ async def job_ask_tracker_check(context: ContextTypes.DEFAULT_TYPE):
     if db.is_payment_confirmed(user_id):
         return
 
+    check_text = "🦥 Ну как? Всё получилось с трекером? Нравится? 👇"
+    _remember(user_id, check_text, markup=tracker_check_keyboard(attempt), parse_mode=None)
     await context.bot.send_message(
         chat_id=user_id,
-        text="🦥 Ну как? Всё получилось с трекером? Нравится? 👇",
+        text=check_text,
         reply_markup=tracker_check_keyboard(attempt),
     )
 
@@ -248,6 +271,7 @@ async def job_send_offer(context: ContextTypes.DEFAULT_TYPE):
         "Нажми кнопку — оплата прямо в Telegram 👇"
     )
 
+    _remember(user_id, text, markup=buy_keyboard())
     await context.bot.send_message(
         chat_id=user_id,
         text=text,
@@ -277,8 +301,7 @@ async def job_no_pressure(context: ContextTypes.DEFAULT_TYPE):
         chat_id=user_id,
         text=(
             "🦥 Никакого давления.\n\n"
-            "Ты можешь вернуться в любой момент — кнопка доступна выше.\n\n"
-            "Если есть вопросы — просто напиши, отвечу."
+            "Ты можешь вернуться в любой момент — кнопка доступна выше."
         ),
     )
 
@@ -420,13 +443,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await update.message.reply_text(
+    sub_text = (
         f"🦥 Привет, {user.first_name}!\n\n"
         f"Я подготовил тебе подарок — универсальный интерактивный трекер для достижения твоих задач.\n\n"
         f"Чтобы получить его, подпишись на канал — там всё самое важное о программе.\n\n"
-        f"Как подпишешься — нажми кнопку ниже 👇",
-        reply_markup=subscribe_keyboard(),
+        f"Как подпишешься — нажми кнопку ниже 👇"
     )
+    _remember(user.id, sub_text, markup=subscribe_keyboard(), parse_mode=None)
+    await update.message.reply_text(sub_text, reply_markup=subscribe_keyboard())
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -540,14 +564,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             return
         min_r = MIN_STAKE_KOPECKS // 100
+        stake_text = (
+            f"🎯 *Хочешь добавить ставку на себя?*\n\n"
+            f"Ставка добавляется к стоимости программы.\n"
+            f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
+            f"_Минимальная сумма — {min_r} ₽._"
+        )
+        _remember(user_id, stake_text, markup=stake_confirm_keyboard())
         await context.bot.send_message(
             chat_id=user_id,
-            text=(
-                f"🎯 *Хочешь добавить ставку на себя?*\n\n"
-                f"Ставка добавляется к стоимости программы.\n"
-                f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
-                f"_Минимальная сумма — {min_r} ₽._"
-            ),
+            text=stake_text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=stake_confirm_keyboard(),
         )
@@ -564,10 +590,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         context.user_data["awaiting_stake"] = True
         min_r = MIN_STAKE_KOPECKS // 100
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):",
-        )
+        ask_text = f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):"
+        _remember(user_id, ask_text, parse_mode=None)
+        await context.bot.send_message(chat_id=user_id, text=ask_text)
         return
 
     # ── Нет, без ставки → сразу инвойс ───────────────────────
@@ -584,18 +609,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Текстовые сообщения: ввод ставки или перезапуск воронки."""
+    """Текстовые сообщения: ввод ставки, реакция на «скидку», или защита от случайного ввода."""
     user_id = update.effective_user.id
+    text = update.message.text or ""
 
-    # Ожидаем ввод суммы ставки
+    # 1. Ждём ввод суммы ставки — обрабатываем как число
     if context.user_data.get("awaiting_stake"):
-        text = update.message.text.strip().replace(",", ".").replace(" ", "")
+        clean = text.strip().replace(",", ".").replace(" ", "")
         try:
-            amount_rub = float(text)
+            amount_rub = float(clean)
         except ValueError:
+            min_r = MIN_STAKE_KOPECKS // 100
             await update.message.reply_text(
-                f"⚠️ Введи число, например: 100\n"
-                f"Минимальная сумма — {MIN_STAKE_KOPECKS // 100} ₽."
+                f"⚠️ Некорректный формат ввода данных.\n\nВведи число, например: 100\n"
+                f"Минимальная сумма — {min_r} ₽."
             )
             return
 
@@ -612,7 +639,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_course_invoice(user_id, context, stake_kopecks=amount_kopecks)
         return
 
-    await cmd_start(update, context)
+    # 2. Запрос скидки — специальный ответ
+    if _is_discount_request(text):
+        await update.message.reply_text(
+            "Предложение 1990 вместо 4900 действует в течение трёх дней с текущего момента, "
+            "мы специально уронили цену, чтобы дать возможность большему количеству участников "
+            "начать двигаться к своим целям."
+        )
+        return
+
+    # 3. Любой другой текст — некорректный ввод, повторяем последнее сообщение
+    last = _user_last.get(user_id)
+    await update.message.reply_text("⚠️ Некорректный формат ввода данных.")
+    if last:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=last["text"],
+            parse_mode=last.get("parse_mode"),
+            reply_markup=last.get("markup"),
+        )
+    else:
+        await cmd_start(update, context)
 
 
 # ── Оплата ───────────────────────────────────────────────────
