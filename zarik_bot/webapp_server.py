@@ -52,6 +52,7 @@ def validate_init_data(raw: str) -> dict | None:
     try:
         params = _parse_init_data_params(raw)
         hash_recv = params.pop("hash", None)
+        params.pop("signature", None)   # Bot API 8.0+: signature не входит в data-check-string
         if not hash_recv:
             logger.warning("initData: нет hash")
             return None
