@@ -580,6 +580,42 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Оплата ───────────────────────────────────────────────────
 
+def _build_receipt(stake_kopecks: int = 0) -> str:
+    """
+    Формирует provider_data с чеком для ЮКасса (54-ФЗ).
+    vat_code=1 — без НДС.
+    payment_mode=full_payment, payment_subject=service.
+    Email/телефон покупателя передаёт Telegram автоматически
+    через send_email_to_provider / send_phone_number_to_provider.
+    """
+    import json as _json
+
+    def _rub(kopecks: int) -> str:
+        return f"{kopecks / 100:.2f}"
+
+    items = [
+        {
+            "description": "Программа «Зарик 77 дней»",
+            "quantity": "1.00",
+            "amount": {"value": _rub(COURSE_PRICE_KOPECKS), "currency": "RUB"},
+            "vat_code": 1,
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        }
+    ]
+    if stake_kopecks > 0:
+        items.append({
+            "description": "Ставка на себя (возврат при завершении программы)",
+            "quantity": "1.00",
+            "amount": {"value": _rub(stake_kopecks), "currency": "RUB"},
+            "vat_code": 1,
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        })
+
+    return _json.dumps({"receipt": {"items": items}}, ensure_ascii=False)
+
+
 async def send_course_invoice(
     chat_id: int,
     context: ContextTypes.DEFAULT_TYPE,
@@ -605,11 +641,13 @@ async def send_course_invoice(
             payload=f"course_{chat_id}_stake_{stake_kopecks}",
             provider_token=PROVIDER_TOKEN,
             currency="RUB",
-            start_parameter="pay",
             prices=prices,
             need_name=True,
             need_email=True,
             need_phone_number=True,
+            send_email_to_provider=True,
+            send_phone_number_to_provider=True,
+            provider_data=_build_receipt(stake_kopecks),
         )
         logger.info(f"Инвойс отправлен: user={chat_id}, итого={total_rub}₽, ставка={stake_kopecks // 100}₽")
     except Exception as e:
