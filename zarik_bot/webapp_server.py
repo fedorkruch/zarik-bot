@@ -89,6 +89,14 @@ def get_user_id_from_request(request: web.Request) -> int | None:
     except Exception:
         pass
 
+    # Последний фоллбек: ?uid=XXX query-param (только для TEST_USER_IDS, когда initData пуст)
+    uid_q = request.rel_url.query.get("uid", "")
+    if uid_q.isdigit():
+        uid = int(uid_q)
+        if uid in TEST_USER_IDS:
+            logger.warning(f"DEV fallback: test user {uid} via ?uid query param")
+            return uid
+
     return None
 
 
