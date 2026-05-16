@@ -567,6 +567,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     user_id = query.from_user.id
     data    = query.data
+    db.log_user_session(user_id)
 
     # ── Переключение вкладок ──────────────────────────────────
     if data.startswith("tab:"):
@@ -839,6 +840,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text    = update.message.text.strip()
+    db.log_user_session(user_id)
 
     if text == "🦥 Начать":
         await cmd_start(update, context)
@@ -889,6 +891,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    db.log_user_session(user_id)
     if not db.is_payment_confirmed(user_id):
         return
     step = db.get_onboarding_step(user_id)
@@ -1068,6 +1071,58 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика активности участников за 7 дней (только для admin)."""
+    if not is_admin(update.effective_user.id):
+        return
+
+    stats = db.get_session_stats()
+
+    # Считаем средние часы первого и последнего входа с учётом часового пояса
+    import pytz
+    first_hours, last_hours = [], []
+    for s in stats["raw_sessions"]:
+        tz_name = s.get("timezone") or "Europe/Moscow"
+        try:
+            tz = pytz.timezone(tz_name)
+            for field, bucket in ((s["first_open_utc"], first_hours), (s["last_open_utc"], last_hours)):
+                if field:
+                    utc_dt = dt.fromisoformat(field).replace(tzinfo=pytz.utc)
+                    local_dt = utc_dt.astimezone(tz)
+                    bucket.append(local_dt.hour + local_dt.minute / 60)
+        except Exception:
+            pass
+
+    def fmt_hour(hours: list) -> str:
+        if not hours:
+            return "—"
+        avg = sum(hours) / len(hours)
+        h, m = int(avg), int((avg % 1) * 60)
+        return f"{h:02d}:{m:02d}"
+
+    top_lines = ""
+    for i, u in enumerate(stats["top_users"], 1):
+        name = f"@{u['username']}" if u.get("username") else f"id{u['user_id']}"
+        top_lines += f"\n  {i}. {name} — {u['total']} обращений"
+
+    text = (
+        "📊 *Активность · @Zarik\\_Lazy\\_Bot*\n\n"
+        f"👥 Активных сегодня: *{stats['active_today']}*\n"
+        f"👥 Активных за 7 дней: *{stats['active_users_7d']}*\n\n"
+        "📅 *Средние показатели за 7 дней:*\n"
+        f"• Обращений в день: *{stats['avg_interactions']}*\n"
+        f"• Продолжительность сессии: *{stats['avg_session_min']} мин*\n"
+        f"• Активных дней из 7: *{stats['avg_active_days']}*\n\n"
+        "⏰ *Время по местному часовому поясу:*\n"
+        f"• Первое открытие: *{fmt_hour(first_hours)}*\n"
+        f"• Последнее открытие: *{fmt_hour(last_hours)}*\n"
+    )
+    if top_lines:
+        text += f"\n🔥 *Топ-5 активных (7 дней):*{top_lines}"
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
 async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in TEST_USER_IDS:
         return
@@ -1233,6 +1288,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("today",      cmd_today))
     app.add_handler(CommandHandler("progress",   cmd_progress))
     app.add_handler(CommandHandler("admin",      cmd_admin))
+    app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("setday",     cmd_setday))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("grant",      cmd_grant))

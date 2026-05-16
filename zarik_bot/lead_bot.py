@@ -210,6 +210,7 @@ async def job_ask_tracker_check(context: ContextTypes.DEFAULT_TYPE):
         text=check_text,
         reply_markup=tracker_check_keyboard(attempt),
     )
+    db.mark_lead_tracker_question_sent(user_id)
 
 
 async def job_send_intro(context: ContextTypes.DEFAULT_TYPE):
@@ -240,6 +241,7 @@ async def job_send_intro(context: ContextTypes.DEFAULT_TYPE):
         text=text,
         parse_mode=ParseMode.MARKDOWN,
     )
+    db.mark_lead_intro_sent(user_id)
 
     # +10 сек → оффер с ценой
     context.job_queue.run_once(
@@ -487,6 +489,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── «Да, всё отлично!» ────────────────────────────────────
     if data == "tracker_ok":
         await query.answer()
+        db.mark_lead_tracker_reply(user_id, yes=True)
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
@@ -506,6 +509,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── «Нет, не получилось» ──────────────────────────────────
     if data.startswith("tracker_fail"):
         await query.answer()
+        db.mark_lead_tracker_reply(user_id, yes=False)
         attempt = int(data.split("_")[-1])
         try:
             await query.edit_message_reply_markup(reply_markup=None)
@@ -563,6 +567,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
             return
+        db.mark_lead_start_clicked(user_id)
         min_r = MIN_STAKE_KOPECKS // 100
         stake_text = (
             f"🎯 *Хочешь добавить ставку на себя?*\n\n"
@@ -577,6 +582,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=stake_confirm_keyboard(),
         )
+        db.mark_lead_stake_asked(user_id)
         return
 
     # ── Да, хочу ставку → просим ввести сумму ────────────────
@@ -584,6 +590,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         if db.is_payment_confirmed(user_id):
             return
+        db.mark_lead_stake_choice(user_id, "yes")
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
@@ -600,6 +607,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         if db.is_payment_confirmed(user_id):
             return
+        db.mark_lead_stake_choice(user_id, "no")
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
@@ -734,6 +742,7 @@ async def send_course_invoice(
             provider_data=_build_receipt(stake_kopecks),
         )
         logger.info(f"Инвойс отправлен: user={chat_id}, итого={total_rub}₽, ставка={stake_kopecks // 100}₽")
+        db.mark_lead_invoice_sent(chat_id)
     except Exception as e:
         logger.error(f"Ошибка send_invoice user={chat_id}: {e}")
         await context.bot.send_message(
@@ -821,30 +830,65 @@ async def cmd_leads(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    leads = db.get_all_leads()
-    if not leads:
+    f = db.get_funnel_stats()
+    if not f or not f.get("total"):
         await update.message.reply_text("📊 Лидов пока нет.")
         return
 
-    total      = len(leads)
-    subscribed = sum(1 for l in leads if l.get("subscribed_at"))
-    tracker_s  = sum(1 for l in leads if l.get("tracker_sent_at"))
-    pitched    = sum(1 for l in leads if l.get("pitch_sent_at"))
-    purchased  = sum(1 for l in leads if l.get("lead_status") == "purchased")
-    cold       = sum(1 for l in leads if l.get("lead_status") == "cold")
+    cold = sum(1 for l in db.get_all_leads() if l.get("lead_status") == "cold")
 
     text = (
         f"📊 *CRM — лиды @Shagov77\\_bot*\n\n"
-        f"Всего лидов: {total}\n"
-        f"Подписались на канал: {subscribed}\n"
-        f"Получили трекер: {tracker_s}\n"
-        f"Получили оффер: {pitched}\n"
-        f"Купили курс: {purchased} 🎉\n"
+        f"Всего лидов: {f['total']}\n"
+        f"Подписались на канал: {f['subscribed']}\n"
+        f"Получили трекер: {f['tracker_sent']}\n"
+        f"Получили оффер: {f['offer_sent']}\n"
+        f"Купили курс: {f['purchased']} 🎉\n"
         f"Остыли (cold): {cold}\n\n"
-        f"Конверсия: {purchased / max(tracker_s, 1) * 100:.1f}% (купили / получили трекер)"
+        f"Конверсия: {f['purchased'] / max(f['tracker_sent'], 1) * 100:.1f}% (купили / получили трекер)"
     )
 
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальная воронка с конверсией на каждом шаге (только для администратора)."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    f = db.get_funnel_stats()
+    if not f or not f.get("total"):
+        await update.message.reply_text("📊 Данных пока нет.")
+        return
+
+    def pct(n, base):
+        return f"{n / base * 100:.0f}%" if base else "—"
+
+    def drop(current, prev):
+        if not prev:
+            return ""
+        lost = prev - current
+        return f" (−{lost}, {lost / prev * 100:.0f}% отвал)" if lost > 0 else ""
+
+    t = f["total"]
+    lines = [
+        "🔽 *Воронка @Shagov77\\_bot*\n",
+        f"Всего лидов:              {t:>4}  (100%)",
+        f"Подписались:              {f['subscribed']:>4}  ({pct(f['subscribed'], t)}){drop(f['subscribed'], t)}",
+        f"Получили трекер:          {f['tracker_sent']:>4}  ({pct(f['tracker_sent'], t)}){drop(f['tracker_sent'], f['subscribed'])}",
+        f"Увидели вопрос:           {f['question_sent']:>4}  ({pct(f['question_sent'], t)}){drop(f['question_sent'], f['tracker_sent'])}",
+        f"Ответили на вопрос:       {f['question_replied']:>4}  ({pct(f['question_replied'], t)}) → Да: {f['replied_yes']} / Нет: {f['replied_no']}",
+        f"Знакомство отправлено:    {f['intro_sent']:>4}  ({pct(f['intro_sent'], t)}){drop(f['intro_sent'], f['question_replied'])}",
+        f"Получили оффер:           {f['offer_sent']:>4}  ({pct(f['offer_sent'], t)}){drop(f['offer_sent'], f['intro_sent'])}",
+        f"Нажали «Начать»:          {f['start_clicked']:>4}  ({pct(f['start_clicked'], t)}){drop(f['start_clicked'], f['offer_sent'])}",
+        f"Увидели вопрос о ставке:  {f['stake_asked']:>4}  ({pct(f['stake_asked'], t)}) → Да: {f['stake_yes'] or 0} / Нет: {f['stake_no'] or 0}",
+        f"Получили счёт:            {f['invoice_sent']:>4}  ({pct(f['invoice_sent'], t)}){drop(f['invoice_sent'], f['stake_asked'])}",
+        f"Оплатили:                 {f['purchased']:>4}  ({pct(f['purchased'], t)}){drop(f['purchased'], f['invoice_sent'])}",
+        "",
+        f"🎯 Итоговая конверсия: *{pct(f['purchased'], f['tracker_sent'])}* (оплатили / получили трекер)",
+    ]
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
 # ── Сборка приложения ────────────────────────────────────────
@@ -868,6 +912,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("leads", cmd_leads))
+    app.add_handler(CommandHandler("funnel", cmd_funnel))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))

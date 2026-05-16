@@ -82,13 +82,32 @@ def init_db():
                 first_name           TEXT,
                 subscribed_at        TEXT,
                 tracker_sent_at      TEXT,
+                tracker_question_at  TEXT,
+                tracker_reply_yes    INTEGER,
+                intro_sent_at        TEXT,
                 pitch_sent_at        TEXT,
+                start_clicked_at     TEXT,
+                stake_asked_at       TEXT,
+                stake_choice         TEXT,
+                invoice_sent_at      TEXT,
+                purchased_at         TEXT,
                 follow_2_sent_at     TEXT,
                 follow_3_sent_at     TEXT,
                 follow_7_sent_at     TEXT,
                 final_sent_at        TEXT,
                 lead_status          TEXT DEFAULT 'new',
                 created_at           TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id           INTEGER NOT NULL,
+                session_date      TEXT NOT NULL,
+                first_open_utc    TEXT NOT NULL,
+                last_open_utc     TEXT NOT NULL,
+                interaction_count INTEGER DEFAULT 1,
+                FOREIGN KEY (user_id) REFERENCES users(user_id),
+                UNIQUE(user_id, session_date)
             );
         """)
 
@@ -109,6 +128,15 @@ def init_db():
             "ALTER TABLE users ADD COLUMN dropout_warning_sent_at TEXT DEFAULT NULL",
             "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
             "ALTER TABLE users ADD COLUMN share_photos INTEGER DEFAULT NULL",
+            # leads — детальная воронка
+            "ALTER TABLE leads ADD COLUMN tracker_question_at TEXT",
+            "ALTER TABLE leads ADD COLUMN tracker_reply_yes INTEGER",
+            "ALTER TABLE leads ADD COLUMN intro_sent_at TEXT",
+            "ALTER TABLE leads ADD COLUMN start_clicked_at TEXT",
+            "ALTER TABLE leads ADD COLUMN stake_asked_at TEXT",
+            "ALTER TABLE leads ADD COLUMN stake_choice TEXT",
+            "ALTER TABLE leads ADD COLUMN invoice_sent_at TEXT",
+            "ALTER TABLE leads ADD COLUMN purchased_at TEXT",
         ]
         for migration in migrations:
             try:
@@ -602,9 +630,95 @@ def mark_lead_final(user_id: int):
 def mark_lead_purchased(user_id: int):
     with get_conn() as conn:
         conn.execute(
-            "UPDATE leads SET lead_status = 'purchased' WHERE user_id = ?",
+            """UPDATE leads
+               SET lead_status = 'purchased',
+                   purchased_at = COALESCE(purchased_at, datetime('now'))
+               WHERE user_id = ?""",
             (user_id,)
         )
+
+def mark_lead_tracker_question_sent(user_id: int):
+    """Зафиксировать момент отправки вопроса «Ну как, получилось с трекером?»."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET tracker_question_at = COALESCE(tracker_question_at, datetime('now')) WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_tracker_reply(user_id: int, yes: bool):
+    """Зафиксировать ответ пользователя на вопрос о трекере (Да=1 / Нет=0)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET tracker_reply_yes = ? WHERE user_id = ?",
+            (1 if yes else 0, user_id)
+        )
+
+def mark_lead_intro_sent(user_id: int):
+    """Зафиксировать отправку знакомства с программой."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET intro_sent_at = COALESCE(intro_sent_at, datetime('now')) WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_start_clicked(user_id: int):
+    """Зафиксировать клик на кнопку «Начать за 1990 ₽»."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET start_clicked_at = COALESCE(start_clicked_at, datetime('now')) WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_stake_asked(user_id: int):
+    """Зафиксировать момент отправки вопроса про ставку."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET stake_asked_at = COALESCE(stake_asked_at, datetime('now')) WHERE user_id = ?",
+            (user_id,)
+        )
+
+def mark_lead_stake_choice(user_id: int, choice: str):
+    """Зафиксировать выбор ставки: 'yes' или 'no'."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET stake_choice = ? WHERE user_id = ?",
+            (choice, user_id)
+        )
+
+def mark_lead_invoice_sent(user_id: int):
+    """Зафиксировать момент отправки счёта на оплату."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET invoice_sent_at = COALESCE(invoice_sent_at, datetime('now')) WHERE user_id = ?",
+            (user_id,)
+        )
+
+def get_funnel_stats() -> dict:
+    """
+    Возвращает полную статистику воронки @Shagov77_bot для команды /funnel.
+    Каждый счётчик — кол-во лидов, достигших этого шага.
+    """
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT
+                COUNT(*)                                          AS total,
+                SUM(subscribed_at IS NOT NULL)                    AS subscribed,
+                SUM(tracker_sent_at IS NOT NULL)                  AS tracker_sent,
+                SUM(tracker_question_at IS NOT NULL)              AS question_sent,
+                SUM(tracker_reply_yes IS NOT NULL)                AS question_replied,
+                SUM(tracker_reply_yes = 1)                        AS replied_yes,
+                SUM(tracker_reply_yes = 0)                        AS replied_no,
+                SUM(intro_sent_at IS NOT NULL)                    AS intro_sent,
+                SUM(pitch_sent_at IS NOT NULL)                    AS offer_sent,
+                SUM(start_clicked_at IS NOT NULL)                 AS start_clicked,
+                SUM(stake_asked_at IS NOT NULL)                   AS stake_asked,
+                SUM(stake_choice = 'yes')                         AS stake_yes,
+                SUM(stake_choice = 'no')                          AS stake_no,
+                SUM(invoice_sent_at IS NOT NULL)                  AS invoice_sent,
+                SUM(lead_status = 'purchased')                    AS purchased
+            FROM leads
+        """).fetchone()
+    return dict(row) if row else {}
 
 def get_leads_for_followup() -> list:
     """Возвращает лидов, которым нужно отправить follow-up (не купили, трекер отправлен)."""
@@ -713,6 +827,88 @@ def reset_to_onboarding(user_id: int):
                WHERE user_id = ?""",
             (user_id,)
         )
+
+
+# ── Аналитика сессий (@Zarik_Lazy_Bot) ───────────────────────
+
+def log_user_session(user_id: int):
+    """
+    Фиксирует факт обращения пользователя (любое сообщение / callback).
+    На каждый UTC-день создаётся одна запись:
+    - first_open_utc — первое обращение за день
+    - last_open_utc  — обновляется при каждом обращении
+    - interaction_count — счётчик за день
+    """
+    now_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    today   = now_str[:10]
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO user_sessions (user_id, session_date, first_open_utc, last_open_utc, interaction_count)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(user_id, session_date)
+            DO UPDATE SET
+                last_open_utc     = excluded.last_open_utc,
+                interaction_count = interaction_count + 1
+        """, (user_id, today, now_str, now_str))
+
+
+def get_session_stats() -> dict:
+    """
+    Агрегированная статистика по сессиям за последние 7 дней.
+    Возвращает dict с ключами:
+      active_today, avg_interactions, avg_session_min, active_days_avg,
+      top_users ([{user_id, username, interactions}]),
+      raw_sessions ([{user_id, timezone, first_open_utc, last_open_utc}])
+    """
+    seven_days_ago = (date.today() - timedelta(days=7)).isoformat()
+
+    with get_conn() as conn:
+        # Активные сегодня
+        today_str = date.today().isoformat()
+        active_today = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS cnt FROM user_sessions WHERE session_date = ?",
+            (today_str,)
+        ).fetchone()["cnt"]
+
+        # Средние показатели за 7 дней
+        agg = conn.execute("""
+            SELECT
+                AVG(interaction_count)                                   AS avg_interactions,
+                AVG((strftime('%s', last_open_utc) - strftime('%s', first_open_utc)) / 60.0) AS avg_session_min,
+                COUNT(DISTINCT user_id)                                  AS active_users,
+                COUNT(DISTINCT session_date) * 1.0 / MAX(1, COUNT(DISTINCT user_id)) AS avg_active_days
+            FROM user_sessions
+            WHERE session_date >= ?
+        """, (seven_days_ago,)).fetchone()
+
+        # Топ-5 по числу обращений за 7 дней
+        top = conn.execute("""
+            SELECT s.user_id, u.username, SUM(s.interaction_count) AS total
+            FROM user_sessions s
+            LEFT JOIN users u ON u.user_id = s.user_id
+            WHERE s.session_date >= ?
+            GROUP BY s.user_id
+            ORDER BY total DESC
+            LIMIT 5
+        """, (seven_days_ago,)).fetchall()
+
+        # Сырые сессии за 7 дней для расчёта часового пояса в Python
+        raw = conn.execute("""
+            SELECT s.user_id, u.timezone, s.first_open_utc, s.last_open_utc
+            FROM user_sessions s
+            LEFT JOIN users u ON u.user_id = s.user_id
+            WHERE s.session_date >= ?
+        """, (seven_days_ago,)).fetchall()
+
+    return {
+        "active_today":    active_today,
+        "avg_interactions": round(agg["avg_interactions"] or 0, 1),
+        "avg_session_min":  round(agg["avg_session_min"] or 0, 1),
+        "active_users_7d":  agg["active_users"] or 0,
+        "avg_active_days":  round(agg["avg_active_days"] or 0, 1),
+        "top_users":        [dict(r) for r in top],
+        "raw_sessions":     [dict(r) for r in raw],
+    }
 
 
 def set_day_for_testing(user_id: int, target_day: int):
