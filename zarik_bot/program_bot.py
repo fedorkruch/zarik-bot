@@ -880,6 +880,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             build_achievements_screen(user_id),
             parse_mode=ParseMode.HTML,
         )
+    elif text == "📱 МиниАПП":
+        if WEBAPP_URL:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo as _WAI
+            url = make_miniapp_url(user_id)
+            await update.message.reply_text(
+                "📱",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Открыть трекер", web_app=_WAI(url=url))
+                ]]),
+                disable_notification=True,
+            )
     elif text == "❓ Помощь":
         await update.message.reply_text(
             "🦥 Как пользоваться Зариком:\n\n"
