@@ -435,7 +435,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif tab == "achievements":
             text   = build_achievements_screen(user_id)
-            markup = tab_only_keyboard("achievements")
+            markup = None
 
         else:
             return
@@ -695,7 +695,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             build_achievements_screen(user_id),
             parse_mode=ParseMode.HTML,
-            reply_markup=tab_only_keyboard("achievements")
         )
     elif text == "❓ Помощь":
         await update.message.reply_text(
