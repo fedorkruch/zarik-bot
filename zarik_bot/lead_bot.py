@@ -361,19 +361,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Проверяем подписку на канал
-    if not await is_subscribed(user.id, context.bot):
-        await update.message.reply_text(
-            f"🦥 Привет, {user.first_name}!\n\n"
-            f"Я подготовил тебе подарок — интерактивный трекер достижений.\n\n"
-            f"Чтобы получить его, подпишись на канал 👇",
-            reply_markup=subscribe_keyboard(),
-        )
-        return
-
-    # Подписан — запускаем флоу
-    db.mark_lead_subscribed(user.id)
-    await do_send_tracker(user.id, context)
+    # Всегда показываем приветствие + предложение подписаться
+    await update.message.reply_text(
+        f"🦥 Привет, {user.first_name}!\n\n"
+        f"Я подготовил тебе подарок — интерактивный трекер достижений на 77 дней.\n\n"
+        f"Чтобы получить его, подпишись на канал — там всё самое важное о программе.\n\n"
+        f"Как подпишешься — нажми кнопку ниже 👇",
+        reply_markup=subscribe_keyboard(),
+    )
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -390,9 +385,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_reply_markup(reply_markup=None)
             await do_send_tracker(user_id, context)
         else:
-            await query.answer(
-                f"Ты ещё не подписан на @{CHANNEL}. Подпишись и нажми кнопку снова.",
-                show_alert=True,
+            await query.answer()
+            await query.edit_message_text(
+                f"🦥 Я не обнаружил подписки на канал.\n\n"
+                f"Как только подпишешься — я сразу пришлю подарок 🎁\n\n"
+                f"Подпишись и нажми кнопку снова 👇",
+                reply_markup=subscribe_keyboard(),
             )
         return
 
