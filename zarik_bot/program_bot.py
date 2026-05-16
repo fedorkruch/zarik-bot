@@ -80,6 +80,19 @@ def make_mini_bar(value: int, total: int, width: int = 10) -> str:
     return "●" * filled + "·" * (width - filled)
 
 
+def get_rank(days_done: int) -> str:
+    """Ранг участника на основе засчитанных дней."""
+    if days_done >= 63: return "🏆 Легенда"
+    if days_done >= 49: return "💎 Мастер"
+    if days_done >= 42: return "🦅 В полёте"
+    if days_done >= 35: return "🎯 На полпути"
+    if days_done >= 28: return "🔥 В огне"
+    if days_done >= 21: return "⚡ В потоке"
+    if days_done >= 14: return "💪 Входит в ритм"
+    if days_done >= 7:  return "🚀 Стартовал"
+    return "🌱 Новичок"
+
+
 def day_word(n: int) -> str:
     if n == 1:
         return "день"
@@ -156,30 +169,73 @@ def build_tasks_list(user_row, day: int) -> str:
 
 
 def build_progress_screen(user_id: int) -> str:
-    """Экран «Итоги» — общий прогресс и планетарный рейтинг."""
-    stats = db.get_stats(user_id)
-    day   = stats["current_day"]
-    done  = stats["days_completed"]
+    """Экран «Прогресс» — переработанный: ранг, бар, путь по неделям, ближайшая цель."""
+    stats  = db.get_stats(user_id)
+    day    = stats["current_day"]
+    done   = stats["days_completed"]
     streak = stats["streak"]
     percentile, ctx = ct.get_planet_percentile(done)
-    bar = make_progress_bar(day - 1)
     next_m = ct.get_next_percentile_milestone(done)
 
-    lines = [
-        f"<b>📊  Прогресс · День {day} из {TOTAL_DAYS}</b>",
-        "",
-        bar,
-        "",
-        DIV,
-        f"✅  Засчитано:      <b>{done}</b> {day_word(done)}",
-        f"🔥  Серия:            <b>{streak}</b> {day_word(streak)} подряд",
-        f"🌍  Рейтинг:         <b>{h(percentile)}</b> планеты",
-    ]
-    if next_m:
-        d, pct = next_m
-        lines.append(f"      <i>ещё {d} {day_word(d)} → {h(pct)}</i>")
+    # Прогресс-бар (моноширинный — выглядит ровно на всех устройствах)
+    bar_width = 17
+    filled = round(done / TOTAL_DAYS * bar_width)
+    pct    = round(done / TOTAL_DAYS * 100)
+    bar    = "▓" * filled + "░" * (bar_width - filled)
 
-    lines += ["", DIV, f"<i>{h(ctx)}</i>"]
+    # Визуализация пути по неделям (11 недель = 77 дней)
+    week_now = (day - 1) // 7 + 1
+    weeks = ""
+    for w in range(1, 12):
+        if w < week_now:
+            weeks += "✅"
+        elif w == week_now:
+            weeks += "🔥"
+        else:
+            weeks += "⬜"
+
+    # Следующая цель
+    if next_m:
+        d, pct_next = next_m
+        goal_line = f"Ещё <b>{d}</b> {day_word(d)} → {h(pct_next)} 🌍"
+    else:
+        goal_line = "Ты достиг максимального рейтинга! 🏆"
+
+    # Серия — текстовое усиление
+    if streak >= 7:
+        streak_label = f"<b>{streak}</b> {day_word(streak)} подряд 🔥"
+    elif streak >= 3:
+        streak_label = f"<b>{streak}</b> {day_word(streak)} подряд 💪"
+    elif streak == 0:
+        streak_label = "<b>0</b> — начни сегодня!"
+    else:
+        streak_label = f"<b>{streak}</b> {day_word(streak)} подряд"
+
+    rank = get_rank(done)
+
+    lines = [
+        f"<b>{rank}</b>",
+        "",
+        f"День <b>{day}</b> из {TOTAL_DAYS}",
+        f"<code>{bar}</code>  {pct}%",
+        "",
+        "─────────────────────",
+        "",
+        f"✅  Засчитано      <b>{done}</b> {day_word(done)}",
+        f"🔥  Серия          {streak_label}",
+        f"🌍  Рейтинг        <b>{h(percentile)}</b> планеты",
+        "",
+        f"🎯  {goal_line}",
+        "",
+        "─────────────────────",
+        "",
+        "📅  Путь по неделям:",
+        weeks,
+        "",
+        "─────────────────────",
+        "",
+        f"<i>{h(ctx)}</i>",
+    ]
     return "\n".join(lines)
 
 
