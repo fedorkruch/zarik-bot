@@ -305,7 +305,6 @@ body{
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 // ── Telegram WebApp init ────────────────────────
-// Читаем lazily чтобы не поймать момент до загрузки CDN-скрипта
 function getTg()  { return window.Telegram?.WebApp || null; }
 function getInitData()  { return getTg()?.initData || ''; }
 function getUnsafeUid() { return getTg()?.initDataUnsafe?.user?.id || 0; }
@@ -315,6 +314,15 @@ function ensureTg() {
   const tg = getTg();
   if (tg && !_tgReady) { tg.ready(); tg.expand(); _tgReady = true; }
 }
+
+// ── Подписанные URL-параметры от бота ────────────
+const _urlP = new URLSearchParams(window.location.search);
+const BOT_AUTH = {
+  uid: _urlP.get('uid') || '',
+  ts:  _urlP.get('ts')  || '',
+  sig: _urlP.get('sig') || '',
+};
+function hasBotAuth() { return !!(BOT_AUTH.uid && BOT_AUTH.ts && BOT_AUTH.sig); }
 
 let STATE = null, CUR_VIEW = 'main', MSG_TAB = 'morning', SEL_SHARE = 0;
 
@@ -342,12 +350,15 @@ const PLANET_TASKS = [
 
 async function api(method, path, body) {
   ensureTg();
-  const initData   = getInitData();
-  const unsafeUid  = getUnsafeUid();
+  const initData  = getInitData();
+  const unsafeUid = getUnsafeUid();
   const opts = { method, headers: {'X-Init-Data': initData, 'Content-Type':'application/json'} };
   if (body) opts.body = JSON.stringify(body);
-  // Если initData пуст — добавляем uid как query-param (server примет только для TEST_USER_IDS)
-  if (!initData && unsafeUid) {
+  if (hasBotAuth()) {
+    // Подписанный токен от бота — приоритет над initData
+    const sep = path.includes('?') ? '&' : '?';
+    path += sep + 'uid=' + BOT_AUTH.uid + '&ts=' + BOT_AUTH.ts + '&sig=' + BOT_AUTH.sig;
+  } else if (!initData && unsafeUid) {
     path += (path.includes('?') ? '&' : '?') + 'uid=' + unsafeUid;
   }
   const r = await fetch(path, opts);

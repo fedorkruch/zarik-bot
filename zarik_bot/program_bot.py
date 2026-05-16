@@ -2,6 +2,8 @@
 program_bot.py — Программный бот Зарика (@Zarik_Lazy_Bot): онбординг + 77-дневная программа.
 Проверяет факт оплаты через БД по user_id. Без оплаты — не пускает.
 """
+import hashlib
+import hmac as _hmac
 import html
 import logging
 import os
@@ -60,6 +62,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _last_start: dict[int, float] = {}
+
+
+def make_miniapp_url(user_id: int) -> str:
+    """Генерирует подписанный URL для открытия Mini App без зависимости от initData."""
+    if not WEBAPP_URL:
+        return ""
+    ts  = int(_time.time())
+    sig = _hmac.new(
+        PROGRAM_BOT_TOKEN.encode(),
+        f"{user_id}:{ts}".encode(),
+        hashlib.sha256,
+    ).hexdigest()[:20]
+    return f"{WEBAPP_URL}?uid={user_id}&ts={ts}&sig={sig}"
 
 BAR_WIDTH = 20
 DIV = "· · · · · · · · · · · ·"
@@ -866,10 +881,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML,
         )
     elif text == "📱 МиниАПП":
-        if WEBAPP_URL:
+        url = make_miniapp_url(user_id)
+        if url:
             await update.message.reply_text(
                 "📱 Нажми кнопку ниже — откроется твой трекер:",
-                reply_markup=miniapp_open_keyboard(WEBAPP_URL),
+                reply_markup=miniapp_open_keyboard(url),
             )
         else:
             await update.message.reply_text("МиниАПП пока недоступен.")

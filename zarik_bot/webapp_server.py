@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import os
+import time as _time
 import urllib.parse
 from pathlib import Path
 
@@ -89,12 +90,36 @@ def get_user_id_from_request(request: web.Request) -> int | None:
     except Exception:
         pass
 
-    # Последний фоллбек: ?uid=XXX query-param (только для TEST_USER_IDS, когда initData пуст)
+    # Подписанный токен от бота: ?uid=X&ts=Y&sig=Z (работает для всех пользователей)
     uid_q = request.rel_url.query.get("uid", "")
+    ts_q  = request.rel_url.query.get("ts",  "")
+    sig_q = request.rel_url.query.get("sig", "")
+    if uid_q.isdigit() and ts_q.isdigit() and sig_q:
+        try:
+            uid = int(uid_q)
+            ts  = int(ts_q)
+            # Токен действителен 10 минут
+            if abs(_time.time() - ts) <= 600:
+                expected = hmac.new(
+                    PROGRAM_BOT_TOKEN.encode(),
+                    f"{uid}:{ts}".encode(),
+                    hashlib.sha256,
+                ).hexdigest()[:20]
+                if hmac.compare_digest(expected, sig_q):
+                    logger.info(f"Auth via signed URL token: uid={uid}")
+                    return uid
+                else:
+                    logger.warning(f"Signed token HMAC mismatch for uid={uid}")
+            else:
+                logger.warning(f"Signed token expired for uid={uid_q}")
+        except Exception as e:
+            logger.warning(f"Token validation error: {e}")
+
+    # Последний фоллбек: ?uid=XXX без подписи (только для TEST_USER_IDS)
     if uid_q.isdigit():
         uid = int(uid_q)
         if uid in TEST_USER_IDS:
-            logger.warning(f"DEV fallback: test user {uid} via ?uid query param")
+            logger.warning(f"DEV fallback: test user {uid} via unsigned ?uid param")
             return uid
 
     return None
