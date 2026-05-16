@@ -14,6 +14,7 @@ from aiohttp import web
 
 import database as db
 import content as ct
+from workout import get_workout
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,35 @@ def build_full_state(user_id: int) -> dict:
 
     bar_chars, pct_num = _make_progress_bar(day - 1 if day > 0 else 0)
 
+    # Утреннее / вечернее сообщения
+    morning = ct.get_morning(day) if day > 0 else "🦥 Программа скоро начнётся!"
+    evening = ct.get_evening(day, all_done=len(completed) == 5) if day > 0 else ""
+
+    # Тренировка
+    try:
+        w = get_workout(dict(user_row), day) if (day > 0 and user_row) else {}
+        workout_sub = (
+            f"Отж: {w['pushup']['total']} · Присед: {w['squat']['total']} · Пресс: {w['abs']['total']}"
+            if w else "Персональная тренировка"
+        )
+    except Exception:
+        workout_sub = "Персональная тренировка"
+
+    # Выживаемость группы
+    g_total  = group.get("total", 0)
+    g_active = group.get("active", 0)
+    group_survival_pct = round(g_active / max(g_total, 1) * 100)
+
+    # Тексты для шаринга
+    n_done = len(completed)
+    share_texts = []
+    if day > 0:
+        share_texts = [
+            f"День {day}/77 🦥 Иду к {percentile} планеты. Сегодня — {n_done}/5 задач. Кто ещё в игре?",
+            f"{pct_num}% пути пройдено в #77SoftChallenge. Без алкоголя, со спортом и книгами. Ленивец гордится. 🦥",
+            f"Факт: только 6% людей читают 10 страниц в день. Я — один из них уже {day} дней подряд. #77Soft",
+        ]
+
     return {
         "started":      started,
         "day":          day,
@@ -121,6 +151,7 @@ def build_full_state(user_id: int) -> dict:
         "pct_num":      pct_num,
         "bar":          bar_chars,
         "completed_tasks": completed,
+        "all_tasks_done": len(completed) == 5,
         "days_done":    days_done,
         "streak":       streak,
         "percentile":   percentile,
@@ -131,9 +162,15 @@ def build_full_state(user_id: int) -> dict:
         "week_done":    week_done,
         "week_bar":     _make_week_bar(week_done),
         "week_header":  week_header,
-        "group_total":  group.get("total", 0),
-        "group_active": group.get("active", 0),
+        "group_total":  g_total,
+        "group_active": g_active,
+        "group_dropped": g_total - g_active,
+        "group_survival_pct": group_survival_pct,
         "achievements": achievements,
+        "morning":      morning,
+        "evening":      evening,
+        "workout_sub":  workout_sub,
+        "share_texts":  share_texts,
     }
 
 

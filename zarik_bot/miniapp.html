@@ -3,624 +3,547 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Зарик Ленивец</title>
+<title>Зарик · 77 дней</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
+/* ── Reset ─────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;-webkit-font-smoothing:antialiased}
 body{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  background:var(--tg-theme-bg-color,#1c1c1e);
-  color:var(--tg-theme-text-color,#fff);
-  min-height:100vh;
-  display:flex;
-  flex-direction:column;
-  overflow-x:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Roboto,sans-serif;
+  background:#0f0f13;color:#fff;overflow-x:hidden;
 }
-
-/* ── Шапка ── */
-.topbar{
-  background:var(--tg-theme-bg-color,#1c1c1e);
-  padding:10px 14px 8px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  border-bottom:0.5px solid #2c2c2e;
-  flex-shrink:0;
+:root{
+  --gold:#e5a012;--gold-dim:rgba(229,160,18,.15);
+  --green:#4cd964;--green-dim:rgba(76,217,100,.12);
+  --red:#ff5c5c;--blue:#4fc3f7;--purple:#b388ff;
+  --card:#1b1b23;--card2:#22222c;
+  --border:rgba(255,255,255,.07);
+  --sub:rgba(255,255,255,.42);--dim:rgba(255,255,255,.22);
 }
-.avatar{
-  width:34px;height:34px;border-radius:50%;
-  background:#3a3a3c;
+.screen{display:flex;flex-direction:column;min-height:100vh;padding-bottom:32px}
+.screen.hidden{display:none}
+.slabel{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--dim);
+  text-transform:uppercase;padding:0 16px;margin:18px 0 8px}
+.card{background:var(--card);border-radius:18px;padding:16px;margin:0 12px 10px;
+  border:1px solid var(--border)}
+/* Main header */
+.main-hdr{padding:20px 16px 10px;display:flex;justify-content:space-between;align-items:flex-start}
+.hdr-left .challenge-lbl{font-size:11px;letter-spacing:.1em;color:var(--dim);
+  text-transform:uppercase;font-weight:600}
+.hdr-left .day-title{font-size:38px;font-weight:800;line-height:1.1;margin-top:4px}
+.d-num{color:#fff}.d-sep{color:rgba(255,255,255,.3);font-weight:400;font-size:22px}
+.hdr-icons{display:flex;gap:8px;margin-top:4px}
+.icon-btn{width:40px;height:40px;background:var(--card);border-radius:12px;
+  border:1px solid var(--border);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:18px;
+  transition:background .15s;-webkit-tap-highlight-color:transparent}
+.icon-btn:active{background:var(--card2)}
+/* Progress */
+.prog-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.prog-lbl{color:rgba(255,255,255,.7);font-size:14px}
+.prog-pct{color:var(--gold);font-size:15px;font-weight:700}
+.bar-track{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.bar-fill{height:100%;background:var(--gold);border-radius:3px;transition:width .6s ease}
+.bar-labels{display:flex;justify-content:space-between;align-items:center}
+.bar-side{color:var(--dim);font-size:11px}
+.bar-planet{color:var(--green);font-size:12px;font-weight:500}
+/* Message */
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tab-btn{flex:1;padding:8px 0;border:none;border-radius:20px;
+  font-size:13px;font-weight:600;cursor:pointer;
+  transition:all .2s;background:rgba(255,255,255,.07);color:var(--sub);
+  -webkit-tap-highlight-color:transparent}
+.tab-btn.active{background:var(--gold);color:#fff}
+.sloth-big{font-size:40px;display:block;margin-bottom:10px;line-height:1}
+.msg-quote{font-size:17px;font-style:italic;font-weight:500;line-height:1.5;color:#fff}
+.msg-attr{margin-top:10px;font-size:12px;color:var(--dim)}
+/* Tasks */
+.tasks-hdr-row{display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.tasks-title{font-size:16px;font-weight:600}
+.tasks-counter{font-size:12px;font-weight:600;color:var(--sub);
+  background:rgba(255,255,255,.08);padding:3px 10px;border-radius:10px}
+.task-row{display:flex;align-items:center;gap:12px;
+  padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:opacity .1s;-webkit-tap-highlight-color:transparent;user-select:none}
+.task-row:last-child{border-bottom:none}
+.task-row:active{opacity:.7}
+.task-check{width:26px;height:26px;border-radius:8px;
+  border:2px solid rgba(255,255,255,.2);flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;flex-shrink:0;
-}
-.botname{font-size:14px;font-weight:600;color:var(--tg-theme-text-color,#fff)}
-.online{font-size:11px;color:#30d158}
-
-/* ── Чат ── */
-.chat{
-  flex:1;
-  padding:12px 10px 6px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  overflow-y:auto;
-  padding-bottom:80px;
-}
-
-/* ── Сообщение бота ── */
-.msg-wrap{display:flex;gap:8px;align-items:flex-end}
-.msg-avatar{
-  width:26px;height:26px;border-radius:50%;
-  background:#3a3a3c;
+  font-size:14px;transition:all .2s}
+.task-check.done{background:var(--gold);border-color:var(--gold);color:#fff}
+.task-text{flex:1;min-width:0}
+.task-name{font-size:14px;font-weight:500;transition:color .2s}
+.task-name.done{color:var(--sub);text-decoration:line-through}
+.task-sub{font-size:11px;color:var(--dim);margin-top:2px}
+/* Done banner */
+.done-banner{background:linear-gradient(135deg,#1a2a12,#0f1a0a);
+  border:1px solid var(--green);border-radius:18px;
+  padding:18px 16px;margin:0 12px 10px;text-align:center}
+.done-banner .done-icon{font-size:36px;display:block;margin-bottom:8px}
+.done-banner .done-title{font-size:17px;font-weight:700;color:var(--green)}
+.done-banner .done-sub{font-size:13px;color:rgba(255,255,255,.55);margin-top:4px}
+/* Sub-header */
+.sub-hdr{display:flex;align-items:center;gap:10px;padding:20px 16px 12px}
+.back-btn{width:36px;height:36px;background:var(--card);border-radius:10px;
+  border:1px solid var(--border);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:14px;flex-shrink:0;
-}
-.bubble{
-  background:#2c2c2e;
-  border-radius:16px 16px 16px 4px;
-  padding:10px 13px;
-  flex:1;
-  max-width:calc(100% - 34px);
-}
-.bubble-title{
-  font-size:14px;font-weight:700;
-  color:var(--tg-theme-text-color,#fff);
-  line-height:1.3;
-}
-.bubble-text{
-  font-size:12px;color:#ebebf599;
-  line-height:1.5;margin-top:3px;
-}
-.progress-line{
-  font-family:monospace;
-  color:#30d158;
-  font-size:12px;
-  margin-top:5px;
-  letter-spacing:0.5px;
-}
-.progress-pct{color:#ebebf599;font-size:11px;margin-left:6px}
-.divider-line{
-  border:none;border-top:0.5px solid #3a3a3c;
-  margin:8px 0;
-}
-.section-title{
-  font-size:12px;font-weight:600;
-  color:#ebebf5cc;
-  margin-bottom:2px;
-}
-
-/* ── Кнопки задач ── */
-.tasks-wrap{
-  margin-left:34px;
-  display:flex;flex-direction:column;gap:5px;
-}
-.task-btn{
-  background:#2c2c2e;
-  border-radius:11px;
-  padding:10px 13px;
-  font-size:13px;
-  color:var(--tg-theme-text-color,#fff);
-  display:flex;align-items:center;gap:7px;
-  cursor:pointer;
-  user-select:none;
-  -webkit-tap-highlight-color:transparent;
-  transition:background 0.15s, opacity 0.15s;
-  border:none;width:100%;text-align:left;
-}
-.task-btn:active{opacity:0.7}
-.task-btn.done{color:#30d158}
-.task-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.task-btn-sm{
-  background:#2c2c2e;
-  border-radius:11px;
-  padding:10px 10px;
-  font-size:12px;
-  color:var(--tg-theme-text-color,#fff);
-  display:flex;align-items:center;gap:6px;
-  cursor:pointer;
-  user-select:none;
-  -webkit-tap-highlight-color:transparent;
-  transition:background 0.15s, opacity 0.15s;
-  border:none;width:100%;text-align:left;
-}
-.task-btn-sm:active{opacity:0.7}
-.task-btn-sm.done{color:#30d158}
-
-.close-btn{
-  background:#1c7c3c;
-  border-radius:11px;
-  padding:12px;
-  font-size:13px;font-weight:700;
-  color:#fff;
-  text-align:center;
-  cursor:pointer;
-  user-select:none;
-  -webkit-tap-highlight-color:transparent;
-  transition:opacity 0.15s;
-  border:none;width:100%;
-}
-.close-btn:active{opacity:0.7}
-.close-btn.disabled{background:#3a3a3c;color:#636366;cursor:default}
-.close-btn.completed{background:#1a5c2c}
-
-/* ── Инлайн вкладки под сообщением ── */
-.itabs-row{
-  margin-left:34px;
-  display:flex;gap:4px;margin-top:2px;
-}
-.itab{
-  flex:1;
-  background:#2c2c2e;
-  border-radius:9px;
-  padding:6px 4px;
-  font-size:10px;
-  color:#636366;
-  text-align:center;
-  cursor:pointer;
-  transition:all 0.15s;
-  border:none;
-}
-.itab.active{
-  background:#0a84ff22;
-  color:#0a84ff;
-  font-weight:600;
-  border:1px solid #0a84ff44;
-}
-
-/* ── Статистика ── */
-.stat-card{
-  background:#2c2c2e;
-  border-radius:14px;
-  padding:14px;
-  margin-left:34px;
-  display:flex;flex-direction:column;gap:8px;
-}
-.stat-row{
-  display:flex;align-items:baseline;gap:6px;
-  font-size:13px;
-}
-.stat-label{color:#ebebf599}
-.stat-value{font-weight:700;color:var(--tg-theme-text-color,#fff)}
-.stat-value.green{color:#30d158}
-.stat-hint{font-size:11px;color:#636366;margin-top:2px;padding-left:20px}
-
-/* ── Ачивки ── */
-.ach-list{margin-left:34px;display:flex;flex-direction:column;gap:6px}
-.ach-item{
-  background:#2c2c2e;
-  border-radius:11px;
-  padding:10px 13px;
-  display:flex;align-items:center;gap:10px;
-  font-size:12px;
-}
-.ach-item.unlocked .ach-name{color:#30d158;font-weight:600}
-.ach-item.locked .ach-name{color:#636366}
-.ach-day{font-size:10px;color:#636366;margin-top:1px}
-
-/* ── Нижний таб-бар (iOS-стиль) ── */
-.tab-bar{
-  position:fixed;
-  bottom:0;left:0;right:0;
-  background:rgba(28,28,30,0.95);
-  border-top:0.5px solid #2c2c2e;
-  display:flex;
-  padding:8px 0 env(safe-area-inset-bottom,10px);
-  backdrop-filter:blur(20px);
-  -webkit-backdrop-filter:blur(20px);
-  z-index:100;
-}
-.tab{
-  flex:1;
-  display:flex;flex-direction:column;
-  align-items:center;gap:2px;
-  cursor:pointer;
-  padding:4px 0;
-  -webkit-tap-highlight-color:transparent;
-}
-.tab-icon{font-size:22px;line-height:1}
-.tab-label{font-size:9px;color:#636366;transition:color 0.15s}
-.tab.active .tab-label{color:#0a84ff}
-.tab-dot{
-  width:4px;height:4px;border-radius:50%;
-  background:#0a84ff;
-  margin-top:2px;
-  display:none;
-}
-.tab.active .tab-dot{display:block}
-
-/* ── Загрузка / Ошибка ── */
-.loading{
-  flex:1;display:flex;
-  align-items:center;justify-content:center;
-  flex-direction:column;gap:12px;
-  color:#636366;font-size:14px;
-}
-.spinner{
-  width:28px;height:28px;
-  border:2px solid #3a3a3c;
-  border-top-color:#0a84ff;
-  border-radius:50%;
-  animation:spin 0.8s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
+  font-size:17px;color:#fff;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.sub-title-wrap{flex:1}
+.sub-title{font-size:20px;font-weight:700}
+.sub-subtitle{font-size:13px;color:var(--sub);margin-top:1px}
+/* Week screen */
+.group-stats{display:flex}
+.g-stat{flex:1;text-align:center}
+.g-num{font-size:30px;font-weight:800;line-height:1}
+.g-num.white{color:#fff}.g-num.green{color:var(--green)}.g-num.red{color:var(--red)}
+.g-lbl{font-size:11px;color:var(--dim);margin-top:4px}
+.surv-track{height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:14px 0 6px}
+.surv-fill{height:100%;background:var(--green);border-radius:3px}
+.surv-text{font-size:13px;color:var(--green);font-weight:500}
+.planet-title{font-size:16px;font-weight:700;margin-bottom:3px}
+.planet-by{font-size:12px;color:var(--sub);margin-bottom:16px}
+.pt-row{margin-bottom:14px}
+.pt-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.pt-name{font-size:14px;font-weight:500}
+.pt-pct{font-size:14px;font-weight:700;color:var(--gold)}
+.pt-bar{height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.pt-fill{height:100%;border-radius:3px}
+.pt-fact{font-size:11px;color:var(--dim)}
+/* Achievements */
+.ach-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 12px 10px}
+.ach-card{background:var(--card);border-radius:16px;padding:18px 12px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  border:1.5px solid var(--border)}
+.ach-card.unlocked{background:#162216;border-color:var(--green)}
+.ach-card.locked{opacity:.6}
+.ach-icon{font-size:34px;margin-bottom:8px}
+.ach-name{font-size:13px;font-weight:600;margin-bottom:3px;line-height:1.2}
+.ach-desc{font-size:11px;color:var(--sub);margin-bottom:8px}
+.ach-badge{padding:3px 10px;border-radius:8px;font-size:10px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase}
+.ach-badge.got{background:var(--green);color:#0a1a0a}
+.ach-badge.soon{background:rgba(255,255,255,.1);color:var(--sub)}
+.sloth-q-card{background:var(--card);border-radius:18px;padding:16px;margin:0 12px;
+  display:flex;align-items:flex-start;gap:12px;border:1px solid var(--border)}
+.sloth-q-ico{font-size:28px;flex-shrink:0}
+.sloth-q-text{font-size:14px;font-style:italic;color:rgba(255,255,255,.75);line-height:1.5}
+/* Share */
+.share-preview{position:relative;overflow:hidden;
+  background:linear-gradient(145deg,#14141c,#1a1a28);
+  border-radius:18px;margin:0 12px 10px;padding:20px;
+  border:1px solid var(--border);min-height:190px}
+.preview-watermark{position:absolute;right:-10px;bottom:-10px;
+  font-size:90px;opacity:.08;line-height:1;pointer-events:none}
+.preview-badge{font-size:10px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+.preview-day{font-size:52px;font-weight:900;color:var(--gold);line-height:1}
+.preview-dayof{font-size:14px;color:var(--sub);margin-top:2px;margin-bottom:12px}
+.preview-bar{height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-bottom:12px}
+.preview-bar-fill{height:100%;background:var(--green);border-radius:2px}
+.preview-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.1);
+  font-size:11px;font-weight:500}
+.preview-planet{font-size:13px;color:var(--green);font-weight:500}
+.share-option{background:var(--card);border-radius:14px;padding:14px;
+  margin:0 12px 8px;border:1.5px solid var(--border);cursor:pointer;
+  font-size:14px;line-height:1.5;color:rgba(255,255,255,.85);
+  transition:border-color .15s;-webkit-tap-highlight-color:transparent}
+.share-option.selected{border-color:var(--gold);background:var(--gold-dim)}
+.copy-btn{display:block;width:calc(100% - 24px);margin:12px 12px 8px;
+  background:var(--gold);color:#fff;font-size:16px;font-weight:600;
+  border:none;border-radius:14px;padding:15px;cursor:pointer;
+  transition:opacity .15s;-webkit-tap-highlight-color:transparent}
+.copy-btn:active{opacity:.8}
+.hashtags{text-align:center;font-size:11px;color:var(--dim);padding:0 16px 8px}
+/* Loader */
+#loader{position:fixed;inset:0;background:#0f0f13;
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:12px;z-index:999}
+.loader-sloth{font-size:48px;animation:sway 2s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+.loader-text{font-size:14px;color:var(--sub)}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="avatar">🦥</div>
-  <div>
-    <div class="botname">Зарик Ленивец</div>
-    <div class="online">онлайн</div>
+<div id="loader">
+  <span class="loader-sloth">🦥</span>
+  <span class="loader-text">Загружаю данные…</span>
+</div>
+
+<!-- MAIN -->
+<div id="s-main" class="screen hidden">
+  <div class="main-hdr">
+    <div class="hdr-left">
+      <div class="challenge-lbl">77 SOFT CHALLENGE</div>
+      <div class="day-title">
+        <span class="d-num" id="m-day">—</span><span class="d-sep">/77</span>
+      </div>
+    </div>
+    <div class="hdr-icons">
+      <button class="icon-btn" onclick="nav('week')">📊</button>
+      <button class="icon-btn" onclick="nav('ach')">🏆</button>
+      <button class="icon-btn" onclick="nav('share')">🔗</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="prog-row">
+      <span class="prog-lbl">Общий прогресс</span>
+      <span class="prog-pct" id="m-pct">0%</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="m-bar" style="width:0%"></div></div>
+    <div class="bar-labels">
+      <span class="bar-side">Старт</span>
+      <span class="bar-planet" id="m-planet"></span>
+      <span class="bar-side">Финиш</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-morning" onclick="setTab('morning')">☀️ УТРО</button>
+      <button class="tab-btn" id="tab-evening" onclick="setTab('evening')">🌙 ВЕЧЕР</button>
+    </div>
+    <span class="sloth-big">🦥</span>
+    <div class="msg-quote" id="m-msg">…</div>
+    <div class="msg-attr" id="m-msg-attr">— Ленивец</div>
+  </div>
+
+  <div class="done-banner hidden" id="m-done-banner">
+    <span class="done-icon">🎉</span>
+    <div class="done-title">День закрыт! Зарик гордится!</div>
+    <div class="done-sub">Все 5 задач выполнены. Так держать 💪</div>
+  </div>
+
+  <div class="card">
+    <div class="tasks-hdr-row">
+      <span class="tasks-title">Задачи на сегодня</span>
+      <span class="tasks-counter" id="m-counter">0/5</span>
+    </div>
+    <div id="m-tasks"></div>
   </div>
 </div>
 
-<div class="chat" id="chat">
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <div>Загружаю данные…</div>
+<!-- WEEK -->
+<div id="s-week" class="screen hidden">
+  <div class="sub-hdr">
+    <button class="back-btn" onclick="nav('main')">←</button>
+    <div class="sub-title-wrap">
+      <div class="sub-title">Итоги недели</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="slabel" style="padding:0;margin:0 0 14px">НЕДЕЛЯ <span id="w-weeknum">1</span> · УЧАСТНИКИ</div>
+    <div class="group-stats">
+      <div class="g-stat"><div class="g-num white" id="w-total">—</div><div class="g-lbl">Всего</div></div>
+      <div class="g-stat"><div class="g-num green" id="w-active">—</div><div class="g-lbl">В игре 🔥</div></div>
+      <div class="g-stat"><div class="g-num red" id="w-dropped">—</div><div class="g-lbl">Сошли 😴</div></div>
+    </div>
+    <div class="surv-track"><div class="surv-fill" id="w-surv-bar" style="width:0%"></div></div>
+    <div class="surv-text" id="w-surv-text"></div>
+  </div>
+
+  <div class="card">
+    <div class="planet-title">🌍 Ты обгоняешь планету</div>
+    <div class="planet-by" id="w-planet-by">По итогам дней</div>
+    <div id="w-tasks"></div>
+  </div>
+
+  <div class="sloth-q-card">
+    <span class="sloth-q-ico">🦥</span>
+    <span class="sloth-q-text">«Пока другие думают начать — ты уже в игре. Это всё, что нужно знать.»</span>
   </div>
 </div>
 
-<div class="tab-bar">
-  <div class="tab active" onclick="switchTab('tasks')" id="tab-tasks">
-    <div class="tab-icon">☀️</div>
-    <div class="tab-label">Сегодня</div>
-    <div class="tab-dot"></div>
+<!-- ACHIEVEMENTS -->
+<div id="s-ach" class="screen hidden">
+  <div class="sub-hdr">
+    <button class="back-btn" onclick="nav('main')">←</button>
+    <div class="sub-title-wrap">
+      <div class="sub-title">Достижения</div>
+      <div class="sub-subtitle" id="ach-count">0/6 разблокировано</div>
+    </div>
   </div>
-  <div class="tab" onclick="switchTab('progress')" id="tab-progress">
-    <div class="tab-icon">📊</div>
-    <div class="tab-label">Итоги</div>
-    <div class="tab-dot"></div>
+  <div class="ach-grid" id="ach-grid"></div>
+  <div class="sloth-q-card">
+    <span class="sloth-q-ico">🦥</span>
+    <span class="sloth-q-text">«Каждая ачивка — это я лично хлопаю тебе одной лапой. Медленно. Но от души.»</span>
   </div>
-  <div class="tab" onclick="switchTab('week')" id="tab-week">
-    <div class="tab-icon">📅</div>
-    <div class="tab-label">Неделя</div>
-    <div class="tab-dot"></div>
+</div>
+
+<!-- SHARE -->
+<div id="s-share" class="screen hidden">
+  <div class="sub-hdr">
+    <button class="back-btn" onclick="nav('main')">←</button>
+    <div class="sub-title-wrap"><div class="sub-title">Поделиться</div></div>
   </div>
-  <div class="tab" onclick="switchTab('achievements')" id="tab-achievements">
-    <div class="tab-icon">🏆</div>
-    <div class="tab-label">Ачивки</div>
-    <div class="tab-dot"></div>
+
+  <div class="share-preview">
+    <div class="preview-watermark">🦥</div>
+    <div class="preview-badge">77 SOFT CHALLENGE</div>
+    <div class="preview-day" id="sh-day">—</div>
+    <div class="preview-dayof" id="sh-dayof">из 77 · 0% пути</div>
+    <div class="preview-bar"><div class="preview-bar-fill" id="sh-bar" style="width:0%"></div></div>
+    <div class="preview-chips">
+      <span class="chip">📚 Читаю</span>
+      <span class="chip">💪 Тренируюсь</span>
+      <span class="chip">💧 2л воды</span>
+      <span class="chip">🚫 Без алк</span>
+    </div>
+    <div class="preview-planet" id="sh-planet"></div>
   </div>
+
+  <div class="slabel">ТЕКСТ ДЛЯ СОЦ. СЕТЕЙ</div>
+  <div id="sh-options"></div>
+  <button class="copy-btn" onclick="copyText()">Копировать текст</button>
+  <div class="hashtags">#77Soft &nbsp;#77SoftRU &nbsp;#ЗарикОдобряет</div>
 </div>
 
 <script>
-const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const INIT_DATA = tg?.initData || '';
 
-let state = null;
-let currentTab = 'tasks';
+let STATE = null, CUR_VIEW = 'main', MSG_TAB = 'morning', SEL_SHARE = 0;
 
-// ── Загрузка данных ───────────────────────────────────────
+const TASK_DEFS = [
+  { icon:'💪', name:'Тренировка',        subKey:'workout_sub' },
+  { icon:'💧', name:'Вода — 8 стаканов', sub:'2 литра в день' },
+  { icon:'📚', name:'Чтение — 10 страниц',sub:'Любая книга, любая страница' },
+  { icon:'🥗', name:'Без фастфуда',       sub:'Питание без джанкфуда' },
+  { icon:'🚫', name:'Без алкоголя',       sub:'Трезвый день' },
+];
+
+const ACH_SUBS = {
+  first_step:'День 1 завершён', week_fire:'7 дней подряд',
+  sloth_approves:'14 дней в программе', diamond_will:'30 дней засчитано',
+  top_planet:'50 дней пройдено', legend_77:'Все 77 дней!',
+};
+
+const PLANET_TASKS = [
+  { icon:'📚', name:'Чтение',       color:'#e5a012', pct:94, fact:'6% людей читают >10 стр. в день' },
+  { icon:'💪', name:'Спорт',        color:'#4cd964', pct:87, fact:'13% людей тренируются каждый день' },
+  { icon:'💧', name:'Вода',         color:'#4fc3f7', pct:91, fact:'9% людей пьют 2+ л воды в день' },
+  { icon:'🥗', name:'Питание',      color:'#ffa726', pct:76, fact:'24% людей питаются без джанкфуда' },
+  { icon:'🚫', name:'Без алкоголя', color:'#b388ff', pct:78, fact:'22% людей держат полный отказ от алкоголя' },
+];
+
+async function api(method, path, body) {
+  const opts = { method, headers: {'X-Init-Data': INIT_DATA, 'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
 
 async function loadState() {
   try {
-    const res = await fetch('/api/state', {
-      headers: { 'X-Init-Data': tg.initData }
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      showError(err.error === 'not_paid'
-        ? '🦥 Участие не оплачено.\nВернись в бот регистрации.'
-        : 'Ошибка загрузки. Попробуй ещё раз.');
-      return;
-    }
-    state = await res.json();
-    render();
-  } catch(e) {
-    showError('Не удалось подключиться к серверу.\nПроверь соединение.');
+    const data = await api('GET', '/api/state');
+    if (data.error) throw new Error(data.error);
+    STATE = data;
+  } catch(e) { STATE = null; }
+}
+
+function nav(view) {
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  document.getElementById('s-' + CUR_VIEW).classList.add('hidden');
+  CUR_VIEW = view;
+  document.getElementById('s-' + view).classList.remove('hidden');
+  if (view === 'main')  renderMain();
+  if (view === 'week')  renderWeek();
+  if (view === 'ach')   renderAch();
+  if (view === 'share') renderShare();
+  window.scrollTo(0, 0);
+}
+
+function setTab(tab) {
+  MSG_TAB = tab;
+  document.getElementById('tab-morning').classList.toggle('active', tab === 'morning');
+  document.getElementById('tab-evening').classList.toggle('active', tab === 'evening');
+  if (STATE) {
+    document.getElementById('m-msg').textContent =
+      tab === 'morning' ? (STATE.morning || '') : (STATE.evening || '');
   }
 }
 
-function showError(msg) {
-  document.getElementById('loading').innerHTML =
-    `<div style="text-align:center;padding:20px;color:#636366;white-space:pre-line">${msg}</div>`;
-}
-
-// ── Переключение вкладок ──────────────────────────────────
-
-function switchTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.itab').forEach(el => el.classList.remove('active'));
-  const it = document.getElementById('itab-' + tab);
-  if (it) it.classList.add('active');
-  render();
-}
-
-// ── Рендер ───────────────────────────────────────────────
-
-function render() {
-  if (!state) return;
-  const chat = document.getElementById('chat');
-  chat.innerHTML = '';
-
-  if (!state.started) {
-    chat.innerHTML = `<div class="loading" style="flex:1;color:#636366">
-      🦥 Программа начнётся завтра в 6:00.<br>Отдыхай!
-    </div>`;
-    return;
-  }
-
-  if (currentTab === 'tasks')        renderTasks(chat);
-  else if (currentTab === 'progress') renderProgress(chat);
-  else if (currentTab === 'week')     renderWeek(chat);
-  else if (currentTab === 'achievements') renderAchievements(chat);
-}
-
-// ── Экран «Сегодня» ──────────────────────────────────────
-
-function renderTasks(chat) {
-  const { day, total_days, bar, pct_num, completed_tasks } = state;
-  const done = completed_tasks.length;
-  const allDone = done >= 5;
-
-  // Пузырёк с инфо о дне
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-wrap';
-  bubble.innerHTML = `
-    <div class="msg-avatar">🦥</div>
-    <div class="bubble">
-      <div class="bubble-title">☀️ День ${day} из ${total_days} · ${esc(state.percentile)} планеты</div>
-      <div class="progress-line">${bar}<span class="progress-pct">${pct_num}%</span></div>
-      <hr class="divider-line">
-      <div class="section-title">📋 Отметь что выполнил сегодня 👇</div>
-    </div>`;
-  chat.appendChild(bubble);
-
-  // Кнопки задач
-  const FULL = [
-    ['💪', 'Тренировка'],
-    ['💧', 'Вода · 2 л / 8 стаканов'],
-    ['📚', 'Чтение · 10 страниц'],
-  ];
-  const HALF = [
-    ['🥗', 'Питание'],
-    ['🚫', 'Алкоголь'],
-  ];
-  const TASK_ALL = [...FULL, ['🥗', 'Без фастфуда и снеков'], ['🚫', 'День без алкоголя']];
-
-  const wrap = document.createElement('div');
-  wrap.className = 'tasks-wrap';
-
-  FULL.forEach((t, i) => {
-    const isDone = completed_tasks.includes(i);
-    const btn = document.createElement('button');
-    btn.className = 'task-btn' + (isDone ? ' done' : '');
-    btn.innerHTML = `${isDone ? '✅' : '⬜'} ${t[0]} ${t[1]}`;
-    btn.onclick = () => toggleTask(i);
-    wrap.appendChild(btn);
+function renderMain() {
+  if (!STATE) return;
+  const s = STATE;
+  document.getElementById('m-day').textContent = s.day || '—';
+  const pct = s.pct_num || 0;
+  document.getElementById('m-pct').textContent  = pct + '%';
+  document.getElementById('m-bar').style.width  = pct + '%';
+  document.getElementById('m-planet').textContent =
+    s.percentile ? 'Ты в ' + s.percentile + ' планеты 🌍' : '';
+  const msg = MSG_TAB === 'morning' ? (s.morning || '') : (s.evening || '');
+  document.getElementById('m-msg').textContent     = msg;
+  document.getElementById('m-msg-attr').textContent = '— Ленивец, день ' + (s.day || 1);
+  document.getElementById('m-done-banner').classList.toggle('hidden', !s.all_tasks_done);
+  const done = (s.completed_tasks || []).length;
+  document.getElementById('m-counter').textContent = done + '/5';
+  const wrap = document.getElementById('m-tasks');
+  wrap.innerHTML = '';
+  const completed = new Set(s.completed_tasks || []);
+  TASK_DEFS.forEach((t, i) => {
+    const isDone = completed.has(i);
+    const sub = t.subKey ? (s[t.subKey] || '') : (t.sub || '');
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    row.innerHTML =
+      '<div class="task-check ' + (isDone ? 'done' : '') + '">' + (isDone ? '✓' : '') + '</div>' +
+      '<div class="task-text">' +
+        '<div class="task-name ' + (isDone ? 'done' : '') + '">' + t.icon + ' ' + t.name + '</div>' +
+        (sub ? '<div class="task-sub">' + sub + '</div>' : '') +
+      '</div>';
+    if (!isDone) row.addEventListener('click', () => toggleTask(i));
+    wrap.appendChild(row);
   });
-
-  // 4 и 5 — рядом
-  const row = document.createElement('div');
-  row.className = 'task-row';
-  HALF.forEach((t, j) => {
-    const i = j + 3;
-    const isDone = completed_tasks.includes(i);
-    const btn = document.createElement('button');
-    btn.className = 'task-btn-sm' + (isDone ? ' done' : '');
-    btn.innerHTML = `${isDone ? '✅' : '⬜'} ${t[0]} ${t[1]}`;
-    btn.onclick = () => toggleTask(i);
-    row.appendChild(btn);
-  });
-  wrap.appendChild(row);
-
-  // Кнопка «Закрыть день»
-  const closeBtn = document.createElement('button');
-  if (allDone) {
-    closeBtn.className = 'close-btn completed';
-    closeBtn.textContent = '🎉 День завершён!';
-    closeBtn.onclick = () => {};
-  } else {
-    closeBtn.className = 'close-btn';
-    closeBtn.textContent = `✅ Закрыть день`;
-    closeBtn.onclick = () => closeDay(closeBtn);
-  }
-  wrap.appendChild(closeBtn);
-
-  chat.appendChild(wrap);
-
-  // Инлайн-табы
-  chat.appendChild(makeItabsRow());
-  chat.scrollTop = 0;
 }
 
 async function toggleTask(idx) {
-  if (!state) return;
-  const day = state.day;
-  const already = state.completed_tasks.includes(idx);
-  if (already) return; // повторное нажатие — ничего
-
-  tg.HapticFeedback.impactOccurred('light');
+  if (!STATE || STATE.all_tasks_done) return;
+  if (tg) tg.HapticFeedback?.impactOccurred('medium');
   try {
-    const res = await fetch('/api/task', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Init-Data': tg.initData },
-      body: JSON.stringify({ task_index: idx })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      state.completed_tasks = data.completed_tasks;
-      renderTasks(document.getElementById('chat'));
+    const res = await api('POST', '/api/task', { task_index: idx });
+    if (!res.error) {
+      STATE.completed_tasks = res.completed_tasks;
+      STATE.all_tasks_done  = res.completed_tasks.length === 5;
+      renderMain();
     }
-  } catch(e) { console.error(e); }
+  } catch(e) {}
 }
 
-async function closeDay(btn) {
-  const done = state.completed_tasks.length;
-  if (done < 5) {
-    const left = 5 - done;
-    tg.showAlert(`Осталось ${left} ${taskWord(left)}. Отметь все — и закроем день! 💪`);
+function renderWeek() {
+  if (!STATE) return;
+  const s = STATE;
+  document.getElementById('w-weeknum').textContent = s.week_num || 1;
+  document.getElementById('w-total').textContent   = s.group_total   || 0;
+  document.getElementById('w-active').textContent  = s.group_active  || 0;
+  document.getElementById('w-dropped').textContent = s.group_dropped || 0;
+  const surv = s.group_survival_pct || 0;
+  document.getElementById('w-surv-bar').style.width  = surv + '%';
+  document.getElementById('w-surv-text').textContent =
+    surv + '% ещё идут — выше среднего по миру (58%)';
+  document.getElementById('w-planet-by').textContent =
+    'По итогам ' + (s.days_done || s.day || 0) + ' дней';
+  const wrap = document.getElementById('w-tasks');
+  wrap.innerHTML = '';
+  PLANET_TASKS.forEach(t => {
+    wrap.innerHTML +=
+      '<div class="pt-row">' +
+        '<div class="pt-top">' +
+          '<span class="pt-name">' + t.icon + ' ' + t.name + '</span>' +
+          '<span class="pt-pct">лучше ' + t.pct + '% людей</span>' +
+        '</div>' +
+        '<div class="pt-bar"><div class="pt-fill" style="width:' + t.pct + '%;background:' + t.color + '"></div></div>' +
+        '<div class="pt-fact">' + t.fact + '</div>' +
+      '</div>';
+  });
+}
+
+function renderAch() {
+  if (!STATE) return;
+  const achs = STATE.achievements || [];
+  const daysD = STATE.days_done || 0;
+  const unlocked = achs.filter(a => a.unlocked).length;
+  document.getElementById('ach-count').textContent = unlocked + '/6 разблокировано';
+  const grid = document.getElementById('ach-grid');
+  grid.innerHTML = '';
+  achs.forEach(a => {
+    const sub  = ACH_SUBS[a.id] || '';
+    const left = Math.max(0, a.threshold - daysD);
+    const card = document.createElement('div');
+    card.className = 'ach-card ' + (a.unlocked ? 'unlocked' : 'locked');
+    card.innerHTML =
+      '<div class="ach-icon">' + a.icon + '</div>' +
+      '<div class="ach-name">' + a.name + '</div>' +
+      '<div class="ach-desc">' + sub + '</div>' +
+      '<div class="ach-badge ' + (a.unlocked ? 'got' : 'soon') + '">' +
+        (a.unlocked ? 'Получено' : 'Ещё ' + left + ' дн.') +
+      '</div>';
+    grid.appendChild(card);
+  });
+}
+
+function renderShare() {
+  if (!STATE) return;
+  const s = STATE;
+  document.getElementById('sh-day').textContent   = s.day || '—';
+  document.getElementById('sh-dayof').textContent = 'из 77 · ' + (s.pct_num || 0) + '% пути';
+  document.getElementById('sh-bar').style.width   = (s.pct_num || 0) + '%';
+  document.getElementById('sh-planet').textContent =
+    s.percentile ? '🌍 Ты в ' + s.percentile + ' планеты' : '';
+  const opts = s.share_texts || [];
+  const wrap = document.getElementById('sh-options');
+  wrap.innerHTML = '';
+  opts.forEach((txt, i) => {
+    const el = document.createElement('div');
+    el.className = 'share-option' + (i === SEL_SHARE ? ' selected' : '');
+    el.textContent = txt;
+    el.addEventListener('click', () => {
+      SEL_SHARE = i;
+      wrap.querySelectorAll('.share-option').forEach((e, j) => {
+        e.classList.toggle('selected', j === i);
+      });
+    });
+    wrap.appendChild(el);
+  });
+}
+
+function copyText() {
+  const texts = STATE?.share_texts || [];
+  const txt = texts[SEL_SHARE] || '';
+  if (!txt) return;
+  const done = () => {
+    if (tg) tg.HapticFeedback?.notificationOccurred('success');
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Скопировано!';
+    setTimeout(() => { btn.textContent = 'Копировать текст'; }, 2000);
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+  } else { fallbackCopy(txt, done); }
+}
+
+function fallbackCopy(txt, cb) {
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta); cb();
+}
+
+(async () => {
+  await loadState();
+  document.getElementById('loader').style.display = 'none';
+
+  if (!STATE) {
+    document.body.innerHTML =
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'height:100vh;gap:16px;text-align:center;padding:24px">' +
+      '<span style="font-size:48px">🦥</span>' +
+      '<div style="font-size:18px;font-weight:700">Не удалось загрузить данные</div>' +
+      '<div style="color:rgba(255,255,255,.5);font-size:14px">Открой бота @Zarik_Lazy_Bot<br>и попробуй снова</div>' +
+      '</div>';
     return;
   }
-  tg.HapticFeedback.notificationOccurred('success');
-  btn.textContent = '⏳ Закрываю…';
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/close', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Init-Data': tg.initData },
-      body: JSON.stringify({})
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.new_achievements && data.new_achievements.length > 0) {
-        const names = data.new_achievements.map(a => `${a.icon} ${a.name}`).join('\n');
-        tg.showAlert(`🏆 Новые ачивки!\n${names}`);
-      }
-      // Обновить состояние
-      await loadState();
-    }
-  } catch(e) { console.error(e); }
-}
 
-// ── Экран «Итоги» ────────────────────────────────────────
+  if (!STATE.started) {
+    document.body.innerHTML =
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'height:100vh;gap:16px;text-align:center;padding:24px">' +
+      '<span style="font-size:48px">🦥</span>' +
+      '<div style="font-size:18px;font-weight:700">Программа ещё не началась</div>' +
+      '<div style="color:rgba(255,255,255,.5);font-size:14px">Пройди онбординг в боте<br>и приходи сюда завтра утром</div>' +
+      '</div>';
+    return;
+  }
 
-function renderProgress(chat) {
-  const { day, total_days, bar, pct_num, days_done, streak, percentile, pct_ctx, next_days, next_pct } = state;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-wrap';
-  bubble.innerHTML = `
-    <div class="msg-avatar">🦥</div>
-    <div class="bubble">
-      <div class="bubble-title">📊 Прогресс · День ${day} из ${total_days}</div>
-      <div class="progress-line">${bar}<span class="progress-pct">${pct_num}%</span></div>
-    </div>`;
-  chat.appendChild(bubble);
-
-  const card = document.createElement('div');
-  card.className = 'stat-card';
-  card.innerHTML = `
-    <div class="stat-row"><span class="stat-label">✅ Засчитано:</span><span class="stat-value">${days_done} ${dayWord(days_done)}</span></div>
-    <div class="stat-row"><span class="stat-label">🔥 Серия:</span><span class="stat-value">${streak} ${dayWord(streak)} подряд</span></div>
-    <div class="stat-row"><span class="stat-label">🌍 Рейтинг:</span><span class="stat-value green">${esc(percentile)} планеты</span></div>
-    ${next_days ? `<div class="stat-hint">ещё ${next_days} ${dayWord(next_days)} → ${esc(next_pct)}</div>` : ''}
-    <hr class="divider-line">
-    <div class="bubble-text" style="font-size:11px">${esc(pct_ctx)}</div>
-  `;
-  chat.appendChild(card);
-  chat.appendChild(makeItabsRow());
-}
-
-// ── Экран «Неделя» ───────────────────────────────────────
-
-function renderWeek(chat) {
-  const { day, days_done, week_num, week_done, week_bar, week_header, group_total, group_active,
-    percentile, next_days, next_pct } = state;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-wrap';
-  bubble.innerHTML = `
-    <div class="msg-avatar">🦥</div>
-    <div class="bubble">
-      <div class="bubble-title">📅 Неделя ${week_num} · ${week_done} из 7 дней</div>
-      <div class="bubble-text" style="margin-top:6px">${mdToHtml(week_header)}</div>
-    </div>`;
-  chat.appendChild(bubble);
-
-  const card = document.createElement('div');
-  card.className = 'stat-card';
-  card.innerHTML = `
-    <div class="stat-row"><span class="stat-label">Эта неделя:</span><span class="stat-value" style="font-family:monospace;color:#30d158">${week_bar}</span><span class="stat-label">${week_done} / 7</span></div>
-    <div class="stat-row"><span class="stat-label">Всего засчитано:</span><span class="stat-value">${days_done}</span><span class="stat-label">из ${day} дней</span></div>
-    <div class="stat-row"><span class="stat-label">🌍</span><span class="stat-value green">${esc(percentile)} планеты</span></div>
-    ${next_days ? `<div class="stat-hint">ещё ${next_days} ${dayWord(next_days)} → ${esc(next_pct)}</div>` : ''}
-    ${group_total > 0 ? `
-    <hr class="divider-line">
-    <div class="stat-row"><span class="stat-label">👥 Группа:</span><span class="stat-value">${group_total} участников</span></div>
-    <div class="stat-row"><span class="stat-label">🏃 Продолжают:</span><span class="stat-value">${group_active}</span></div>` : ''}
-  `;
-  chat.appendChild(card);
-  chat.appendChild(makeItabsRow());
-}
-
-// ── Экран «Ачивки» ───────────────────────────────────────
-
-function renderAchievements(chat) {
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-wrap';
-  bubble.innerHTML = `
-    <div class="msg-avatar">🦥</div>
-    <div class="bubble">
-      <div class="bubble-title">🏆 Твои ачивки</div>
-      <div class="bubble-text">Открывай достижения каждые 7 дней</div>
-    </div>`;
-  chat.appendChild(bubble);
-
-  const list = document.createElement('div');
-  list.className = 'ach-list';
-  (state.achievements || []).forEach(a => {
-    const item = document.createElement('div');
-    item.className = 'ach-item ' + (a.unlocked ? 'unlocked' : 'locked');
-    item.innerHTML = `
-      <div style="font-size:22px">${a.unlocked ? '✅' : '⬜'}</div>
-      <div style="font-size:20px">${a.icon}</div>
-      <div>
-        <div class="ach-name">${esc(a.name)}</div>
-        <div class="ach-day">День ${a.threshold}</div>
-      </div>`;
-    list.appendChild(item);
-  });
-  chat.appendChild(list);
-  chat.appendChild(makeItabsRow());
-}
-
-// ── Инлайн-табы ──────────────────────────────────────────
-
-function makeItabsRow() {
-  const tabs = [
-    ['tasks', '☀️ Сегодня'],
-    ['progress', '📊 Итоги'],
-    ['week', '📅 Неделя'],
-    ['achievements', '🏆 Ачивки'],
-  ];
-  const row = document.createElement('div');
-  row.className = 'itabs-row';
-  tabs.forEach(([key, label]) => {
-    const btn = document.createElement('button');
-    btn.className = 'itab' + (key === currentTab ? ' active' : '');
-    btn.id = 'itab-' + key;
-    btn.textContent = label;
-    btn.onclick = () => switchTab(key);
-    row.appendChild(btn);
-  });
-  return row;
-}
-
-// ── Утилиты ──────────────────────────────────────────────
-
-function esc(s) {
-  if (!s) return '';
-  return String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
-
-function mdToHtml(s) {
-  // *text* → <b>text</b>, остальное экранируется
-  return esc(s).replace(/\*([^*]+)\*/g, '<b>$1</b>').replace(/\n/g,'<br>');
-}
-
-function dayWord(n) {
-  if (n % 10 === 1 && n % 100 !== 11) return 'день';
-  if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'дня';
-  return 'дней';
-}
-
-function taskWord(n) {
-  if (n === 1) return 'задача';
-  if ([2,3,4].includes(n)) return 'задачи';
-  return 'задач';
-}
-
-// ── Старт ────────────────────────────────────────────────
-loadState();
+  nav('main');
+})();
 </script>
 </body>
 </html>

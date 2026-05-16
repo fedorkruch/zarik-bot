@@ -35,7 +35,7 @@ from keyboards import (
     photo_keyboard,
     photos_done_keyboard,
     photos_retry_keyboard,
-    MAIN_MENU,
+    main_menu,
     START_MENU,
     TIMEZONES,
 )
@@ -46,6 +46,7 @@ PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ["BOT_TOKEN
 LEAD_BOT_USERNAME = os.environ.get("LEAD_BOT_USERNAME", "Shagov77_bot")
 ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
 WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.app
+MAIN_MENU         = main_menu(WEBAPP_URL)              # ← собирается с WebApp-кнопкой если URL задан
 TOTAL_DAYS        = 77
 # Тест-пользователи: обходят проверку оплаты и сбрасываются при каждом /start
 TEST_USER_IDS     = {283760217, 262479340}

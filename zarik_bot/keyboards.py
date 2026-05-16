@@ -1,7 +1,7 @@
 """
 keyboards.py — клавиатуры бота Зарик (77-дневный челлендж)
 """
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 # 5 задач: 0=тренировка, 1=вода, 2=чтение, 3=питание, 4=алкоголь
 TASK_LABELS = [
@@ -162,16 +162,26 @@ def progress_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
-# Главное меню (Reply-кнопки) — постоянная клавиатура внизу
-MAIN_MENU = ReplyKeyboardMarkup(
-    [
-        ["📋 Мои задачи на сегодня"],
-        ["📊 Прогресс", "🏆 Ачивки"],
-        ["❓ Помощь"],
-    ],
-    resize_keyboard=True,
-    is_persistent=True,
-)
+def main_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
+    """Главное меню. Если webapp_url задан — кнопка «Трекер» открывает Mini App."""
+    bottom_row = (
+        [KeyboardButton("📱 Трекер", web_app=WebAppInfo(url=webapp_url))]
+        if webapp_url
+        else ["❓ Помощь"]
+    )
+    return ReplyKeyboardMarkup(
+        [
+            ["📋 Мои задачи на сегодня"],
+            ["📊 Прогресс", "🏆 Ачивки"],
+            bottom_row,
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+# Обратная совместимость: без URL — обычное меню с «Помощью»
+MAIN_MENU = main_menu()
 
 # Кнопка старта — до завершения онбординга
 START_MENU = ReplyKeyboardMarkup(
