@@ -380,6 +380,53 @@ async def handle_close_day(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def handle_debug(request: web.Request) -> web.Response:
+    """GET /debug — диагностическая страница, показывает всё что получает браузер."""
+    html = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Debug</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+body{background:#0f0f13;color:#fff;font-family:monospace;padding:16px;font-size:12px}
+h2{color:#e5a012;margin-bottom:12px}
+.row{margin-bottom:8px;word-break:break-all}
+.k{color:rgba(255,255,255,.45)}
+.v{color:#4cd964}
+.empty{color:#ff5c5c}
+</style>
+</head>
+<body>
+<h2>🦥 Mini App Debug</h2>
+<div id="out"></div>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const rows = [
+  ['tg available',   tg ? 'YES' : 'NO'],
+  ['tg.version',     tg?.version || '—'],
+  ['tg.platform',    tg?.platform || '—'],
+  ['tg.initData',    tg?.initData || 'EMPTY'],
+  ['initData.len',   (tg?.initData||'').length],
+  ['unsafe.user',    JSON.stringify(tg?.initDataUnsafe?.user) || '—'],
+  ['location.href',  location.href],
+  ['location.search',location.search || 'EMPTY'],
+  ['location.hash',  location.hash || 'EMPTY'],
+];
+const out = document.getElementById('out');
+rows.forEach(([k,v]) => {
+  const d = document.createElement('div');
+  d.className = 'row';
+  const empty = !v || v === 'EMPTY' || v === '—' || v === '0';
+  d.innerHTML = '<span class="k">' + k + ': </span><span class="' + (empty?'empty':'v') + '">' + v + '</span>';
+  out.appendChild(d);
+});
+</script>
+</body></html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
 async def handle_set_mode(request: web.Request) -> web.Response:
     """POST /api/set_mode {"miniapp": false} — переключает режим отображения."""
     uid = get_user_id_from_request(request)
@@ -403,6 +450,7 @@ def create_app() -> web.Application:
     app.router.add_get("/apple-touch-icon.png", handle_apple_icon)
     app.router.add_get("/icon-192.png",        handle_apple_icon)
     app.router.add_get("/icon-512.png",        handle_apple_icon)
+    app.router.add_get("/debug",               handle_debug)
     app.router.add_get("/api/state",           handle_state)
     app.router.add_post("/api/task",           handle_task)
     app.router.add_post("/api/close",          handle_close_day)

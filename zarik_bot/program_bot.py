@@ -883,9 +883,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📱 МиниАПП":
         url = make_miniapp_url(user_id)
         if url:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo as _WAI
+            debug_url = WEBAPP_URL.rstrip("/") + "/debug"
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📱 Открыть МиниАПП", web_app=_WAI(url=url))],
+                [InlineKeyboardButton("🔍 Debug", web_app=_WAI(url=debug_url))],
+            ])
             await update.message.reply_text(
                 "📱 Нажми кнопку ниже — откроется твой трекер:",
-                reply_markup=miniapp_open_keyboard(url),
+                reply_markup=markup,
             )
         else:
             await update.message.reply_text("МиниАПП пока недоступен.")
