@@ -86,15 +86,15 @@ async def is_subscribed(user_id: int, bot) -> bool:
     """
     Проверяет подписку на @kabanovofficial.
     При любой ошибке — возвращает False (не пропускаем).
-    Бот должен быть добавлен в канал как администратор для корректной проверки.
+    Бот должен быть администратором канала.
     """
     try:
         member = await bot.get_chat_member(f"@{CHANNEL}", user_id)
-        logger.info(f"Статус подписки {user_id} на @{CHANNEL}: {member.status}")
+        logger.info(f"[SUB] user={user_id} status={member.status}")
         return member.status not in (ChatMember.BANNED, ChatMember.LEFT)
     except Exception as e:
-        logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
-        return False  # при ошибке — не пропускаем
+        logger.error(f"[SUB ERROR] user={user_id} error={e}")
+        return False
 
 
 # ── Основной флоу ────────────────────────────────────────────
@@ -392,34 +392,50 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     data = query.data
+    logger.info(f"[CB] user={user_id} data={data}")
 
     # Проверка подписки на канал
     if data == "check_sub":
-        if await is_subscribed(user_id, context.bot):
+        # Сначала проверяем подписку, потом отвечаем на callback
+        subscribed = await is_subscribed(user_id, context.bot)
+
+        if subscribed:
             await query.answer("✅ Подписка подтверждена!")
             db.upsert_lead(user_id, query.from_user.username or "", query.from_user.first_name or "")
             db.mark_lead_subscribed(user_id)
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.warning(f"[CB] edit_markup error (ignored): {e}")
             await do_send_tracker(user_id, context)
         else:
-            await query.answer()
-            await query.edit_message_text(
-                f"🦥 Я не обнаружил подписки на канал.\n\n"
-                f"Как только подпишешься — я сразу пришлю подарок 🎁\n\n"
-                f"Подпишись и нажми кнопку снова 👇",
-                reply_markup=subscribe_keyboard(),
+            await query.answer(
+                "Подписка не обнаружена. Подпишись и нажми снова.",
+                show_alert=True,
             )
+            try:
+                await query.edit_message_text(
+                    "🦥 Я не обнаружил подписки на канал.\n\n"
+                    "Как только подпишешься — я сразу пришлю подарок 🎁\n\n"
+                    "Подпишись и нажми кнопку снова 👇",
+                    reply_markup=subscribe_keyboard(),
+                )
+            except Exception as e:
+                logger.warning(f"[CB] edit_text error (ignored): {e}")
         return
 
     # Покупка курса
     if data == "buy_course":
         await query.answer()
         if db.is_payment_confirmed(user_id):
-            await query.edit_message_text(
-                f"✅ Ты уже в программе!\n\n"
-                f'👉 <a href="https://t.me/{PROGRAM_BOT_USERNAME}">Зарик Ленивец</a>',
-                parse_mode=ParseMode.HTML,
-            )
+            try:
+                await query.edit_message_text(
+                    f"✅ Ты уже в программе!\n\n"
+                    f'👉 <a href="https://t.me/{PROGRAM_BOT_USERNAME}">Зарик Ленивец</a>',
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
             return
         await send_course_invoice(user_id, context)
         return
