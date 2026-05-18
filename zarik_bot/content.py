@@ -403,10 +403,23 @@ def get_afternoon_smart(day: int, completed: set) -> str:
 
 
 def get_evening(day: int, all_done: bool) -> str:
-    """Вечернее сообщение в 21:00 — циклические (10 вариантов)"""
+    """Вечернее сообщение в 21:00 — циклические (10 вариантов).
+    Используется только для all_done=True или как fallback."""
     if all_done:
         return EVENING_DONE[(day - 1) % len(EVENING_DONE)]
     return EVENING_NOT_DONE[(day - 1) % len(EVENING_NOT_DONE)]
+
+
+def get_evening_smart(day: int, completed: set) -> str:
+    """Умное вечернее сообщение в 21:00 с учётом конкретных незакрытых задач."""
+    done = len(completed)
+    if done >= 5:
+        return EVENING_DONE[(day - 1) % len(EVENING_DONE)]
+    if done == 0:
+        return AFTERNOON_ZERO
+    remaining = [TASK_NAMES[i] for i in range(5) if i not in completed]
+    tasks_str = "\n".join(remaining)
+    return AFTERNOON_PARTIAL.format(tasks=tasks_str)
 
 
 def get_weekly_header(week: int) -> str:

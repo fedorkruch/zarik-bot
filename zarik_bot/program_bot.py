@@ -1011,10 +1011,10 @@ async def job_evening(context: ContextTypes.DEFAULT_TYPE):
             completed = db.get_completed_tasks(user["user_id"], day)
             all_done  = len(completed) >= 5
 
-            # Сначала текстовое послание
+            # Умное вечернее послание с учётом незакрытых задач
             await context.bot.send_message(
                 chat_id=user["user_id"],
-                text=ct.get_evening(day, all_done),
+                text=ct.get_evening_smart(day, completed),
             )
             # Затем экран задач если не все выполнены
             if not all_done:
