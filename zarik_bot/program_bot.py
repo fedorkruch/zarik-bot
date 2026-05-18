@@ -986,12 +986,21 @@ async def job_afternoon(context: ContextTypes.DEFAULT_TYPE):
                 continue
             completed = db.get_completed_tasks(user["user_id"], day)
             all_done  = len(completed) >= 5
-            text = ct.get_afternoon_smart(day, completed)
+
+            # 1. Умное дневное послание (текст отдельно)
             await context.bot.send_message(
                 chat_id=user["user_id"],
-                text=text,
-                reply_markup=None if all_done else today_markup(user["user_id"], day, completed)
+                text=ct.get_afternoon_smart(day, completed),
             )
+            # 2. Трекер отдельным сообщением если не все выполнены
+            if not all_done:
+                user_row = db.get_user(user["user_id"])
+                await context.bot.send_message(
+                    chat_id=user["user_id"],
+                    text=build_today_screen(user_row, day, completed),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=today_markup(user["user_id"], day, completed)
+                )
         except Exception as e:
             logger.warning(f"День {user['user_id']}: {e}")
 
