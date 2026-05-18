@@ -1141,22 +1141,19 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_row  = db.get_user(uid)
     completed = db.get_completed_tasks(uid, target)
 
-    # ── Шапка режима разработчика ─────────────────────────────
+    # ── Шапка ─────────────────────────────────────────────────
     await update.message.reply_text(
-        f"🛠 <b>DEV MODE · День {target} из {TOTAL_DAYS}</b>",
+        f"🛠 <b>DEV · День {target} из {TOTAL_DAYS}</b>\n"
+        f"──────────────────────",
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 6:00 — Мотивационное послание ─────────────────────────
-    morning_text = build_morning_text(user_row, target)
-    await update.message.reply_text(
-        f"<b>☀️ 6:00 — утро (мотивация)</b>\n\n{morning_text}",
-        parse_mode=ParseMode.HTML,
-    )
+    # ── ☀️ 6:00 — Мотивационное послание ──────────────────────
+    await update.message.reply_text(build_morning_text(user_row, target))
 
-    # ── 6:00 — Задания на день ────────────────────────────────
+    # ── 📋 6:00 — Задания на день ─────────────────────────────
     await update.message.reply_text(
-        f"<b>📋 6:00 — задания на день</b>\n\n" + build_tasks_list(user_row, target),
+        build_tasks_list(user_row, target),
         parse_mode=ParseMode.HTML,
     )
 
@@ -1167,32 +1164,53 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=today_markup(uid, target, completed),
     )
 
-    # ── 14:00 — Дневное сообщение ─────────────────────────────
-    afternoon = ct.get_afternoon(target, all_done=False)
+    # ── 🌤 14:00 — ноль галочек ───────────────────────────────
     await update.message.reply_text(
-        f"<b>🌤 14:00 — день</b>\n\n{afternoon}",
+        f"<i>— 14:00 · ноль галочек —</i>\n\n"
+        + ct.get_afternoon_smart(target, set()),
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 21:00 — Вечер (не все выполнено) ─────────────────────
-    evening = ct.get_evening(target, all_done=False)
+    # ── 🌤 14:00 — часть галочек (пример: выполнена только тренировка) ──
+    partial_sample = {0}   # только тренировка закрыта
     await update.message.reply_text(
-        f"<b>🌙 21:00 — вечер (не все выполнено)</b>\n\n{evening}",
+        f"<i>— 14:00 · частично (пример: только тренировка) —</i>\n\n"
+        + ct.get_afternoon_smart(target, partial_sample),
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 🎉 — Вечер (все галочки закрыты) ─────────────────────
-    evening_done = ct.get_evening(target, all_done=True)
+    # ── 🌤 14:00 — все выполнено ──────────────────────────────
     await update.message.reply_text(
-        f"<b>🎉 При закрытии всех галочек</b>\n\n{evening_done}",
+        f"<i>— 14:00 · все галочки —</i>\n\n"
+        + ct.get_afternoon_smart(target, {0, 1, 2, 3, 4}),
         parse_mode=ParseMode.HTML,
     )
 
-    # ── 20:00 — Недельный итог (если milestone день) ──────────
+    # ── 🌙 21:00 — ноль галочек ───────────────────────────────
+    await update.message.reply_text(
+        f"<i>— 21:00 · ноль галочек —</i>\n\n"
+        + ct.get_evening_smart(target, set()),
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── 🌙 21:00 — часть галочек ──────────────────────────────
+    await update.message.reply_text(
+        f"<i>— 21:00 · частично (пример: только тренировка) —</i>\n\n"
+        + ct.get_evening_smart(target, partial_sample),
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── 🌙 21:00 — все выполнено ──────────────────────────────
+    await update.message.reply_text(
+        f"<i>— 21:00 · все галочки —</i>\n\n"
+        + ct.get_evening_smart(target, {0, 1, 2, 3, 4}),
+        parse_mode=ParseMode.HTML,
+    )
+
+    # ── 📊 20:00 — Недельный итог (если milestone день) ───────
     if target in WEEKLY_MILESTONE_DAYS:
-        milestone_text = build_weekly_milestone_screen(uid)
         await update.message.reply_text(
-            f"<b>📊 20:00 — недельный итог (день {target})</b>\n\n{milestone_text}",
+            build_weekly_milestone_screen(uid),
             parse_mode=ParseMode.HTML,
         )
 
