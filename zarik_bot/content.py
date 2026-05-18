@@ -93,6 +93,29 @@ MORNING = [
 # ДНЕВНЫЕ СООБЩЕНИЯ 14:00 — уникальные по дням
 # ══════════════════════════════════════════════════════════════
 
+# 14:00 — ни одной галочки не проставлено
+AFTERNOON_ZERO = (
+    "Нуууу. Пока чисто. Подозрительно чисто. "
+    "Как моя совесть после дневного сна. "
+    "Проснись и ткни галочку. Хоть одну."
+)
+
+# 14:00 — часть галочек проставлена, {tasks} — список незакрытых
+AFTERNOON_PARTIAL = (
+    "Эээ, а кто тут у нас молодец? "
+    "Пока не полный молодец, но уже видно потенциал. "
+    "Вот что осталось:\n{tasks}\n— и ты красавчик."
+)
+
+# Названия задач по индексу (для подстановки в AFTERNOON_PARTIAL)
+TASK_NAMES = {
+    0: "💪 Тренировка",
+    1: "💧 Вода",
+    2: "📚 Чтение",
+    3: "🥗 Без фастфуда",
+    4: "🚫 Без алкоголя",
+}
+
 AFTERNOON_NOT_DONE = [
     "Эй. Я вишу тут и смотрю на твой чеклист. Там ещё есть непогашенные галочки. Время ещё есть. Вставай.",
     "Обед. Половина дня позади. Тренировки ещё не было? Вода не допита? Книга закрыта? Хорошо. Значит впереди ещё есть чем заняться.",
@@ -359,10 +382,24 @@ def get_morning(day: int) -> str:
 
 
 def get_afternoon(day: int, all_done: bool) -> str:
-    """Дневное сообщение в 14:00 — циклические (10 вариантов)"""
+    """Дневное сообщение в 14:00 — циклические (10 вариантов).
+    Используется только для all_done=True или как fallback."""
     if all_done:
         return AFTERNOON_DONE[(day - 1) % len(AFTERNOON_DONE)]
     return AFTERNOON_NOT_DONE[(day - 1) % len(AFTERNOON_NOT_DONE)]
+
+
+def get_afternoon_smart(day: int, completed: set) -> str:
+    """Умное дневное сообщение в 14:00 с учётом конкретных незакрытых задач."""
+    done = len(completed)
+    if done >= 5:
+        return AFTERNOON_DONE[(day - 1) % len(AFTERNOON_DONE)]
+    if done == 0:
+        return AFTERNOON_ZERO
+    # Есть прогресс, но не всё — показываем что осталось
+    remaining = [TASK_NAMES[i] for i in range(5) if i not in completed]
+    tasks_str = "\n".join(remaining)
+    return AFTERNOON_PARTIAL.format(tasks=tasks_str)
 
 
 def get_evening(day: int, all_done: bool) -> str:

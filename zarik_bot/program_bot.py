@@ -986,9 +986,10 @@ async def job_afternoon(context: ContextTypes.DEFAULT_TYPE):
                 continue
             completed = db.get_completed_tasks(user["user_id"], day)
             all_done  = len(completed) >= 5
+            text = ct.get_afternoon_smart(day, completed)
             await context.bot.send_message(
                 chat_id=user["user_id"],
-                text=ct.get_afternoon(day, all_done),
+                text=text,
                 reply_markup=None if all_done else today_markup(user["user_id"], day, completed)
             )
         except Exception as e:
