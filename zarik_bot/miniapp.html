@@ -55,6 +55,7 @@ body{
   transition:all .2s;background:rgba(255,255,255,.07);color:var(--sub);
   -webkit-tap-highlight-color:transparent}
 .tab-btn.active{background:var(--gold);color:#fff}
+.tab-btn.locked{opacity:.3;cursor:default;pointer-events:none}
 .sloth-big{font-size:40px;display:block;margin-bottom:10px;line-height:1}
 .msg-quote{font-size:17px;font-style:italic;font-weight:500;line-height:1.5;color:#fff}
 .msg-attr{margin-top:10px;font-size:12px;color:var(--dim)}
@@ -406,6 +407,8 @@ function nav(view) {
 }
 
 function setTab(tab) {
+  const allDone = STATE && STATE.all_tasks_done;
+  if (tab === 'evening' && !allDone) return; // заблокировано
   MSG_TAB = tab;
   document.getElementById('tab-morning').classList.toggle('active', tab === 'morning');
   document.getElementById('tab-evening').classList.toggle('active', tab === 'evening');
@@ -429,6 +432,9 @@ function renderMain() {
   document.getElementById('m-msg').textContent     = msg;
   document.getElementById('m-msg-attr').textContent = '— Ленивец, день ' + (s.day || 1);
   document.getElementById('m-done-banner').classList.toggle('hidden', !s.all_tasks_done);
+  const eveningBtn = document.getElementById('tab-evening');
+  eveningBtn.classList.toggle('locked', !s.all_tasks_done);
+  if (!s.all_tasks_done && MSG_TAB === 'evening') setTab('morning');
   const done = (s.completed_tasks || []).length;
   document.getElementById('m-counter').textContent = done + '/5';
   const wrap = document.getElementById('m-tasks');
