@@ -329,88 +329,92 @@ def _calc_task_percentile(user_rate: float, all_rates: list) -> int:
 
 def build_weekly_milestone_screen(user_id: int) -> str:
     """
-    Расширенный итог недели для дней 7, 14, 21 ... 77.
-    Показывает: мотивационный заголовок, накопленные повторения + калории,
-    перцентиль по каждой задаче относительно всех участников, статистику группы.
+    Итог недели для дней 7, 14, 21 ... 77.
+    Форматирует шаблон WEEKLY_HEADER реальными данными пользователя.
     """
     stats    = db.get_stats(user_id)
     day      = stats["current_day"]
-    done     = stats["days_completed"]
     week_num = (day - 1) // 7 + 1
 
-    user_row      = db.get_user(user_id)
-    all_compl     = db.get_completed_days_set(user_id)
+    user_row  = db.get_user(user_id)
+    all_compl = db.get_completed_days_set(user_id)
 
-    # ── Накопленные повторения (только за дни с выполненной тренировкой) ──
+    # Границы текущей недели
+    week_start = (week_num - 1) * 7 + 1
+    week_end   = week_num * 7
+
+    # ── Накопленные и недельные повторения ──────────────────────
     total_pushups = total_squats = total_abs = workout_days = 0
+    week_pushups  = week_squats  = week_abs  = w_train = 0
+
     for d in all_compl:
         tasks = db.get_completed_tasks(user_id, d)
-        if 0 in tasks:   # task 0 = тренировка
+        if 0 in tasks:
             w = get_workout(dict(user_row), d)
             total_pushups += w["pushup"]["total"]
             total_squats  += w["squat"]["total"]
             total_abs     += w["abs"]["total"]
             workout_days  += 1
+            if week_start <= d <= week_end:
+                week_pushups += w["pushup"]["total"]
+                week_squats  += w["squat"]["total"]
+                week_abs     += w["abs"]["total"]
+                w_train      += 1
 
-    kcal = round(
-        total_pushups * _KCAL_PUSHUP
-        + total_squats  * _KCAL_SQUAT
-        + total_abs     * _KCAL_ABS
-        + workout_days  * _KCAL_SESSION
+    # ── Подсчёт задач за неделю ─────────────────────────────────
+    user_counts        = db.get_task_completion_counts(user_id)
+    weekly_task_counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for d in all_compl:
+        if week_start <= d <= week_end:
+            for t in db.get_completed_tasks(user_id, d):
+                if t in weekly_task_counts:
+                    weekly_task_counts[t] += 1
+
+    # Конвертация: вода — литры (×2), чтение — страницы (×20)
+    w_water  = weekly_task_counts[1] * 2
+    w_pages  = weekly_task_counts[2] * 20
+    w_nojunk = weekly_task_counts[3]
+    w_noalc  = weekly_task_counts[4]
+
+    total_water  = user_counts.get(1, 0) * 2
+    total_pages  = user_counts.get(2, 0) * 20
+    total_nojunk = user_counts.get(3, 0)
+    total_noalc  = user_counts.get(4, 0)
+
+    # ── Форматируем шаблон ──────────────────────────────────────
+    header_text = ct.format_weekly_header(
+        week_num,
+        train=w_train,
+        pushups=week_pushups,
+        abs=week_abs,
+        squats=week_squats,
+        water=w_water,
+        pages=w_pages,
+        nojunk=w_nojunk,
+        noalc=w_noalc,
+        total_pushups=total_pushups,
+        total_abs=total_abs,
+        total_squats=total_squats,
+        total_water=total_water,
+        total_pages=total_pages,
+        total_nojunk=total_nojunk,
+        total_noalc=total_noalc,
     )
 
-    # ── Перцентили по задачам ──────────────────────────────────
-    user_counts = db.get_task_completion_counts(user_id)
-    all_rates   = db.get_all_task_completion_rates()   # один запрос на все задачи
-
-    task_lines = []
-    for i in range(5):
-        user_cnt  = user_counts.get(i, 0)
-        user_rate = user_cnt / day if day > 0 else 0
-        pct_below = _calc_task_percentile(user_rate, all_rates.get(i, []))
-        top_pct   = 100 - pct_below
-        top_label = f"топ {top_pct}%" if top_pct < 100 else "💯 выполнено каждый день!"
-        task_lines.append(
-            f"{TASK_LABELS_WEEKLY[i]}  —  <b>{user_cnt}</b> из {day} дней  ·  {top_label}"
-        )
-
-    # ── Заголовок недели ──────────────────────────────────────
-    header = md2html(ct.get_weekly_header(week_num))
-
-    # ── Группа ────────────────────────────────────────────────
+    # ── Группа ──────────────────────────────────────────────────
     group = db.get_group_stats()
-
-    lines = [
-        f"<b>📅 Итоги недели {week_num}</b>",
-        "",
-        header,
-        "",
-        "─────────────────────",
-        "",
-        "<b>🏋️ За всё время программы ты сделал:</b>",
-        f"   Отжимания    <b>{total_pushups:,}</b> раз".replace(",", " "),
-        f"   Приседания   <b>{total_squats:,}</b> раз".replace(",", " "),
-        f"   Пресс         <b>{total_abs:,}</b> раз".replace(",", " "),
-        f"",
-        f"   🔥 Сожжено примерно <b>{kcal:,}</b> ккал".replace(",", " "),
-        "",
-        "─────────────────────",
-        "",
-        "<b>📊 Твой рейтинг среди участников:</b>",
-    ] + task_lines + [
-        "",
-        "─────────────────────",
-    ]
+    lines = [md2html(header_text)]
 
     if group and group.get("total", 0) > 0:
         lines += [
+            "",
+            "─────────────────────",
             "",
             f"👥  Группа:      {group['total']} участников",
             f"🏃  Продолжают:  <b>{group['active']}</b>",
         ]
 
     return "\n".join(lines)
-
 
 def build_achievements_screen(user_id: int) -> str:
     """Экран «Ачивки» — все достижения с ✅/⬜."""

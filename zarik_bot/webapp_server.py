@@ -156,9 +156,42 @@ def build_full_state(user_id: int) -> dict:
     # Неделя
     week_num   = (day - 1) // 7 + 1 if day > 0 else 1
     week_start = (week_num - 1) * 7 + 1
+    week_end   = week_num * 7
     all_compl  = db.get_completed_days_set(user_id)
     week_done  = len({d for d in all_compl if week_start <= d <= day})
-    week_header = ct.get_weekly_header(week_num)
+
+    # Статистика для шаблона weekly header
+    _wt = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    _w_push = _w_sq = _w_abs = 0
+    _t_push = _t_sq = _t_abs = 0
+    _user_row_dict = dict(user_row) if user_row else {}
+    for _d in all_compl:
+        _tasks = db.get_completed_tasks(user_id, _d)
+        if 0 in _tasks:
+            try:
+                _wo = get_workout(_user_row_dict, _d)
+                _t_push += _wo["pushup"]["total"]
+                _t_sq   += _wo["squat"]["total"]
+                _t_abs  += _wo["abs"]["total"]
+                if week_start <= _d <= week_end:
+                    _w_push += _wo["pushup"]["total"]
+                    _w_sq   += _wo["squat"]["total"]
+                    _w_abs  += _wo["abs"]["total"]
+            except Exception:
+                pass
+        if week_start <= _d <= week_end:
+            for _t in _tasks:
+                if _t in _wt:
+                    _wt[_t] += 1
+    _uc = db.get_task_completion_counts(user_id)
+    week_header = ct.format_weekly_header(
+        week_num,
+        train=_wt[0], pushups=_w_push, abs=_w_abs, squats=_w_sq,
+        water=_wt[1] * 2, pages=_wt[2] * 20, nojunk=_wt[3], noalc=_wt[4],
+        total_pushups=_t_push, total_abs=_t_abs, total_squats=_t_sq,
+        total_water=_uc.get(1, 0) * 2, total_pages=_uc.get(2, 0) * 20,
+        total_nojunk=_uc.get(3, 0), total_noalc=_uc.get(4, 0),
+    )
 
     # Группа
     group = db.get_group_stats() or {}
