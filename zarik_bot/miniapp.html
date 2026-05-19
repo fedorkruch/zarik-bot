@@ -336,6 +336,22 @@ const TASK_DEFS = [
   { icon:'🚫', name:'Без алкоголя',       sub:'Трезвый день' },
 ];
 
+// Доля людей, которые регулярно выполняют каждую задачу (по индексу TASK_DEFS)
+// 0:Тренировка=13%, 1:Вода=9%, 2:Чтение=6%, 3:Без фастфуда=24%, 4:Без алкоголя=22%
+const TASK_FRACS = [0.13, 0.09, 0.06, 0.24, 0.22];
+
+function calcDailyPlanetPct(completedArr) {
+  if (!completedArr || completedArr.length === 0) return null;
+  let frac = 1.0;
+  completedArr.forEach(idx => { if (TASK_FRACS[idx] != null) frac *= TASK_FRACS[idx]; });
+  const topPct = frac * 100;
+  if (topPct >= 10)   return Math.round(topPct) + '%';
+  if (topPct >= 1)    return topPct.toFixed(1) + '%';
+  if (topPct >= 0.1)  return topPct.toFixed(1) + '%';
+  if (topPct >= 0.01) return topPct.toFixed(2) + '%';
+  return '0.01%';
+}
+
 const ACH_SUBS = {
   first_step:'День 1 завершён', week_fire:'7 дней подряд',
   sloth_approves:'14 дней в программе', diamond_will:'30 дней засчитано',
@@ -406,8 +422,9 @@ function renderMain() {
   const pct = s.pct_num || 0;
   document.getElementById('m-pct').textContent  = pct + '%';
   document.getElementById('m-bar').style.width  = pct + '%';
+  const dailyPct = calcDailyPlanetPct(s.completed_tasks);
   document.getElementById('m-planet').textContent =
-    s.percentile ? 'Ты в ' + s.percentile + ' планеты 🌍' : '';
+    dailyPct ? '🌍 Ты уже входишь в топ ' + dailyPct + ' жителей планеты' : '';
   const msg = MSG_TAB === 'morning' ? (s.morning || '') : (s.evening || '');
   document.getElementById('m-msg').textContent     = msg;
   document.getElementById('m-msg-attr').textContent = '— Ленивец, день ' + (s.day || 1);
@@ -504,8 +521,9 @@ function renderShare() {
   document.getElementById('sh-day').textContent   = s.day || '—';
   document.getElementById('sh-dayof').textContent = 'из 77 · ' + (s.pct_num || 0) + '% пути';
   document.getElementById('sh-bar').style.width   = (s.pct_num || 0) + '%';
+  const shPct = calcDailyPlanetPct(s.completed_tasks);
   document.getElementById('sh-planet').textContent =
-    s.percentile ? '🌍 Ты в ' + s.percentile + ' планеты' : '';
+    shPct ? '🌍 Топ ' + shPct + ' жителей планеты' : '';
   const opts = s.share_texts || [];
   const wrap = document.getElementById('sh-options');
   wrap.innerHTML = '';
