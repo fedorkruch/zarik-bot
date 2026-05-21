@@ -941,7 +941,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     # Берём наибольшее разрешение из списка (последний элемент)
     photo = update.message.photo[-1]
-    db.save_user_photo(user_id, "before", photo.file_id)
+    # Скачиваем бинарные данные и сохраняем как BLOB в БД
+    try:
+        tg_file = await context.bot.get_file(photo.file_id)
+        photo_bytes = bytes(await tg_file.download_as_bytearray())
+    except Exception as e:
+        logger.warning(f"handle_photo: не удалось скачать фото {photo.file_id}: {e}")
+        photo_bytes = None
+    db.save_user_photo(user_id, "before", photo.file_id, photo_bytes)
     count = db.count_user_photos(user_id, "before")
     await update.message.reply_text(
         f"✅ Фото {count} сохранено! Пришли ещё или нажми «Готово».",
@@ -1360,7 +1367,6 @@ def _export_db_to_excel(output_path: str):
         ("users",             "Пользователи"),
         ("task_completions",  "Задания"),
         ("user_achievements", "Ачивки"),
-        ("user_photos",       "Фото"),
         ("leads",             "Лиды"),
     ]
 
@@ -1406,6 +1412,57 @@ def _export_db_to_excel(output_path: str):
                 ws.column_dimensions[get_column_letter(ci)].width = min(max_len + 2, 40)
     finally:
         conn.close()
+
+    # ── Лист с реальными фото ─────────────────────────────────
+    try:
+        from openpyxl.drawing.image import Image as XlImage
+        from PIL import Image as PilImage
+        from io import BytesIO
+
+        ws_ph = wb.create_sheet(title="Фото")
+        ws_ph.freeze_panes = "A2"
+
+        # Заголовки
+        for ci, col in enumerate(["user_id", "photo_type", "created_at", "Фото"], 1):
+            cell = ws_ph.cell(row=1, column=ci, value=col)
+            cell.font      = HEADER_FONT
+            cell.fill      = HEADER_FILL
+            cell.alignment = HEADER_ALIGN
+
+        ws_ph.column_dimensions["A"].width = 14
+        ws_ph.column_dimensions["B"].width = 12
+        ws_ph.column_dimensions["C"].width = 20
+        ws_ph.column_dimensions["D"].width = 22
+
+        cursor = conn.execute(
+            "SELECT user_id, photo_type, created_at, photo_data FROM user_photos ORDER BY user_id, id"
+        )
+        ri = 2
+        for row in cursor.fetchall():
+            ws_ph.cell(row=ri, column=1, value=row[0])
+            ws_ph.cell(row=ri, column=2, value=row[1])
+            ws_ph.cell(row=ri, column=3, value=row[2])
+
+            photo_data = row[3]
+            if photo_data:
+                try:
+                    img = PilImage.open(BytesIO(photo_data))
+                    img.thumbnail((160, 160))
+                    buf = BytesIO()
+                    img.save(buf, format="JPEG")
+                    buf.seek(0)
+                    xl_img = XlImage(buf)
+                    xl_img.anchor = f"D{ri}"
+                    ws_ph.add_image(xl_img)
+                    ws_ph.row_dimensions[ri].height = 122
+                except Exception as e:
+                    ws_ph.cell(row=ri, column=4, value=f"ошибка: {e}")
+            else:
+                ws_ph.cell(row=ri, column=4, value="нет данных")
+
+            ri += 1
+    except Exception as e:
+        logger.warning(f"getxls: лист Фото не создан: {e}")
 
     wb.save(output_path)
 

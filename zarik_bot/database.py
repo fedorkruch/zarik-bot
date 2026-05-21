@@ -136,6 +136,7 @@ def init_db():
             "ALTER TABLE users ADD COLUMN dropout_warning_sent_at TEXT DEFAULT NULL",
             "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
             "ALTER TABLE users ADD COLUMN share_photos INTEGER DEFAULT NULL",
+            "ALTER TABLE user_photos ADD COLUMN photo_data BLOB DEFAULT NULL",
             # leads — детальная воронка
             "ALTER TABLE leads ADD COLUMN tracker_question_at TEXT",
             "ALTER TABLE leads ADD COLUMN tracker_reply_yes INTEGER",
@@ -567,13 +568,24 @@ def set_miniapp_mode(user_id: int, use_mini: bool):
 
 # ── Фото пользователей ────────────────────────────────────────
 
-def save_user_photo(user_id: int, photo_type: str, file_id: str):
-    """Сохраняет file_id фото с привязкой к пользователю и типу (before/after)."""
+def save_user_photo(user_id: int, photo_type: str, file_id: str, photo_data: bytes | None = None):
+    """Сохраняет фото: file_id + бинарные данные (BLOB) если переданы."""
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO user_photos (user_id, photo_type, file_id) VALUES (?, ?, ?)",
-            (user_id, photo_type, file_id)
+            "INSERT INTO user_photos (user_id, photo_type, file_id, photo_data) VALUES (?, ?, ?, ?)",
+            (user_id, photo_type, file_id, photo_data)
         )
+
+
+def get_user_photos(user_id: int, photo_type: str = "before") -> list:
+    """Возвращает список фото пользователя (id, file_id, photo_data, created_at)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, file_id, photo_data, created_at FROM user_photos "
+            "WHERE user_id = ? AND photo_type = ? ORDER BY id",
+            (user_id, photo_type)
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 def count_user_photos(user_id: int, photo_type: str = "before") -> int:
     """Количество сохранённых фото."""
