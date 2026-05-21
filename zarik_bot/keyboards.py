@@ -97,6 +97,23 @@ def webapp_keyboard(url: str) -> InlineKeyboardMarkup:
     ])
 
 
+def tasks_and_webapp_keyboard(day: int, completed: set, webapp_url: str) -> InlineKeyboardMarkup:
+    """
+    Трекер с чекбоксами задач + кнопка открытия мини-апп.
+    Используется когда мини-апп включён — пользователь видит статус прямо в Telegram
+    и может открыть мини-апп для отметки или отмечать через инлайн-кнопки.
+    """
+    buttons = []
+    for i in range(5):
+        mark = "✅" if i in completed else "⬜"
+        buttons.append([InlineKeyboardButton(
+            text=f"{mark}  {TASK_SHORT[i]}",
+            callback_data=f"task:{day}:{i}"
+        )])
+    buttons.append([InlineKeyboardButton("📱 Открыть в мини-апп", web_app=WebAppInfo(url=webapp_url))])
+    return InlineKeyboardMarkup(buttons)
+
+
 def all_done_keyboard(active_tab: str = "tasks") -> InlineKeyboardMarkup:
     """Клавиатура после закрытия дня — только подтверждение."""
     return InlineKeyboardMarkup([

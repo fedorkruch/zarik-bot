@@ -27,6 +27,7 @@ import database as db
 import content as ct
 from keyboards import (
     tasks_keyboard,
+    tasks_and_webapp_keyboard,
     all_done_keyboard,
     tab_only_keyboard,
     timezone_keyboard,
@@ -151,12 +152,12 @@ def not_paid_message() -> str:
 
 def today_markup(user_id: int, day: int, completed: set):
     """
-    Если WEBAPP_URL задан и пользователь в Mini App режиме — возвращает
-    кнопку «Открыть задания» + «Не открылось?».
-    Иначе — обычную инлайн-клавиатуру с задачами.
+    Если WEBAPP_URL задан и пользователь в Mini App режиме — показывает
+    чекбоксы задач + кнопку «Открыть в мини-апп» (синхронизация в реальном времени).
+    Иначе — обычная инлайн-клавиатура с задачами.
     """
     if WEBAPP_URL and db.get_use_miniapp(user_id):
-        return webapp_keyboard(WEBAPP_URL)
+        return tasks_and_webapp_keyboard(day, completed, WEBAPP_URL)
     return tasks_keyboard(day, completed, active_tab="tasks")
 
 
@@ -514,11 +515,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             day       = db.get_current_day(user.id)
             completed = db.get_completed_tasks(user.id, day)
-            await update.message.reply_text(
+            tracker_msg = await update.message.reply_text(
                 build_today_screen(user_row, day, completed),
                 parse_mode=ParseMode.HTML,
                 reply_markup=today_markup(user.id, day, completed)
             )
+            db.save_tracker_message(user.id, day, tracker_msg.message_id)
     else:
         # Первый визит — приветствие и описание программы
         await update.message.reply_text(WELCOME_TEXT, reply_markup=welcome_keyboard())
@@ -544,11 +546,12 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     day       = db.get_current_day(user.id)
     completed = db.get_completed_tasks(user.id, day)
-    await update.message.reply_text(
+    tracker_msg = await update.message.reply_text(
         build_today_screen(user_row, day, completed),
         parse_mode=ParseMode.HTML,
         reply_markup=today_markup(user.id, day, completed)
     )
+    db.save_tracker_message(user.id, day, tracker_msg.message_id)
 
 
 async def cmd_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -966,12 +969,13 @@ async def job_morning(context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.HTML,
             )
             # 3. Трекер с галочками
-            await context.bot.send_message(
+            tracker_msg = await context.bot.send_message(
                 chat_id=user["user_id"],
                 text=build_today_screen(user_row, day, completed),
                 parse_mode=ParseMode.HTML,
                 reply_markup=today_markup(user["user_id"], day, completed)
             )
+            db.save_tracker_message(user["user_id"], day, tracker_msg.message_id)
         except Exception as e:
             logger.warning(f"Утро {user['user_id']}: {e}")
 
@@ -999,12 +1003,13 @@ async def job_afternoon(context: ContextTypes.DEFAULT_TYPE):
             # 2. Трекер отдельным сообщением если не все выполнены
             if not all_done:
                 user_row = db.get_user(user["user_id"])
-                await context.bot.send_message(
+                tracker_msg = await context.bot.send_message(
                     chat_id=user["user_id"],
                     text=build_today_screen(user_row, day, completed),
                     parse_mode=ParseMode.HTML,
                     reply_markup=today_markup(user["user_id"], day, completed)
                 )
+                db.save_tracker_message(user["user_id"], day, tracker_msg.message_id)
         except Exception as e:
             logger.warning(f"День {user['user_id']}: {e}")
 
@@ -1032,12 +1037,13 @@ async def job_evening(context: ContextTypes.DEFAULT_TYPE):
             # Затем экран задач если не все выполнены
             if not all_done:
                 user_row = db.get_user(user["user_id"])
-                await context.bot.send_message(
+                tracker_msg = await context.bot.send_message(
                     chat_id=user["user_id"],
                     text=build_today_screen(user_row, day, completed),
                     parse_mode=ParseMode.HTML,
                     reply_markup=today_markup(user["user_id"], day, completed)
                 )
+                db.save_tracker_message(user["user_id"], day, tracker_msg.message_id)
         except Exception as e:
             logger.warning(f"Вечер {user['user_id']}: {e}")
 
@@ -1171,11 +1177,12 @@ async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # ── Трекер с галочками ────────────────────────────────────
-    await update.message.reply_text(
+    tracker_msg = await update.message.reply_text(
         build_today_screen(user_row, target, completed),
         parse_mode=ParseMode.HTML,
         reply_markup=today_markup(uid, target, completed),
     )
+    db.save_tracker_message(uid, target, tracker_msg.message_id)
 
     # ── 🌤 14:00 — ноль галочек ───────────────────────────────
     await update.message.reply_text(
@@ -1290,11 +1297,12 @@ async def cmd_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     day = db.get_current_day(uid)
     user_row = db.get_user(uid)
     completed = db.get_completed_tasks(uid, day)
-    await update.message.reply_text(
+    tracker_msg = await update.message.reply_text(
         build_today_screen(user_row, day, completed),
         parse_mode=ParseMode.HTML,
         reply_markup=today_markup(uid, day, completed)
     )
+    db.save_tracker_message(uid, day, tracker_msg.message_id)
 
 
 # ── Сборка приложения ────────────────────────────────────────

@@ -11,6 +11,7 @@ import time as _time
 import urllib.parse
 from pathlib import Path
 
+import aiohttp
 from aiohttp import web
 
 import database as db
@@ -27,6 +28,8 @@ MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
 
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+
 TASK_LABELS = [
     ("💪", "Тренировка"),
     ("💧", "Вода · 2 л / 8 стаканов"),
@@ -34,6 +37,64 @@ TASK_LABELS = [
     ("🥗", "Без фастфуда и снеков"),
     ("🚫", "День без алкоголя"),
 ]
+
+# Короткие подписи — совпадают с keyboards.py TASK_SHORT
+_TASK_SHORT = [
+    "💪 Тренировка",
+    "💧 Вода — 8 стаканов",
+    "📚 Чтение — 10 страниц",
+    "🥗 Без фастфуда",
+    "🚫 Без алкоголя сегодня",
+]
+
+
+async def _edit_tracker_keyboard(uid: int, day: int, completed: set) -> None:
+    """
+    Редактирует inline-клавиатуру трекер-сообщения в Telegram чтобы отразить
+    текущее состояние задач (вызывается когда пользователь отмечает задачи в мини-апп).
+    Если message_id не сохранён или токен недоступен — молча пропускает.
+    """
+    if not PROGRAM_BOT_TOKEN:
+        return
+    msg_id = db.get_tracker_message_id(uid, day)
+    if not msg_id:
+        return
+
+    if len(completed) >= 5:
+        # Все задачи выполнены
+        markup = {
+            "inline_keyboard": [
+                [{"text": "🎉  День завершён!", "callback_data": "noop"}]
+            ]
+        }
+    else:
+        keyboard = []
+        for i in range(5):
+            mark = "✅" if i in completed else "⬜"
+            keyboard.append([{
+                "text": f"{mark}  {_TASK_SHORT[i]}",
+                "callback_data": f"task:{day}:{i}"
+            }])
+        if WEBAPP_URL:
+            keyboard.append([{
+                "text": "📱 Открыть в мини-апп",
+                "web_app": {"url": WEBAPP_URL}
+            }])
+        markup = {"inline_keyboard": keyboard}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(
+                f"https://api.telegram.org/bot{PROGRAM_BOT_TOKEN}/editMessageReplyMarkup",
+                json={
+                    "chat_id": uid,
+                    "message_id": msg_id,
+                    "reply_markup": markup,
+                },
+                timeout=aiohttp.ClientTimeout(total=5),
+            )
+    except Exception as exc:
+        logger.warning(f"edit_tracker_keyboard uid={uid}: {exc}")
 
 
 # ── Авторизация через Telegram initData ──────────────────────
@@ -377,8 +438,10 @@ async def handle_task(request: web.Request) -> web.Response:
             return web.json_response({"error": "invalid task"}, status=400)
         day = db.get_current_day(uid)
         db.complete_task(uid, day, task_index)
-        completed = sorted(db.get_completed_tasks(uid, day))
-        return web.json_response({"completed_tasks": completed, "day": day})
+        completed_set = db.get_completed_tasks(uid, day)
+        # Синхронизируем трекер-сообщение в Telegram
+        await _edit_tracker_keyboard(uid, day, completed_set)
+        return web.json_response({"completed_tasks": sorted(completed_set), "day": day})
     except Exception as e:
         logger.exception(f"task error for {uid}")
         return web.json_response({"error": str(e)}, status=500)

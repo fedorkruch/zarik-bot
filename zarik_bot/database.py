@@ -109,6 +109,14 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(user_id),
                 UNIQUE(user_id, session_date)
             );
+
+            CREATE TABLE IF NOT EXISTS tracker_messages (
+                user_id    INTEGER NOT NULL,
+                day_number INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (user_id, day_number)
+            );
         """)
 
         # Миграции для существующих баз данных
@@ -626,6 +634,31 @@ def mark_lead_final(user_id: int):
             "UPDATE leads SET final_sent_at = datetime('now'), lead_status = 'cold' WHERE user_id = ?",
             (user_id,)
         )
+
+
+# ── Трекер-сообщения (синхронизация Telegram ↔ мини-апп) ─────
+
+def save_tracker_message(user_id: int, day_number: int, message_id: int):
+    """Сохраняет message_id трекер-сообщения для последующего редактирования."""
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO tracker_messages (user_id, day_number, message_id, updated_at)
+               VALUES (?, ?, ?, datetime('now'))
+               ON CONFLICT(user_id, day_number) DO UPDATE SET
+                   message_id = excluded.message_id,
+                   updated_at = datetime('now')""",
+            (user_id, day_number, message_id)
+        )
+
+
+def get_tracker_message_id(user_id: int, day_number: int) -> int | None:
+    """Возвращает message_id последнего трекер-сообщения для данного дня, или None."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT message_id FROM tracker_messages WHERE user_id = ? AND day_number = ?",
+            (user_id, day_number)
+        ).fetchone()
+    return row["message_id"] if row else None
 
 def mark_lead_purchased(user_id: int):
     with get_conn() as conn:

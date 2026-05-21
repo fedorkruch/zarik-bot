@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Зарик — бот-наставник, который ведёт тебя к результату за 77 дней маленькими шагами. Без надрыва, без героизма. 1990 ₽.">
+<title>Зарик · 77 дней к другой жизни</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0C0B09;
+  --bg2:      #161410;
+  --bg3:      #1E1C18;
+  --bg4:      #262420;
+  --green:    #7EC94A;
+  --green2:   #5BA332;
+  --gold:     #F5A623;
+  --text:     #F0EDE6;
+  --text2:    #A8A39B;
+  --text3:    #5C5851;
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(255,255,255,0.12);
+  --r:        16px;
+  --r2:       24px;
+  --tr:       0.3s ease;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Inter',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+
+/* ── UTILS ── */
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+.reveal{opacity:0;transform:translateY(32px);transition:opacity 0.7s ease,transform 0.7s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:0.1s}
+.reveal-delay-2{transition-delay:0.2s}
+.reveal-delay-3{transition-delay:0.3s}
+.reveal-delay-4{transition-delay:0.4s}
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(126,201,74,0.12);
+  color:var(--green);
+  border:1px solid rgba(126,201,74,0.25);
+  padding:6px 14px;
+  border-radius:100px;
+  font-size:13px;font-weight:600;letter-spacing:0.02em;
+}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--green);
+  color:#0C1A06;
+  padding:16px 32px;
+  border-radius:100px;
+  font-size:16px;font-weight:700;
+  cursor:pointer;border:none;
+  transition:background var(--tr),transform var(--tr),box-shadow var(--tr);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.btn:hover{background:var(--green2);transform:translateY(-2px);box-shadow:0 12px 32px rgba(126,201,74,0.3)}
+.btn:active{transform:translateY(0)}
+.btn-outline{
+  background:transparent;
+  color:var(--text);
+  border:1px solid var(--border2);
+  padding:14px 28px;
+  border-radius:100px;
+  font-size:15px;font-weight:600;
+  cursor:pointer;
+  transition:border-color var(--tr),background var(--tr);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.btn-outline:hover{border-color:var(--border2);background:var(--bg3)}
+.section-label{
+  font-size:13px;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:12px;
+}
+.section-title{
+  font-size:clamp(36px,5vw,56px);
+  font-weight:900;line-height:1.1;
+  letter-spacing:-0.02em;
+}
+.section-sub{
+  font-size:18px;
+  color:var(--text2);
+  line-height:1.65;
+  max-width:560px;
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:16px 0;
+  transition:background var(--tr),border-color var(--tr),backdrop-filter var(--tr);
+  border-bottom:1px solid transparent;
+}
+nav.scrolled{
+  background:rgba(12,11,9,0.85);
+  border-color:var(--border);
+  backdrop-filter:blur(12px);
+}
+.nav-inner{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-logo{
+  display:flex;align-items:center;gap:10px;
+  font-size:18px;font-weight:800;
+  letter-spacing:-0.01em;
+}
+.nav-logo-icon{font-size:24px}
+.nav-cta{padding:10px 22px;font-size:14px}
+
+/* ── HERO ── */
+#hero{
+  min-height:100vh;
+  display:flex;align-items:center;
+  padding:120px 0 80px;
+  position:relative;
+  overflow:hidden;
+}
+.hero-bg{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 80% 60% at 70% 50%,rgba(126,201,74,0.06) 0%,transparent 70%),
+    radial-gradient(ellipse 50% 80% at 20% 80%,rgba(245,166,35,0.04) 0%,transparent 60%);
+  pointer-events:none;
+}
+.hero-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  align-items:center;
+  gap:60px;
+}
+.hero-text .tag{margin-bottom:24px}
+.hero-h1{
+  font-size:clamp(48px,7vw,80px);
+  font-weight:900;
+  line-height:1.0;
+  letter-spacing:-0.03em;
+  margin-bottom:24px;
+}
+.hero-h1 span{color:var(--green)}
+.hero-sub{
+  font-size:18px;color:var(--text2);
+  line-height:1.7;max-width:480px;
+  margin-bottom:36px;
+}
+.hero-cta-row{
+  display:flex;align-items:center;gap:16px;
+  flex-wrap:wrap;
+}
+.hero-note{font-size:13px;color:var(--text3)}
+.hero-stats{
+  display:flex;gap:32px;
+  margin-top:48px;
+  padding-top:48px;
+  border-top:1px solid var(--border);
+}
+.hero-stat-num{
+  font-size:32px;font-weight:900;
+  letter-spacing:-0.02em;line-height:1;
+  margin-bottom:4px;
+}
+.hero-stat-num.green{color:var(--green)}
+.hero-stat-num.gold{color:var(--gold)}
+.hero-stat-label{font-size:13px;color:var(--text3);font-weight:500}
+
+/* Mascot image */
+.hero-visual{
+  display:flex;justify-content:center;align-items:center;
+  position:relative;
+}
+.sloth-wrap{
+  animation:float 5s ease-in-out infinite;
+  filter:drop-shadow(0 32px 48px rgba(0,0,0,0.55));
+  position:relative;z-index:1;
+}
+.sloth-wrap img{
+  width:340px;
+  height:auto;
+  border-radius:28px;
+  display:block;
+}
+@keyframes float{
+  0%,100%{transform:translateY(0px) rotate(-1deg)}
+  50%{transform:translateY(-14px) rotate(1deg)}
+}
+.glow-ring{
+  position:absolute;
+  width:380px;height:380px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(126,201,74,0.1) 0%,transparent 70%);
+  pointer-events:none;
+}
+
+/* ── PAIN ── */
+#pain{padding:100px 0}
+.pain-header{text-align:center;margin-bottom:60px}
+.pain-header .section-sub{margin:16px auto 0}
+.pain-cards{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+.pain-card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:28px 24px;
+  transition:border-color var(--tr),transform var(--tr);
+}
+.pain-card:hover{border-color:var(--border2);transform:translateY(-4px)}
+.pain-icon{font-size:36px;margin-bottom:16px}
+.pain-title{font-size:18px;font-weight:700;margin-bottom:8px;line-height:1.3}
+.pain-desc{font-size:15px;color:var(--text2);line-height:1.6}
+
+/* ── PHILOSOPHY ── */
+#philosophy{
+  padding:100px 0;
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.philosophy-inner{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:80px;
+  align-items:center;
+}
+.phil-quote{
+  font-size:clamp(28px,4vw,42px);
+  font-weight:900;
+  line-height:1.15;
+  letter-spacing:-0.02em;
+}
+.phil-quote .accent{color:var(--gold)}
+.phil-body p{
+  font-size:17px;color:var(--text2);
+  line-height:1.75;margin-bottom:20px;
+}
+.phil-body p:last-child{margin-bottom:0}
+.phil-body strong{color:var(--text);font-weight:700}
+
+/* ── HOW IT WORKS ── */
+#how{padding:100px 0}
+.how-header{text-align:center;margin-bottom:64px}
+.how-header .section-sub{margin:16px auto 0}
+.how-steps{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:24px;
+  position:relative;
+}
+.how-connector{
+  position:absolute;
+  top:44px;left:calc(33.33% + 20px);right:calc(33.33% + 20px);
+  height:1px;
+  background:linear-gradient(90deg,var(--green),var(--gold));
+  opacity:0.3;
+  display:none;
+}
+.how-step{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:32px 28px;
+  text-align:center;
+  position:relative;
+}
+.how-num{
+  width:44px;height:44px;
+  border-radius:50%;
+  background:var(--bg4);
+  border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:900;
+  color:var(--green);
+  margin:0 auto 20px;
+}
+.how-icon{font-size:40px;margin-bottom:16px}
+.how-title{font-size:20px;font-weight:800;margin-bottom:10px}
+.how-desc{font-size:15px;color:var(--text2);line-height:1.65}
+.how-link{
+  display:inline-block;margin-top:16px;
+  font-size:14px;font-weight:600;
+  color:var(--green);
+  border-bottom:1px solid rgba(126,201,74,0.3);
+  padding-bottom:2px;
+}
+
+/* ── TASKS ── */
+#tasks{padding:100px 0;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.tasks-header{margin-bottom:48px}
+.tasks-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+.task-card{
+  display:flex;align-items:flex-start;gap:20px;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:24px;
+  transition:border-color var(--tr),transform var(--tr);
+}
+.task-card:hover{border-color:var(--green);transform:translateX(4px)}
+.task-card.full{grid-column:1/-1}
+.task-emoji{
+  font-size:32px;
+  min-width:52px;height:52px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--bg4);
+  border-radius:12px;
+  flex-shrink:0;
+}
+.task-content{}
+.task-title{font-size:17px;font-weight:700;margin-bottom:4px}
+.task-desc{font-size:14px;color:var(--text2);line-height:1.6}
+.task-badge{
+  display:inline-block;margin-top:8px;
+  font-size:11px;font-weight:700;
+  background:rgba(126,201,74,0.12);
+  color:var(--green);
+  padding:3px 10px;border-radius:100px;
+  letter-spacing:0.04em;
+}
+
+/* ── GAMIFICATION ── */
+#game{padding:100px 0}
+.game-header{text-align:center;margin-bottom:64px}
+.game-header .section-sub{margin:16px auto 0}
+.achievements{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-bottom:48px;
+}
+.ach-card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:24px 20px;
+  text-align:center;
+  transition:border-color var(--tr),transform var(--tr);
+}
+.ach-card:hover{border-color:var(--gold);transform:translateY(-4px)}
+.ach-icon{font-size:40px;margin-bottom:12px}
+.ach-name{font-size:15px;font-weight:700;margin-bottom:4px}
+.ach-days{font-size:13px;color:var(--text3);font-weight:500}
+.planet-bar{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:40px;
+  text-align:center;
+}
+.planet-title{font-size:24px;font-weight:800;margin-bottom:8px}
+.planet-sub{font-size:15px;color:var(--text2);margin-bottom:28px}
+.progress-track{
+  background:var(--bg4);
+  border-radius:100px;
+  height:12px;
+  overflow:hidden;
+  position:relative;
+  margin-bottom:12px;
+}
+.progress-fill{
+  height:100%;
+  background:linear-gradient(90deg,var(--green),var(--gold));
+  border-radius:100px;
+  animation:fillBar 2s ease forwards;
+  animation-delay:0.5s;
+  width:0;
+}
+@keyframes fillBar{to{width:var(--fill)}}
+.progress-labels{
+  display:flex;justify-content:space-between;
+  font-size:13px;color:var(--text3);font-weight:500;
+}
+.progress-pct{
+  font-size:32px;font-weight:900;color:var(--green);
+  letter-spacing:-0.02em;
+}
+
+/* ── TESTIMONIALS ── */
+#testi{padding:100px 0;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.testi-header{text-align:center;margin-bottom:56px}
+.testi-header .section-sub{margin:16px auto 0}
+.testi-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+}
+.testi-card{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:28px;
+  display:flex;flex-direction:column;
+  transition:border-color var(--tr);
+}
+.testi-card:hover{border-color:var(--border2)}
+.stars{color:var(--gold);font-size:14px;letter-spacing:2px;margin-bottom:16px}
+.testi-text{
+  font-size:16px;line-height:1.7;
+  color:var(--text2);flex:1;
+  margin-bottom:20px;
+  font-style:italic;
+}
+.testi-text strong{color:var(--text);font-style:normal;font-weight:700}
+.testi-author{display:flex;align-items:center;gap:12px}
+.testi-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:var(--bg4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+.testi-name{font-size:14px;font-weight:700}
+.testi-meta{font-size:12px;color:var(--text3)}
+.testi-result{
+  display:inline-block;margin-top:4px;
+  font-size:12px;font-weight:700;
+  color:var(--green);
+  background:rgba(126,201,74,0.1);
+  padding:2px 8px;border-radius:100px;
+}
+
+/* ── PRICING ── */
+#pricing{padding:100px 0}
+.pricing-inner{
+  max-width:680px;
+  margin:0 auto;
+  text-align:center;
+}
+.pricing-inner .section-title{margin-bottom:12px}
+.pricing-inner .section-sub{margin:0 auto 48px}
+.pricing-card{
+  background:var(--bg2);
+  border:1px solid rgba(126,201,74,0.3);
+  border-radius:var(--r2);
+  padding:48px;
+  position:relative;
+  overflow:hidden;
+}
+.pricing-card::before{
+  content:'';
+  position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--green),var(--gold));
+}
+.pricing-badge{
+  display:inline-block;
+  background:rgba(245,166,35,0.15);
+  color:var(--gold);
+  border:1px solid rgba(245,166,35,0.3);
+  padding:6px 16px;border-radius:100px;
+  font-size:13px;font-weight:700;
+  margin-bottom:24px;
+}
+.price-row{
+  display:flex;align-items:baseline;justify-content:center;
+  gap:12px;margin-bottom:8px;
+}
+.price-old{
+  font-size:22px;font-weight:600;
+  color:var(--text3);text-decoration:line-through;
+}
+.price-new{
+  font-size:64px;font-weight:900;
+  letter-spacing:-0.03em;line-height:1;
+}
+.price-currency{font-size:28px;font-weight:700}
+.price-note{font-size:14px;color:var(--text3);margin-bottom:32px}
+.features-list{
+  list-style:none;
+  text-align:left;
+  margin-bottom:36px;
+  display:grid;gap:12px;
+}
+.features-list li{
+  display:flex;align-items:center;gap:12px;
+  font-size:16px;
+}
+.feat-check{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(126,201,74,0.15);
+  color:var(--green);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;flex-shrink:0;font-weight:700;
+}
+.stake-box{
+  background:var(--bg3);
+  border:1px solid rgba(245,166,35,0.25);
+  border-radius:var(--r);
+  padding:20px;
+  margin-bottom:32px;
+  text-align:left;
+}
+.stake-box-title{
+  font-size:15px;font-weight:800;
+  color:var(--gold);margin-bottom:6px;
+}
+.stake-box-text{font-size:14px;color:var(--text2);line-height:1.6}
+.pricing-cta{width:100%;justify-content:center;font-size:18px;padding:18px 36px}
+.pricing-footnote{font-size:13px;color:var(--text3);margin-top:16px}
+
+/* ── FAQ ── */
+#faq{
+  padding:100px 0;
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.faq-header{text-align:center;margin-bottom:56px}
+.faq-list{max-width:720px;margin:0 auto;display:grid;gap:1px}
+.faq-item{border-bottom:1px solid var(--border)}
+.faq-q{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:16px;
+  padding:20px 0;
+  font-size:17px;font-weight:600;
+  cursor:pointer;
+  user-select:none;
+}
+.faq-q:hover{color:var(--text2)}
+.faq-icon{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--bg3);border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;
+  transition:transform var(--tr),background var(--tr);
+}
+.faq-item.open .faq-icon{transform:rotate(45deg);background:var(--green);border-color:var(--green);color:#0C1A06}
+.faq-a{
+  font-size:15px;color:var(--text2);
+  line-height:1.7;
+  max-height:0;overflow:hidden;
+  transition:max-height 0.35s ease, padding 0.35s ease;
+  padding-bottom:0;
+}
+.faq-item.open .faq-a{max-height:300px;padding-bottom:20px}
+
+/* ── FINAL CTA ── */
+#final{
+  padding:120px 0;
+  text-align:center;
+  position:relative;overflow:hidden;
+}
+.final-bg{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse 70% 80% at 50% 50%,rgba(126,201,74,0.07) 0%,transparent 70%);
+  pointer-events:none;
+}
+.final-emoji{font-size:64px;margin-bottom:24px;display:block}
+.final-title{
+  font-size:clamp(40px,6vw,72px);
+  font-weight:900;letter-spacing:-0.03em;
+  line-height:1.05;margin-bottom:20px;
+}
+.final-title span{color:var(--green)}
+.final-sub{
+  font-size:18px;color:var(--text2);
+  max-width:520px;margin:0 auto 40px;line-height:1.65;
+}
+.final-cta{font-size:20px;padding:20px 48px}
+.final-note{
+  font-size:13px;color:var(--text3);
+  margin-top:16px;
+}
+
+/* ── FOOTER ── */
+footer{
+  padding:40px 0;
+  border-top:1px solid var(--border);
+}
+.footer-inner{
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.footer-logo{font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.footer-links{display:flex;gap:24px}
+.footer-link{font-size:14px;color:var(--text3);transition:color var(--tr)}
+.footer-link:hover{color:var(--text)}
+.footer-copy{font-size:13px;color:var(--text3)}
+
+/* ── FLOATING CTA ── */
+.float-btn{
+  position:fixed;bottom:28px;right:28px;z-index:90;
+  opacity:0;transform:translateY(16px);pointer-events:none;
+  transition:opacity 0.4s ease,transform 0.4s ease;
+  box-shadow:0 8px 32px rgba(0,0,0,0.6);
+}
+.float-btn.visible{opacity:1;transform:translateY(0);pointer-events:auto}
+
+/* ── MOBILE ── */
+@media(max-width:900px){
+  .hero-grid{grid-template-columns:1fr;gap:48px}
+  .hero-visual{order:-1}
+  .sloth-wrap img{width:260px;height:auto;border-radius:20px}
+  .glow-ring{width:220px;height:220px}
+  .hero-stats{gap:20px}
+  .pain-cards{grid-template-columns:1fr}
+  .philosophy-inner{grid-template-columns:1fr;gap:40px}
+  .how-steps{grid-template-columns:1fr}
+  .tasks-grid{grid-template-columns:1fr}
+  .task-card.full{grid-column:auto}
+  .achievements{grid-template-columns:repeat(2,1fr)}
+  .testi-grid{grid-template-columns:1fr}
+  .pricing-card{padding:32px 24px}
+  .footer-inner{flex-direction:column;text-align:center}
+  .footer-links{flex-wrap:wrap;justify-content:center}
+  .float-btn{bottom:20px;right:16px}
+}
+@media(max-width:560px){
+  .hero-cta-row{flex-direction:column;align-items:flex-start}
+  .achievements{grid-template-columns:1fr 1fr}
+  .hero-stats{flex-wrap:wrap;gap:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="navbar">
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo">
+      <span class="nav-logo-icon">🦥</span>
+      Зарик
+    </a>
+    <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn nav-cta">
+      Начать →
+    </a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-text">
+        <div class="tag reveal">🦥 Программа 77 дней</div>
+        <h1 class="hero-h1 reveal reveal-delay-1">
+          Маленькие шаги.<br>
+          <span>Большие изменения.</span>
+        </h1>
+        <p class="hero-sub reveal reveal-delay-2">
+          Бот-наставник Зарик каждый день присылает тебе 5 простых задач.
+          Ты отмечаешь что выполнил — и наблюдаешь как меняешься.
+          Без надрыва. Без героизма.
+        </p>
+        <div class="hero-cta-row reveal reveal-delay-3">
+          <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn">
+            Начать за 1990 ₽ →
+          </a>
+          <span class="hero-note">Оплата прямо в Telegram</span>
+        </div>
+        <div class="hero-stats reveal reveal-delay-4">
+          <div>
+            <div class="hero-stat-num green">77</div>
+            <div class="hero-stat-label">дней программы</div>
+          </div>
+          <div>
+            <div class="hero-stat-num">5</div>
+            <div class="hero-stat-label">задач в день</div>
+          </div>
+          <div>
+            <div class="hero-stat-num gold">0</div>
+            <div class="hero-stat-label">героизма</div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-visual reveal reveal-delay-2">
+        <div class="glow-ring"></div>
+        <div class="sloth-wrap">
+          <img src="https://i.ibb.co/hxh1Wj2p/Zarik-site.png" alt="Зарик — твой ленивый наставник">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PAIN POINTS -->
+<section id="pain">
+  <div class="container">
+    <div class="pain-header">
+      <div class="section-label reveal">Знакомо?</div>
+      <h2 class="section-title reveal reveal-delay-1">Узнаёшь себя?</h2>
+      <p class="section-sub reveal reveal-delay-2">Это не слабость — это как работает мозг без правильной системы</p>
+    </div>
+    <div class="pain-cards">
+      <div class="pain-card reveal">
+        <div class="pain-icon">😮‍💨</div>
+        <div class="pain-title">«Начну с понедельника...»</div>
+        <div class="pain-desc">Уже несколько лет как. Мотивация есть в воскресенье вечером — и пропадает во вторник утром.</div>
+      </div>
+      <div class="pain-card reveal reveal-delay-1">
+        <div class="pain-icon">🔄</div>
+        <div class="pain-title">Начал — бросил — начал — бросил</div>
+        <div class="pain-desc">Чувствуешь себя виноватым. Хочешь перемен, но не знаешь как выстроить систему, которая не ломается.</div>
+      </div>
+      <div class="pain-card reveal reveal-delay-2">
+        <div class="pain-icon">😵</div>
+        <div class="pain-title">Слишком много всего сразу</div>
+        <div class="pain-desc">Читаешь о пяти новых привычках, двух диетах и трёх методах медитации. В итоге не делаешь ничего.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PHILOSOPHY -->
+<section id="philosophy">
+  <div class="container">
+    <div class="philosophy-inner">
+      <div>
+        <div class="section-label reveal">Философия Зарика</div>
+        <div class="phil-quote reveal reveal-delay-1">
+          Ленивец не торопится.<br>
+          Ленивец <span class="accent">всегда добирается</span><br>
+          куда нужно.
+        </div>
+      </div>
+      <div class="phil-body reveal reveal-delay-2">
+        <p>Зарик не верит в героизм. Он верит в <strong>маленькие ежедневные действия</strong>, которые через 77 дней превращаются в человека, которого ты хочешь увидеть в зеркале.</p>
+        <p>Не 4-часовые тренировки. Не жёсткие диеты. Не «либо всё, либо ничего».</p>
+        <p><strong>5 задач в день</strong> — выполнимых, конкретных, твоих. Каждое утро в твоём Telegram. Отметил выполненные — день зачтён. Всё.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="container">
+    <div class="how-header">
+      <div class="section-label reveal">Как это работает</div>
+      <h2 class="section-title reveal reveal-delay-1">Три шага — и ты в программе</h2>
+      <p class="section-sub reveal reveal-delay-2">Запустить Зарика займёт меньше минуты</p>
+    </div>
+    <div class="how-steps">
+      <div class="how-step reveal">
+        <div class="how-num">1</div>
+        <div class="how-icon">📲</div>
+        <div class="how-title">Подпишись на бота</div>
+        <div class="how-desc">Нажми кнопку и перейди в @Shagov77_bot — там оформим участие и ответим на вопросы.</div>
+        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="how-link">Открыть бота →</a>
+      </div>
+      <div class="how-step reveal reveal-delay-1">
+        <div class="how-num">2</div>
+        <div class="how-icon">🎯</div>
+        <div class="how-title">Настрой профиль</div>
+        <div class="how-desc">Укажи часовой пояс и стартовый уровень тренировок. Зарик подберёт программу персонально под тебя.</div>
+      </div>
+      <div class="how-step reveal reveal-delay-2">
+        <div class="how-num">3</div>
+        <div class="how-icon">☀️</div>
+        <div class="how-title">Получай задачи каждый день</div>
+        <div class="how-desc">Каждое утро — список задач. Каждый вечер — проверка. Ты видишь прогресс, ачивки и место в топе планеты.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DAILY TASKS -->
+<section id="tasks">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start">
+      <div class="tasks-header">
+        <div class="section-label reveal">Ежедневные задачи</div>
+        <h2 class="section-title reveal reveal-delay-1">5 задач.<br>Каждый день.</h2>
+        <p class="section-sub reveal reveal-delay-2" style="margin-top:16px">
+          Не больше. Не меньше. Минимум усилий — максимум стабильности.
+          Именно поэтому это работает.
+        </p>
+      </div>
+      <div class="tasks-grid reveal reveal-delay-1">
+        <div class="task-card">
+          <div class="task-emoji">💪</div>
+          <div class="task-content">
+            <div class="task-title">Тренировка</div>
+            <div class="task-desc">Отжимания, приседания, пресс — персональная программа, которая растёт вместе с тобой.</div>
+            <span class="task-badge">ПЕРСОНАЛЬНАЯ</span>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-emoji">💧</div>
+          <div class="task-content">
+            <div class="task-title">Вода — 8 стаканов</div>
+            <div class="task-desc">Самый недооценённый инструмент изменений. Просто сделай это.</div>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-emoji">📚</div>
+          <div class="task-content">
+            <div class="task-title">Чтение — 10 страниц</div>
+            <div class="task-desc">Книга в месяц. Без давления. За 77 дней ты прочтёшь 2–3 книги.</div>
+          </div>
+        </div>
+        <div class="task-card">
+          <div class="task-emoji">🥗</div>
+          <div class="task-content">
+            <div class="task-title">Без фастфуда</div>
+            <div class="task-desc">Не диета — просто один день без лишнего. День за днём это меняет всё.</div>
+          </div>
+        </div>
+        <div class="task-card full">
+          <div class="task-emoji">🚫</div>
+          <div class="task-content">
+            <div class="task-title">День без алкоголя</div>
+            <div class="task-desc">Ещё один маленький шаг. После 77 дней ты удивишься как много это меняет.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GAMIFICATION -->
+<section id="game">
+  <div class="container">
+    <div class="game-header">
+      <div class="section-label reveal">Геймификация</div>
+      <h2 class="section-title reveal reveal-delay-1">Зарабатывай ачивки.</h2>
+      <p class="section-sub reveal reveal-delay-2">За каждую серию дней — новое достижение. 6 ачивок от первого шага до легенды.</p>
+    </div>
+    <div class="achievements">
+      <div class="ach-card reveal">
+        <div class="ach-icon">🐾</div>
+        <div class="ach-name">Первый шаг</div>
+        <div class="ach-days">День 1</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🔥</div>
+        <div class="ach-name">Неделя огня</div>
+        <div class="ach-days">7 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">🦥</div>
+        <div class="ach-name">Ленивец одобряет</div>
+        <div class="ach-days">14 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-3">
+        <div class="ach-icon">💎</div>
+        <div class="ach-name">Алмазная воля</div>
+        <div class="ach-days">30 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🌍</div>
+        <div class="ach-name">Топ планеты</div>
+        <div class="ach-days">50 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">👑</div>
+        <div class="ach-name">Легенда 77</div>
+        <div class="ach-days">77 дней</div>
+      </div>
+    </div>
+    <div class="planet-bar reveal">
+      <div class="progress-pct" id="pct-counter">0%</div>
+      <div class="planet-title">Ты в топе планеты</div>
+      <div class="planet-sub">Каждый выполненный день поднимает тебя выше 97% людей на Земле, которые ничего не делают</div>
+      <div class="progress-track">
+        <div class="progress-fill" style="--fill:73%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>0%</span>
+        <span>Топ 27% планеты после 40 дней</span>
+        <span>100%</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section id="testi">
+  <div class="container">
+    <div class="testi-header">
+      <div class="section-label reveal">Отзывы участников</div>
+      <h2 class="section-title reveal reveal-delay-1">Они уже начали</h2>
+      <p class="section-sub reveal reveal-delay-2">Реальные истории людей, которые прошли программу</p>
+    </div>
+    <div class="testi-grid">
+      <div class="testi-card reveal">
+        <div class="stars">★★★★★</div>
+        <p class="testi-text">«Прошёл 40 дней и даже не заметил как. <strong>Минус 6 кг</strong>, читаю каждый вечер — и это просто стало частью жизни. Думал что это очередная ерунда, оказалось нет.»</p>
+        <div class="testi-author">
+          <div class="testi-avatar">🧔</div>
+          <div>
+            <div class="testi-name">Алексей, 34</div>
+            <div class="testi-meta">Предприниматель, Москва</div>
+            <span class="testi-result">День 47 из 77</span>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card reveal reveal-delay-1">
+        <div class="stars">★★★★★</div>
+        <p class="testi-text">«Я никогда не думала, что <strong>5 простых задач</strong> так изменят жизнь. Это не про спорт — это про то, как ты думаешь о себе. После 30 дней я уже другой человек.»</p>
+        <div class="testi-author">
+          <div class="testi-avatar">👩</div>
+          <div>
+            <div class="testi-name">Марина, 27</div>
+            <div class="testi-meta">Маркетолог, Санкт-Петербург</div>
+            <span class="testi-result">Завершила программу</span>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card reveal reveal-delay-2">
+        <div class="stars">★★★★★</div>
+        <p class="testi-text">«Ставка на себя — огонь. Я поставил 3000 ₽ и просто <strong>не мог позволить себе сдаться</strong>. Получил их обратно. И ещё новую версию себя бонусом.»</p>
+        <div class="testi-author">
+          <div class="testi-avatar">👨‍💼</div>
+          <div>
+            <div class="testi-name">Дмитрий, 41</div>
+            <div class="testi-meta">Отец двоих детей, Казань</div>
+            <span class="testi-result">Легенда 77 👑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="pricing-inner">
+      <div class="section-label reveal">Стоимость участия</div>
+      <h2 class="section-title reveal reveal-delay-1">Одна оплата.<br>77 дней работы.</h2>
+      <p class="section-sub reveal reveal-delay-2">Никаких подписок. Никаких скрытых платежей.</p>
+      <div class="pricing-card reveal reveal-delay-1">
+        <div class="pricing-badge">🔥 Специальное предложение</div>
+        <div class="price-row">
+          <span class="price-old">4990 ₽</span>
+          <span class="price-new"><span class="price-currency">₽</span>1990</span>
+        </div>
+        <div class="price-note">Единоразовый платёж · Полный доступ на 77 дней</div>
+        <ul class="features-list">
+          <li><span class="feat-check">✓</span> Персональный бот-наставник каждый день</li>
+          <li><span class="feat-check">✓</span> 5 задач в день — подобранных под тебя</li>
+          <li><span class="feat-check">✓</span> Тренировка с персональной программой роста</li>
+          <li><span class="feat-check">✓</span> Прогресс-трекер и еженедельная статистика</li>
+          <li><span class="feat-check">✓</span> 6 ачивок и место в топе планеты</li>
+          <li><span class="feat-check">✓</span> Mini App с дашбордом прогресса</li>
+        </ul>
+        <div class="stake-box">
+          <div class="stake-box-title">🎯 Ставка на себя — возвращаем 100%</div>
+          <div class="stake-box-text">
+            Добавь к оплате любую сумму (от 100 ₽) — это твой личный договор с собой.
+            Пройдёшь все 77 дней? Получишь её полностью обратно. Это не штраф — это мотивация.
+          </div>
+        </div>
+        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn pricing-cta">
+          Начать за 1990 ₽ →
+        </a>
+        <div class="pricing-footnote">Оплата через Telegram · ЮКасса · Безопасно</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="faq-header">
+      <div class="section-label reveal">Вопросы и ответы</div>
+      <h2 class="section-title reveal reveal-delay-1">Всё что хотел спросить</h2>
+    </div>
+    <div class="faq-list reveal">
+      <div class="faq-item">
+        <div class="faq-q">
+          Что будет если я пропущу день?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          Ничего страшного. Зарик — не тюремщик. Если пропустишь — на следующий день придут задачи нового дня. Программа продолжается. Главное — не бросать совсем. Если не выходишь на связь 3+ дня, Зарик пришлёт тебе напоминание.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">
+          Что такое «ставка на себя»?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          При оплате ты можешь добавить любую сумму сверх стоимости программы (минимум 100 ₽). Это ставка. Если пройдёшь все 77 дней — мы вернём её тебе 100%. Если нет — ставка остаётся у нас. Это твой личный договор с собой. Работает мощнее любой мотивации.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">
+          5 задач в день — это правда не много?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          Именно поэтому это работает. Большинство программ проваливаются из-за завышенных ожиданий. Зарик работает по принципу «минимальных жизнеспособных действий» — меньше героизма, больше стабильности. Через 77 дней ты удивишься насколько далеко зашёл маленькими шагами.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">
+          Когда начнётся программа?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          На следующий день после того как ты пройдёшь онбординг и настроишь профиль. Зарик даёт тебе ночь на подготовку — и с утра присылает первые задачи ровно в 6:00 по твоему часовому поясу.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">
+          А если я уже спортивный?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          Тренировка подстраивается под тебя. При онбординге ты указываешь сколько отжиманий, приседаний и упражнений на пресс можешь сделать прямо сейчас. Программа стартует с твоего уровня и постепенно растёт каждую неделю.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">
+          Как оформить участие?
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">
+          Нажми любую кнопку «Начать» на этой странице — она откроет @Shagov77_bot в Telegram. Там сначала получишь подарок (интерактивный трекер), затем бот проведёт тебя через оформление. Оплата прямо внутри Telegram — быстро и безопасно.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section id="final">
+  <div class="final-bg"></div>
+  <div class="container" style="position:relative">
+    <span class="final-emoji reveal">🦥</span>
+    <h2 class="final-title reveal reveal-delay-1">
+      77 дней — это<br>
+      <span>не так долго.</span>
+    </h2>
+    <p class="final-sub reveal reveal-delay-2">
+      Зато через 77 дней ты будешь смотреть на себя в зеркало и видеть человека, который сделал это.
+      Без надрыва. Маленькими шагами.
+    </p>
+    <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn final-cta reveal reveal-delay-3">
+      Начать прямо сейчас →
+    </a>
+    <div class="final-note reveal reveal-delay-4">Оплата в Telegram · 1990 ₽ · Следующий день — первые задачи</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-logo">
+        <span>🦥</span> Зарик
+      </div>
+      <div class="footer-links">
+        <a href="#how" class="footer-link">Как это работает</a>
+        <a href="#tasks" class="footer-link">Задачи</a>
+        <a href="#pricing" class="footer-link">Цена</a>
+        <a href="#faq" class="footer-link">FAQ</a>
+        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="footer-link" style="color:var(--green)">@Shagov77_bot</a>
+      </div>
+      <div class="footer-copy">© Зарик 2025 · 77 дней к другой жизни</div>
+    </div>
+  </div>
+</footer>
+
+<!-- FLOATING CTA -->
+<a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn float-btn" id="floatBtn">
+  Начать →
+</a>
+
+<script>
+// Scroll reveal
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting) { e.target.classList.add('visible'); }
+  });
+}, {threshold:0.12,rootMargin:'0px 0px -40px 0px'});
+reveals.forEach(el => observer.observe(el));
+
+// Navbar scroll
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 60);
+  floatBtn.classList.toggle('visible', window.scrollY > 500);
+}, {passive:true});
+
+// Floating CTA
+const floatBtn = document.getElementById('floatBtn');
+
+// FAQ accordion
+document.querySelectorAll('.faq-q').forEach(q => {
+  q.addEventListener('click', () => {
+    const item = q.closest('.faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+    if(!wasOpen) item.classList.add('open');
+  });
+});
+
+// Progress bar animation (trigger on scroll)
+const progressFill = document.querySelector('.progress-fill');
+const pctCounter = document.getElementById('pct-counter');
+const gameSection = document.getElementById('game');
+let animated = false;
+
+const gameObserver = new IntersectionObserver((entries) => {
+  if(entries[0].isIntersecting && !animated) {
+    animated = true;
+    // Animate counter
+    let start = 0;
+    const end = 73;
+    const duration = 2200;
+    const step = (timestamp) => {
+      if(!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      pctCounter.textContent = Math.round(eased * end) + '%';
+      if(progress < 1) requestAnimationFrame(step);
+      else pctCounter.textContent = end + '%';
+    };
+    setTimeout(() => requestAnimationFrame(step), 600);
+  }
+}, {threshold:0.3});
+if(gameSection) gameObserver.observe(gameSection);
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if(target) {
+      e.preventDefault();
+      target.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  });
+});
+</script>
+</body>
+</html>
