@@ -1350,6 +1350,86 @@ async def _post_init(application: Application) -> None:
     ])
 
 
+def _export_db_to_excel(output_path: str):
+    """Выгружает все основные таблицы БД в Excel (каждая таблица — отдельный лист)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    TABLES = [
+        ("users",            "👥 Пользователи"),
+        ("task_completions", "✅ Задания"),
+        ("user_achievements","🏆 Ачивки"),
+        ("user_photos",      "📸 Фото"),
+        ("leads",            "🎯 Лиды"),
+    ]
+
+    HEADER_FONT  = Font(bold=True, color="FFFFFF")
+    HEADER_FILL  = PatternFill("solid", fgColor="2E4057")
+    HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # удаляем пустой дефолтный лист
+
+    conn = db.get_conn()
+    try:
+        for table, sheet_title in TABLES:
+            try:
+                cursor = conn.execute(f"SELECT * FROM {table}")
+                rows   = cursor.fetchall()
+                cols   = [d[0] for d in cursor.description]
+            except Exception:
+                continue
+
+            ws = wb.create_sheet(title=sheet_title[:31])
+            ws.freeze_panes = "A2"
+            ws.row_dimensions[1].height = 20
+
+            # Заголовки
+            for ci, col in enumerate(cols, 1):
+                cell = ws.cell(row=1, column=ci, value=col)
+                cell.font  = HEADER_FONT
+                cell.fill  = HEADER_FILL
+                cell.alignment = HEADER_ALIGN
+
+            # Данные
+            for ri, row in enumerate(rows, 2):
+                for ci, val in enumerate(row, 1):
+                    ws.cell(row=ri, column=ci, value=val)
+
+            # Авто-ширина колонок
+            for ci, col in enumerate(cols, 1):
+                max_len = max(
+                    len(str(col)),
+                    *(len(str(r[ci - 1])) for r in rows) if rows else [0]
+                )
+                ws.column_dimensions[get_column_letter(ci)].width = min(max_len + 2, 40)
+    finally:
+        conn.close()
+
+    wb.save(output_path)
+
+
+async def cmd_getxls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выгружает базу данных в Excel и отправляет файл в чат (только для admin)."""
+    if not is_admin(update.effective_user.id):
+        return
+    import tempfile
+    await update.message.reply_text("⏳ Формирую Excel...")
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        _export_db_to_excel(tmp_path)
+        size_kb = Path(tmp_path).stat().st_size // 1024
+        await update.message.reply_document(
+            document=open(tmp_path, "rb"),
+            filename=f"zarik_{dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            caption=f"📊 База данных · {size_kb} КБ · 5 листов",
+        )
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
 async def cmd_getdb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет файл базы данных в чат (только для admin)."""
     if not is_admin(update.effective_user.id):
@@ -1381,6 +1461,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("admin",      cmd_admin))
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("getdb",      cmd_getdb))
+    app.add_handler(CommandHandler("getxls",     cmd_getxls))
     app.add_handler(CommandHandler("setday",     cmd_setday))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("grant",      cmd_grant))
