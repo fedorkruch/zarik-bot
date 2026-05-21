@@ -169,8 +169,11 @@ def _parse_init_data_params(raw: str) -> dict:
     return params
 
 
+_INIT_DATA_MAX_AGE = 24 * 3600   # initData действителен 24 часа
+
+
 def validate_init_data(raw: str) -> dict | None:
-    """Проверяет подпись initData от Telegram WebApp. Возвращает user-dict или None."""
+    """Проверяет подпись и свежесть initData от Telegram WebApp. Возвращает user-dict или None."""
     try:
         params = _parse_init_data_params(raw)
         hash_recv = params.pop("hash", None)
@@ -178,6 +181,18 @@ def validate_init_data(raw: str) -> dict | None:
         if not hash_recv:
             logger.warning("initData: нет hash")
             return None
+
+        # Проверяем свежесть auth_date (защита от replay-атак)
+        auth_date = params.get("auth_date", "")
+        if auth_date.isdigit():
+            age = _time.time() - int(auth_date)
+            if age > _INIT_DATA_MAX_AGE:
+                logger.warning(f"initData: устарел на {int(age / 3600)} ч (auth_date={auth_date})")
+                return None
+        else:
+            logger.warning("initData: нет auth_date — отклоняем")
+            return None
+
         data_check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
         secret = hmac.new(b"WebAppData", PROGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
         computed = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
@@ -542,7 +557,9 @@ async def handle_close_day(request: web.Request) -> web.Response:
 
 
 async def handle_debug(request: web.Request) -> web.Response:
-    """GET /debug — диагностическая страница, показывает всё что получает браузер."""
+    """GET /debug — диагностическая страница (только в dev-окружении)."""
+    if not _IS_DEV:
+        return web.Response(status=404)
     html = """<!DOCTYPE html>
 <html lang="ru">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
