@@ -1350,6 +1350,22 @@ async def _post_init(application: Application) -> None:
     ])
 
 
+async def cmd_getdb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет файл базы данных в чат (только для admin)."""
+    if not is_admin(update.effective_user.id):
+        return
+    db_path = db.DB_PATH
+    if not Path(db_path).exists():
+        await update.message.reply_text("❌ Файл базы не найден.")
+        return
+    size_kb = Path(db_path).stat().st_size // 1024
+    await update.message.reply_document(
+        document=open(db_path, "rb"),
+        filename=f"zarik_{dt.now().strftime('%Y%m%d_%H%M')}.db",
+        caption=f"🗄 База данных · {size_kb} КБ",
+    )
+
+
 def build_app() -> Application:
     db.init_db()
     app = (
@@ -1364,6 +1380,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("progress",   cmd_progress))
     app.add_handler(CommandHandler("admin",      cmd_admin))
     app.add_handler(CommandHandler("stats",      cmd_stats))
+    app.add_handler(CommandHandler("getdb",      cmd_getdb))
     app.add_handler(CommandHandler("setday",     cmd_setday))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("grant",      cmd_grant))
