@@ -1357,11 +1357,11 @@ def _export_db_to_excel(output_path: str):
     from openpyxl.utils import get_column_letter
 
     TABLES = [
-        ("users",            "👥 Пользователи"),
-        ("task_completions", "✅ Задания"),
-        ("user_achievements","🏆 Ачивки"),
-        ("user_photos",      "📸 Фото"),
-        ("leads",            "🎯 Лиды"),
+        ("users",             "Пользователи"),
+        ("task_completions",  "Задания"),
+        ("user_achievements", "Ачивки"),
+        ("user_photos",       "Фото"),
+        ("leads",             "Лиды"),
     ]
 
     HEADER_FONT  = Font(bold=True, color="FFFFFF")
@@ -1369,40 +1369,40 @@ def _export_db_to_excel(output_path: str):
     HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
 
     wb = openpyxl.Workbook()
-    wb.remove(wb.active)  # удаляем пустой дефолтный лист
+    wb.remove(wb.active)
 
-    conn = db.get_conn()
+    import sqlite3
+    conn = sqlite3.connect(str(db.DB_PATH))
+    conn.row_factory = sqlite3.Row
     try:
         for table, sheet_title in TABLES:
             try:
                 cursor = conn.execute(f"SELECT * FROM {table}")
                 rows   = cursor.fetchall()
                 cols   = [d[0] for d in cursor.description]
-            except Exception:
+            except Exception as e:
+                logger.warning(f"getxls: пропускаю таблицу {table}: {e}")
                 continue
 
-            ws = wb.create_sheet(title=sheet_title[:31])
+            ws = wb.create_sheet(title=sheet_title)
             ws.freeze_panes = "A2"
             ws.row_dimensions[1].height = 20
 
-            # Заголовки
             for ci, col in enumerate(cols, 1):
                 cell = ws.cell(row=1, column=ci, value=col)
-                cell.font  = HEADER_FONT
-                cell.fill  = HEADER_FILL
+                cell.font      = HEADER_FONT
+                cell.fill      = HEADER_FILL
                 cell.alignment = HEADER_ALIGN
 
-            # Данные
             for ri, row in enumerate(rows, 2):
                 for ci, val in enumerate(row, 1):
-                    ws.cell(row=ri, column=ci, value=val)
+                    ws.cell(row=ri, column=ci, value=row[ci - 1])
 
-            # Авто-ширина колонок
             for ci, col in enumerate(cols, 1):
-                max_len = max(
-                    len(str(col)),
-                    *(len(str(r[ci - 1])) for r in rows) if rows else [0]
-                )
+                max_len = len(str(col))
+                for row in rows:
+                    v = row[ci - 1]
+                    max_len = max(max_len, len(str(v)) if v is not None else 0)
                 ws.column_dimensions[get_column_letter(ci)].width = min(max_len + 2, 40)
     finally:
         conn.close()
@@ -1414,20 +1414,27 @@ async def cmd_getxls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выгружает базу данных в Excel и отправляет файл в чат (только для admin)."""
     if not is_admin(update.effective_user.id):
         return
-    import tempfile
-    await update.message.reply_text("⏳ Формирую Excel...")
-    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-        tmp_path = tmp.name
+    import tempfile, os
+    msg = await update.message.reply_text("⏳ Формирую Excel...")
+    tmp_path = None
     try:
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".xlsx")
+        os.close(tmp_fd)
         _export_db_to_excel(tmp_path)
-        size_kb = Path(tmp_path).stat().st_size // 1024
-        await update.message.reply_document(
-            document=open(tmp_path, "rb"),
-            filename=f"zarik_{dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            caption=f"📊 База данных · {size_kb} КБ · 5 листов",
-        )
+        size_kb = os.path.getsize(tmp_path) // 1024
+        with open(tmp_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=f"zarik_{dt.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                caption=f"📊 База данных · {size_kb} КБ · 5 листов",
+            )
+        await msg.delete()
+    except Exception as e:
+        logger.exception("cmd_getxls error")
+        await msg.edit_text(f"❌ Ошибка: {e}")
     finally:
-        Path(tmp_path).unlink(missing_ok=True)
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 async def cmd_getdb(update: Update, context: ContextTypes.DEFAULT_TYPE):
