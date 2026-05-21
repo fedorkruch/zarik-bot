@@ -94,7 +94,7 @@ def export_db_to_excel(output_path: str):
             ws_ph.column_dimensions["D"].width = 22
 
             photo_rows = conn.execute(
-                "SELECT user_id, photo_type, created_at, photo_data "
+                "SELECT user_id, photo_type, created_at, photo_path, photo_data "
                 "FROM user_photos ORDER BY user_id, id"
             ).fetchall()
 
@@ -103,22 +103,36 @@ def export_db_to_excel(output_path: str):
                 ws_ph.cell(row=ri, column=2, value=row[1])
                 ws_ph.cell(row=ri, column=3, value=row[2])
 
-                photo_data = row[3]
-                if photo_data:
-                    try:
+                photo_path = row[3]
+                photo_data = row[4]
+
+                # Читаем из файла на диске (приоритет), затем из BLOB
+                try:
+                    if photo_path:
+                        from pathlib import Path as _Path
+                        _p = _Path(photo_path)
+                        img = PilImage.open(_p) if _p.exists() else (
+                            PilImage.open(BytesIO(photo_data)) if photo_data else None
+                        )
+                    elif photo_data:
                         img = PilImage.open(BytesIO(photo_data))
-                        img.thumbnail((160, 160))
-                        buf = BytesIO()
-                        img.save(buf, format="JPEG")
-                        buf.seek(0)
-                        xl_img = XlImage(buf)
-                        xl_img.anchor = f"D{ri}"
-                        ws_ph.add_image(xl_img)
-                        ws_ph.row_dimensions[ri].height = 122
-                    except Exception as e:
-                        ws_ph.cell(row=ri, column=4, value=f"ошибка: {e}")
-                else:
-                    ws_ph.cell(row=ri, column=4, value="нет данных")
+                    else:
+                        img = None
+
+                    if img is None:
+                        ws_ph.cell(row=ri, column=4, value="нет данных")
+                        continue
+
+                    img.thumbnail((160, 160))
+                    buf = BytesIO()
+                    img.save(buf, format="JPEG")
+                    buf.seek(0)
+                    xl_img = XlImage(buf)
+                    xl_img.anchor = f"D{ri}"
+                    ws_ph.add_image(xl_img)
+                    ws_ph.row_dimensions[ri].height = 122
+                except Exception as e:
+                    ws_ph.cell(row=ri, column=4, value=f"ошибка: {e}")
 
         except Exception as e:
             logger.warning(f"getxls: лист Фото не создан: {e}")

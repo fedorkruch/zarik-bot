@@ -10,7 +10,9 @@ from pathlib import Path
 # По умолчанию — рядом с bot.py
 _data_dir = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
 _data_dir.mkdir(parents=True, exist_ok=True)
-DB_PATH = _data_dir / "zarik.db"
+DB_PATH    = _data_dir / "zarik.db"
+PHOTOS_DIR = _data_dir / "photos"
+PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 TOTAL_DAYS = 77   # Длительность программы
 TASKS_PER_DAY = 5 # Количество задач в день
@@ -137,6 +139,7 @@ def init_db():
             "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
             "ALTER TABLE users ADD COLUMN share_photos INTEGER DEFAULT NULL",
             "ALTER TABLE user_photos ADD COLUMN photo_data BLOB DEFAULT NULL",
+            "ALTER TABLE user_photos ADD COLUMN photo_path TEXT DEFAULT NULL",
             "ALTER TABLE leads ADD COLUMN phone TEXT DEFAULT NULL",
             # leads — детальная воронка
             "ALTER TABLE leads ADD COLUMN tracker_question_at TEXT",
@@ -587,30 +590,50 @@ def set_miniapp_mode(user_id: int, use_mini: bool):
 
 # ── Фото пользователей ────────────────────────────────────────
 
-def save_user_photo(user_id: int, photo_type: str, file_id: str, photo_data: bytes | None = None):
-    """Сохраняет фото: file_id + бинарные данные (BLOB) если переданы."""
+def save_user_photo(
+    user_id: int,
+    photo_type: str,
+    file_id: str,
+    photo_data: bytes | None = None,
+    photo_path: str | None = None,
+):
+    """Сохраняет фото.
+    Предпочтительный режим: photo_path — путь к файлу на диске (не BLOB).
+    photo_data сохраняется для обратной совместимости со старыми записями.
+    """
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO user_photos (user_id, photo_type, file_id, photo_data) VALUES (?, ?, ?, ?)",
-            (user_id, photo_type, file_id, photo_data)
+            "INSERT INTO user_photos (user_id, photo_type, file_id, photo_data, photo_path) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, photo_type, file_id, photo_data, photo_path)
         )
 
 
 def get_photos_without_data() -> list:
-    """Возвращает все записи user_photos где photo_data IS NULL (нужен бэкфил)."""
+    """Возвращает все записи user_photos где photo_data IS NULL И photo_path IS NULL (нужен бэкфил)."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, user_id, file_id FROM user_photos WHERE photo_data IS NULL"
+            "SELECT id, user_id, file_id FROM user_photos "
+            "WHERE photo_data IS NULL AND photo_path IS NULL"
         ).fetchall()
     return [dict(r) for r in rows]
 
 
 def update_photo_data(photo_id: int, photo_data: bytes):
-    """Записывает BLOB для существующей записи по её id."""
+    """Записывает BLOB для существующей записи по её id (legacy)."""
     with get_conn() as conn:
         conn.execute(
             "UPDATE user_photos SET photo_data = ? WHERE id = ?",
             (photo_data, photo_id)
+        )
+
+
+def update_photo_path(photo_id: int, photo_path: str):
+    """Записывает путь к файлу на диске для существующей записи."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE user_photos SET photo_path = ? WHERE id = ?",
+            (photo_path, photo_id)
         )
 
 

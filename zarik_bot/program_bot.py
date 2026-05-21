@@ -988,14 +988,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     # Берём наибольшее разрешение из списка (последний элемент)
     photo = update.message.photo[-1]
-    # Скачиваем бинарные данные и сохраняем как BLOB в БД
+    # Скачиваем и сохраняем в файловую систему (Railway Volume)
+    photo_path = None
     try:
-        tg_file = await context.bot.get_file(photo.file_id)
+        tg_file    = await context.bot.get_file(photo.file_id)
         photo_bytes = bytes(await tg_file.download_as_bytearray())
+        ts         = int(_time.time())
+        _dest      = db.PHOTOS_DIR / f"{user_id}_before_{ts}.jpg"
+        _dest.write_bytes(photo_bytes)
+        photo_path = str(_dest)
     except Exception as e:
-        logger.warning(f"handle_photo: не удалось скачать фото {photo.file_id}: {e}")
-        photo_bytes = None
-    db.save_user_photo(user_id, "before", photo.file_id, photo_bytes)
+        logger.warning(f"handle_photo: не удалось сохранить фото {photo.file_id}: {e}")
+    db.save_user_photo(user_id, "before", photo.file_id, photo_path=photo_path)
     count = db.count_user_photos(user_id, "before")
     await update.message.reply_text(
         f"✅ Фото {count} сохранено! Пришли ещё или нажми «Готово».",
@@ -1409,27 +1413,30 @@ cmd_getxls, cmd_getdb = _make_admin_commands(ADMIN_ID)
 
 
 async def cmd_fixphotos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Скачивает и сохраняет BLOB для всех фото без photo_data (только для admin)."""
+    """Скачивает и сохраняет в файловую систему фото без photo_path (только для admin)."""
     if not is_admin(update.effective_user.id):
         return
     pending = db.get_photos_without_data()
     if not pending:
-        await update.message.reply_text("✅ Все фото уже имеют данные — ничего исправлять.")
+        await update.message.reply_text("✅ Все фото уже сохранены на диск — ничего исправлять.")
         return
     msg = await update.message.reply_text(f"⏳ Скачиваю {len(pending)} фото...")
     ok = fail = 0
     for row in pending:
         try:
-            tg_file = await context.bot.get_file(row["file_id"])
+            tg_file     = await context.bot.get_file(row["file_id"])
             photo_bytes = bytes(await tg_file.download_as_bytearray())
-            db.update_photo_data(row["id"], photo_bytes)
+            ts          = int(_time.time())
+            dest        = db.PHOTOS_DIR / f"{row['user_id']}_before_{row['id']}_{ts}.jpg"
+            dest.write_bytes(photo_bytes)
+            db.update_photo_path(row["id"], str(dest))
             ok += 1
         except Exception as e:
             logger.warning(f"fixphotos: id={row['id']} file_id={row['file_id']}: {e}")
             fail += 1
     await msg.edit_text(
         f"✅ Готово!\n"
-        f"Сохранено: {ok} фото\n"
+        f"Сохранено на диск: {ok} фото\n"
         f"Ошибок: {fail} (file_id устарел или файл удалён)"
     )
 

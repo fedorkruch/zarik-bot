@@ -2,6 +2,7 @@
 webapp_server.py — aiohttp сервер для Telegram Mini App.
 Отдаёт miniapp.html и REST-эндпоинты для работы с данными пользователя.
 """
+import collections
 import hashlib
 import hmac
 import json
@@ -33,6 +34,62 @@ TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
 
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+
+# ── Rate limiting (sliding window, in-memory) ─────────────────
+
+_rl: dict[str, collections.deque] = {}
+
+# (limit, window_sec) для каждого маршрута
+_RL_RULES: dict[str, tuple[int, int]] = {
+    "/api/task":  (20, 60),   # 20 req/min на пользователя
+    "/api/close": (5,  60),   # 5 req/min
+    "/api/state": (60, 60),   # 60 req/min
+    "/api/mode":  (10, 60),   # 10 req/min
+}
+_RL_IP_LIMIT  = (200, 60)    # 200 req/min с одного IP (общий фоллбэк)
+
+
+def _rate_ok(key: str, limit: int, window: int = 60) -> bool:
+    """Sliding window rate limiter. Возвращает True если запрос разрешён."""
+    now  = _time.time()
+    q    = _rl.setdefault(key, collections.deque())
+    cutoff = now - window
+    while q and q[0] < cutoff:
+        q.popleft()
+    if len(q) >= limit:
+        return False
+    q.append(now)
+    return True
+
+
+# ── Security headers + rate-limit middleware ──────────────────
+
+@web.middleware
+async def _security_middleware(request: web.Request, handler):
+    ip   = request.remote or "unknown"
+    path = request.path
+
+    # Глобальный rate limit по IP
+    if not _rate_ok(f"ip:{ip}", *_RL_IP_LIMIT):
+        return web.json_response({"error": "rate_limited"}, status=429)
+
+    # Per-user rate limit для API-маршрутов
+    if path in _RL_RULES:
+        # Используем первые 32 байта X-Init-Data как ключ (не раскрываем данные)
+        user_key = (request.headers.get("X-Init-Data", "")[:32]
+                    or request.rel_url.query.get("uid", ip))
+        if not _rate_ok(f"api:{user_key}:{path}", *_RL_RULES[path]):
+            return web.json_response({"error": "rate_limited"}, status=429)
+
+    resp = await handler(request)
+
+    # Security headers
+    resp.headers.setdefault("X-Content-Type-Options",  "nosniff")
+    resp.headers.setdefault("X-XSS-Protection",        "1; mode=block")
+    resp.headers.setdefault("Referrer-Policy",          "strict-origin-when-cross-origin")
+    # X-Frame-Options не ставим: Mini App работает внутри Telegram iframe
+    return resp
+
 
 TASK_LABELS = [
     ("💪", "Тренировка"),
@@ -545,7 +602,10 @@ async def handle_set_mode(request: web.Request) -> web.Response:
 # ── Сборка ───────────────────────────────────────────────────
 
 def create_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(
+        middlewares=[_security_middleware],
+        client_max_size=512 * 1024,   # 512 КБ — максимальный размер тела запроса
+    )
     app.router.add_get("/",                    handle_index)
     app.router.add_get("/app",                 handle_index)
     app.router.add_get("/tracker",             handle_tracker)
