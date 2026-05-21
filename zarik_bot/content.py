@@ -1122,9 +1122,11 @@ def build_weekly_stats(
 
 
 def check_achievements(days_done: int) -> list[str]:
+    """Возвращает все ачивки, порог которых достигнут (>= threshold).
+    Дубликаты исключаются на стороне вызывающего кода через has_achievement."""
     triggered = []
     for ach_id, threshold in ACHIEVEMENT_ORDER:
-        if days_done == threshold:
+        if days_done >= threshold:
             triggered.append(ach_id)
     return triggered
 

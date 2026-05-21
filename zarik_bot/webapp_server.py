@@ -257,16 +257,18 @@ def build_full_state(user_id: int) -> dict:
     # Группа
     group = db.get_group_stats() or {}
 
-    # Ачивки
+    # Ачивки — разблокирована если засчитанных дней >= порога,
+    # либо если запись уже есть в БД (на случай ручного награждения)
     achievements = []
     for ach_id, threshold in ct.ACHIEVEMENT_ORDER:
         ach = ct.ACHIEVEMENTS[ach_id]
+        is_unlocked = days_done >= threshold or db.has_achievement(user_id, ach_id)
         achievements.append({
             "id":        ach_id,
             "icon":      ach["icon"],
             "name":      ach["name"],
             "threshold": threshold,
-            "unlocked":  db.has_achievement(user_id, ach_id),
+            "unlocked":  is_unlocked,
         })
 
     bar_chars, pct_num = _make_progress_bar(day - 1 if day > 0 else 0)
