@@ -38,6 +38,7 @@ from telegram.ext import (
 )
 
 import database as db
+from admin_utils import make_admin_commands as _make_admin_commands
 
 # ── Конфигурация ──────────────────────────────────────────────
 LEAD_BOT_TOKEN       = os.environ["SHAGOV77_BOT_TOKEN"]
@@ -908,11 +909,15 @@ def build_app() -> Application:
         .build()
     )
 
+    _cmd_getxls, _cmd_getdb = _make_admin_commands(ADMIN_ID)
+
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("leads", cmd_leads))
     app.add_handler(CommandHandler("funnel", cmd_funnel))
+    app.add_handler(CommandHandler("getxls", _cmd_getxls))
+    app.add_handler(CommandHandler("getdb",  _cmd_getdb))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
