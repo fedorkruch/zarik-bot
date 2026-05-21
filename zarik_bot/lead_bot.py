@@ -44,7 +44,7 @@ from admin_utils import make_admin_commands as _make_admin_commands
 LEAD_BOT_TOKEN       = os.environ["SHAGOV77_BOT_TOKEN"]
 PROVIDER_TOKEN       = os.environ.get("LEAD_PROVIDER_TOKEN") or os.environ.get("PROVIDER_TOKEN", "")
 PROGRAM_BOT_USERNAME = os.environ.get("PROGRAM_BOT_USERNAME", "Zarik_Lazy_Bot")
-ADMIN_ID             = int(os.environ.get("ADMIN_ID", "283760217"))
+ADMIN_ID             = int(os.environ["ADMIN_ID"])
 WEBAPP_URL           = os.environ.get("WEBAPP_URL", "")
 
 CHANNEL              = "kabanovofficial"           # без @

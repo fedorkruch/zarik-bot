@@ -22,8 +22,12 @@ logger = logging.getLogger(__name__)
 
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
 PORT              = int(os.environ.get("PORT", 8080))
-ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
-TEST_USER_IDS     = {283760217, 262479340}   # те же что в program_bot
+ADMIN_ID          = int(os.environ["ADMIN_ID"])
+# Тест-пользователи загружаются из env — никаких ID в репозитории
+_test_ids_raw     = os.environ.get("TEST_USER_IDS", "")
+TEST_USER_IDS     = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
+# DEV-байпас доступен только если ENV != 'production'
+_IS_DEV           = os.environ.get("ENV", "production").lower() != "production"
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
@@ -142,15 +146,16 @@ def get_user_id_from_request(request: web.Request) -> int | None:
     if user and "id" in user:
         return int(user["id"])
 
-    # Для тест-юзеров — парсим без проверки подписи (на случай неверного токена в env)
-    try:
-        params = _parse_init_data_params(raw)
-        uid = int(json.loads(params.get("user", "{}")).get("id", 0))
-        if uid in TEST_USER_IDS:
-            logger.warning(f"DEV bypass: tест-юзер {uid} без HMAC (проверь PROGRAM_BOT_TOKEN в env)")
-            return uid
-    except Exception:
-        pass
+    # Для тест-юзеров — парсим без проверки подписи (только в dev-окружении)
+    if _IS_DEV:
+        try:
+            params = _parse_init_data_params(raw)
+            uid = int(json.loads(params.get("user", "{}")).get("id", 0))
+            if uid in TEST_USER_IDS:
+                logger.warning(f"DEV bypass: tест-юзер {uid} без HMAC (проверь PROGRAM_BOT_TOKEN в env)")
+                return uid
+        except Exception:
+            pass
 
     # Подписанный токен от бота: ?uid=X&ts=Y&sig=Z (работает для всех пользователей)
     uid_q = request.rel_url.query.get("uid", "")
@@ -166,7 +171,7 @@ def get_user_id_from_request(request: web.Request) -> int | None:
                     PROGRAM_BOT_TOKEN.encode(),
                     f"{uid}:{ts}".encode(),
                     hashlib.sha256,
-                ).hexdigest()[:20]
+                ).hexdigest()
                 if hmac.compare_digest(expected, sig_q):
                     logger.info(f"Auth via signed URL token: uid={uid}")
                     return uid
@@ -177,8 +182,8 @@ def get_user_id_from_request(request: web.Request) -> int | None:
         except Exception as e:
             logger.warning(f"Token validation error: {e}")
 
-    # Последний фоллбек: ?uid=XXX без подписи (только для TEST_USER_IDS)
-    if uid_q.isdigit():
+    # Последний фоллбек: ?uid=XXX без подписи (только для TEST_USER_IDS в dev-окружении)
+    if _IS_DEV and uid_q.isdigit():
         uid = int(uid_q)
         if uid in TEST_USER_IDS:
             logger.warning(f"DEV fallback: test user {uid} via unsigned ?uid param")

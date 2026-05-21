@@ -49,13 +49,15 @@ from workout import get_workout
 # ── Конфигурация ──────────────────────────────────────────────
 PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ["BOT_TOKEN"]
 LEAD_BOT_USERNAME = os.environ.get("LEAD_BOT_USERNAME", "Shagov77_bot")
-ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
+ADMIN_ID          = int(os.environ["ADMIN_ID"])
 WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.app
 MAIN_MENU         = main_menu(WEBAPP_URL)              # ← собирается с WebApp-кнопкой если URL задан
 TOTAL_DAYS        = 77
 BEFORE_EXAMPLE    = Path(__file__).parent / "before_example.jpg"   # пример фото «до» для онбординга
 # Тест-пользователи: обходят проверку оплаты и сбрасываются при каждом /start
-TEST_USER_IDS     = {283760217, 262479340}
+# Загружаем из env — никаких ID в репозитории
+_test_ids_raw     = os.environ.get("TEST_USER_IDS", "")
+TEST_USER_IDS     = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
 VERSION           = "v2.1-miniapp"  # меняй чтобы проверить версию деплоя
 
 logging.basicConfig(
@@ -76,7 +78,7 @@ def make_miniapp_url(user_id: int) -> str:
         PROGRAM_BOT_TOKEN.encode(),
         f"{user_id}:{ts}".encode(),
         hashlib.sha256,
-    ).hexdigest()[:20]
+    ).hexdigest()
     return f"{WEBAPP_URL}?uid={user_id}&ts={ts}&sig={sig}"
 
 DIV = "· · · · · · · · · · · ·"
