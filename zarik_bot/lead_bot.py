@@ -29,7 +29,7 @@ from datetime import datetime
 
 from telegram import (
     BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup,
-    LabeledPrice, Update,
+    KeyboardButton, LabeledPrice, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -474,6 +474,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.warning(f"[CB] edit_markup error (ignored): {e}")
             await do_send_tracker(user_id, context)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "И ещё один момент 👇\n\n"
+                    "Поделись номером телефона — чтобы мы могли связаться напрямую, "
+                    "если понадоблюсь. Это необязательно, можешь пропустить."
+                ),
+                reply_markup=ReplyKeyboardMarkup(
+                    [[KeyboardButton("📱 Поделиться номером телефона", request_contact=True)],
+                     [KeyboardButton("Пропустить →")]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True,
+                ),
+            )
         else:
             await query.answer("Подписка не обнаружена. Подпишись и нажми снова.", show_alert=True)
             try:
@@ -621,6 +635,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Текстовые сообщения: ввод ставки, реакция на «скидку», или защита от случайного ввода."""
     user_id = update.effective_user.id
     text = update.message.text or ""
+
+    # Пропуск запроса телефона
+    if text == "Пропустить →":
+        await update.message.reply_text("Окей, без проблем 🦥", reply_markup=ReplyKeyboardRemove())
+        return
 
     # 1. Ждём ввод суммы ставки — обрабатываем как число
     if context.user_data.get("awaiting_stake"):
@@ -788,6 +807,22 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     )
 
 
+# ── Входящий контакт (телефон) ───────────────────────────────
+
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет телефон лида когда пользователь делится контактом."""
+    contact = update.message.contact
+    if not contact:
+        return
+    phone = contact.phone_number or ""
+    if phone:
+        db.save_lead_phone(update.effective_user.id, phone)
+    await update.message.reply_text(
+        "✅ Номер сохранён, спасибо!",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
 # ── Административные команды ──────────────────────────────────
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -921,6 +956,7 @@ def build_app() -> Application:
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
+    app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     # Периодическая проверка follow-up — каждый час, robust к перезапускам

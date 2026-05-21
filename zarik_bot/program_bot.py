@@ -13,7 +13,9 @@ from datetime import datetime as dt
 from pathlib import Path
 import pytz
 
-from telegram import BotCommand, Update
+from telegram import (
+    BotCommand, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -147,6 +149,26 @@ def not_paid_message() -> str:
         "🦥 Участие в программе не оплачено.\n\n"
         "Вернись к боту регистрации, пройди воронку и оплати участие — "
         f"после этого возвращайся сюда.{lead}"
+    )
+
+
+# ── Кнопка запроса телефона ──────────────────────────────────
+
+_PHONE_KEYBOARD = ReplyKeyboardMarkup(
+    [[KeyboardButton("📱 Поделиться номером телефона", request_contact=True)],
+     [KeyboardButton("Пропустить →")]],
+    resize_keyboard=True,
+    one_time_keyboard=True,
+)
+
+
+async def _send_phone_request(message):
+    """Запрашивает номер телефона после завершения онбординга."""
+    await message.reply_text(
+        "Последний штрих 👇\n\n"
+        "Поделись номером — чтобы я мог связаться с тобой напрямую, "
+        "если понадоблюсь. Это необязательно, можешь пропустить.",
+        reply_markup=_PHONE_KEYBOARD,
     )
 
 
@@ -734,6 +756,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "А пока — отдыхай)",
             reply_markup=MAIN_MENU
         )
+        await _send_phone_request(query.message)
         return
 
     if data == "photos_done":
@@ -758,6 +781,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "А пока — отдыхай)",
             reply_markup=MAIN_MENU
         )
+        await _send_phone_request(query.message)
         return
 
     # ── Закрыть день ──────────────────────────────────────────
@@ -884,6 +908,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text    = update.message.text.strip()
     db.log_user_session(user_id)
 
+    if text == "Пропустить →":
+        await update.message.reply_text("Окей, без проблем 🦥", reply_markup=ReplyKeyboardRemove())
+        return
+
     if text == "🦥 Начать":
         await cmd_start(update, context)
         return
@@ -927,6 +955,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🦥 Используй кнопки меню 👇",
             reply_markup=MAIN_MENU
         )
+
+
+# ── Входящий контакт (телефон) ───────────────────────────────
+
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет номер телефона когда пользователь делится контактом."""
+    contact = update.message.contact
+    if not contact:
+        return
+    user_id = update.effective_user.id
+    phone = contact.phone_number or ""
+    if phone:
+        db.save_user_phone(user_id, phone)
+    await update.message.reply_text(
+        "✅ Номер сохранён, спасибо!",
+        reply_markup=ReplyKeyboardRemove(),
+    )
 
 
 # ── Входящие фото (онбординг: шаг awaiting_photos) ──────────
@@ -1383,6 +1428,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("debug",      cmd_debug))
     app.add_handler(CommandHandler("screen",     cmd_screen))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 

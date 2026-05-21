@@ -137,6 +137,7 @@ def init_db():
             "ALTER TABLE users ADD COLUMN use_miniapp INTEGER DEFAULT 1",
             "ALTER TABLE users ADD COLUMN share_photos INTEGER DEFAULT NULL",
             "ALTER TABLE user_photos ADD COLUMN photo_data BLOB DEFAULT NULL",
+            "ALTER TABLE leads ADD COLUMN phone TEXT DEFAULT NULL",
             # leads — детальная воронка
             "ALTER TABLE leads ADD COLUMN tracker_question_at TEXT",
             "ALTER TABLE leads ADD COLUMN tracker_reply_yes INTEGER",
@@ -165,6 +166,24 @@ def register_user(user_id: int, username: str, first_name: str):
                  onboarding_step, onboarding_complete)
             VALUES (?, ?, ?, '2099-01-01', 'payment', 0)
         """, (user_id, username or "", first_name or "Участник"))
+
+
+def save_user_phone(user_id: int, phone: str):
+    """Сохраняет номер телефона пользователя (из контакта Telegram)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET phone = ? WHERE user_id = ?",
+            (phone, user_id)
+        )
+
+
+def save_lead_phone(user_id: int, phone: str):
+    """Сохраняет номер телефона лида."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET phone = ? WHERE user_id = ?",
+            (phone, user_id)
+        )
 
 
 def save_payment(
