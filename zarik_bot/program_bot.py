@@ -150,6 +150,27 @@ def not_paid_message() -> str:
     )
 
 
+# ── Утилита: редактировать любое сообщение (текст или фото) ──
+
+async def _safe_edit(query, text: str, reply_markup=None, parse_mode=None):
+    """
+    Редактирует сообщение независимо от его типа.
+    • Текстовое  → edit_message_text
+    • Фото       → edit_message_caption
+    • Ни то ни другое → reply_text (новое сообщение)
+    """
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode:
+        kwargs["parse_mode"] = parse_mode
+    try:
+        await query.edit_message_text(text, **kwargs)
+    except Exception:
+        try:
+            await query.edit_message_caption(caption=text, **kwargs)
+        except Exception:
+            await query.message.reply_text(text, **kwargs)
+
+
 # ── Выбор клавиатуры для экрана «Сегодня» ────────────────────
 
 def today_markup(user_id: int, day: int, completed: set):
@@ -718,17 +739,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "photos_done":
         await query.answer()
         count = db.count_user_photos(user_id, "before")
-        if count < 2:
-            # Фото не пришло или пришло меньше 2 — просим повторить или пропустить
-            await query.edit_message_text(
-                "📸 Фото не отправлено.\n\n"
-                "Отправь фото сюда в чат (нужно 2 штуки — анфас и профиль) "
+        if count < 1:
+            # Фото ещё не отправлено — просим прислать или пропустить
+            await _safe_edit(
+                query,
+                "📸 Фото пока не получено.\n\n"
+                "Отправь 2 фото в чат (анфас и профиль) "
                 "или пропусти этот этап, если не хочешь делиться фото 👇",
                 reply_markup=photos_retry_keyboard()
             )
             return
         db.complete_onboarding(user_id)
-        await query.edit_message_text(f"✅ Сохранил {count} фото 📸")
+        noun = "фото" if count in (2, 3, 4) else "фото"
+        await _safe_edit(query, f"✅ Сохранил {count} {noun} 📸")
         await query.message.reply_text(
             "Отлично, твоя программа сформирована под тебя 🎯\n\n"
             "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
