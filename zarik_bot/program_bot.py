@@ -10,6 +10,7 @@ import os
 import re
 import time as _time
 from datetime import datetime as dt
+from pathlib import Path
 import pytz
 
 from telegram import BotCommand, Update
@@ -50,6 +51,7 @@ ADMIN_ID          = int(os.environ.get("ADMIN_ID", "283760217"))
 WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.app
 MAIN_MENU         = main_menu(WEBAPP_URL)              # ← собирается с WebApp-кнопкой если URL задан
 TOTAL_DAYS        = 77
+BEFORE_EXAMPLE    = Path(__file__).parent / "before_example.jpg"   # пример фото «до» для онбординга
 # Тест-пользователи: обходят проверку оплаты и сбрасываются при каждом /start
 TEST_USER_IDS     = {283760217, 262479340}
 VERSION           = "v2.1-miniapp"  # меняй чтобы проверить версию деплоя
@@ -673,8 +675,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         db.set_share_photos(user_id, True)
         db.set_onboarding_step(user_id, "awaiting_photos")
-        await query.edit_message_text(
-            "📸 Отлично! Вот что нужно сделать:\n\n"
+        await query.edit_message_text("📸 Отлично! Сейчас объясню что нужно сделать 👇")
+        instruction = (
             "Сделай 2 фото «до»:\n"
             "• Фронтальное (анфас)\n"
             "• Боковое (профиль)\n\n"
@@ -683,11 +685,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🩳 Парни — шорты или трусы\n\n"
             "Надевайте что вам комфортнее, но в рамках приличия "
             "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
+            "Вот пример фото, можно сделать так же 👆\n\n"
             "Отправляй фото сюда — я сохраню 👇\n"
             "Когда закончишь — нажми кнопку ниже.\n\n"
-            "🔒 Мы не делимся твоими фото, не выкладываем их никуда — это только для тебя.",
-            reply_markup=photos_done_keyboard()
+            "🔒 Мы не делимся твоими фото, не выкладываем их никуда — это только для тебя."
         )
+        try:
+            with open(BEFORE_EXAMPLE, "rb") as photo_file:
+                await query.message.reply_photo(
+                    photo=photo_file,
+                    caption=instruction,
+                    reply_markup=photos_done_keyboard(),
+                )
+        except Exception:
+            # Если фото недоступно — шлём текст как запасной вариант
+            await query.message.reply_text(instruction, reply_markup=photos_done_keyboard())
         return
 
     if data == "photo_no":
