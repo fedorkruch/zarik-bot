@@ -596,6 +596,24 @@ def save_user_photo(user_id: int, photo_type: str, file_id: str, photo_data: byt
         )
 
 
+def get_photos_without_data() -> list:
+    """Возвращает все записи user_photos где photo_data IS NULL (нужен бэкфил)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, user_id, file_id FROM user_photos WHERE photo_data IS NULL"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_photo_data(photo_id: int, photo_data: bytes):
+    """Записывает BLOB для существующей записи по её id."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE user_photos SET photo_data = ? WHERE id = ?",
+            (photo_data, photo_id)
+        )
+
+
 def get_user_photos(user_id: int, photo_type: str = "before") -> list:
     """Возвращает список фото пользователя (id, file_id, photo_data, created_at)."""
     with get_conn() as conn:

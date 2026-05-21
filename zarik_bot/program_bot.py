@@ -1406,6 +1406,32 @@ from admin_utils import make_admin_commands as _make_admin_commands
 cmd_getxls, cmd_getdb = _make_admin_commands(ADMIN_ID)
 
 
+async def cmd_fixphotos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Скачивает и сохраняет BLOB для всех фото без photo_data (только для admin)."""
+    if not is_admin(update.effective_user.id):
+        return
+    pending = db.get_photos_without_data()
+    if not pending:
+        await update.message.reply_text("✅ Все фото уже имеют данные — ничего исправлять.")
+        return
+    msg = await update.message.reply_text(f"⏳ Скачиваю {len(pending)} фото...")
+    ok = fail = 0
+    for row in pending:
+        try:
+            tg_file = await context.bot.get_file(row["file_id"])
+            photo_bytes = bytes(await tg_file.download_as_bytearray())
+            db.update_photo_data(row["id"], photo_bytes)
+            ok += 1
+        except Exception as e:
+            logger.warning(f"fixphotos: id={row['id']} file_id={row['file_id']}: {e}")
+            fail += 1
+    await msg.edit_text(
+        f"✅ Готово!\n"
+        f"Сохранено: {ok} фото\n"
+        f"Ошибок: {fail} (file_id устарел или файл удалён)"
+    )
+
+
 def build_app() -> Application:
     db.init_db()
     app = (
@@ -1420,8 +1446,9 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("progress",   cmd_progress))
     app.add_handler(CommandHandler("admin",      cmd_admin))
     app.add_handler(CommandHandler("stats",      cmd_stats))
-    app.add_handler(CommandHandler("getdb",      cmd_getdb))
-    app.add_handler(CommandHandler("getxls",     cmd_getxls))
+    app.add_handler(CommandHandler("getdb",       cmd_getdb))
+    app.add_handler(CommandHandler("getxls",      cmd_getxls))
+    app.add_handler(CommandHandler("fixphotos",   cmd_fixphotos))
     app.add_handler(CommandHandler("setday",     cmd_setday))
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("grant",      cmd_grant))
