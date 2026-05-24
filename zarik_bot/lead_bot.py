@@ -50,11 +50,22 @@ WEBAPP_URL           = os.environ.get("WEBAPP_URL", "")
 CHANNEL              = "kabanovofficial"           # без @
 CHANNEL_URL          = "https://t.me/kabanovofficial"
 
-# ── Цены (тестовый режим) ─────────────────────────────────────
-# TODO: перед боевым запуском заменить на 199_000
-COURSE_PRICE_KOPECKS  = 6_000    # 60 ₽ (тест; боевой — 199_000 = 1990 ₽)
-RECEIPT_PRICE_KOPECKS = 6_000    # должна совпадать с COURSE_PRICE_KOPECKS (требование ЮКасса)
-MIN_STAKE_KOPECKS     = 1_000    # минимальная ставка 10 ₽
+# ── Тест-пользователи (получают тестовые цены) ───────────────
+_test_ids_raw = os.environ.get("TEST_USER_IDS", "")
+TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
+
+# ── Цены ─────────────────────────────────────────────────────
+COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
+COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
+MIN_STAKE_PROD    = 10_000    # 100 ₽
+MIN_STAKE_TEST    = 1_000     # 10 ₽
+
+def _price_for(user_id: int) -> int:
+    """Стоимость программы в копейках: тест для TEST_USER_IDS, боевая для всех остальных."""
+    return COURSE_PRICE_TEST if user_id in TEST_USER_IDS else COURSE_PRICE_PROD
+
+def _min_stake_for(user_id: int) -> int:
+    return MIN_STAKE_TEST if user_id in TEST_USER_IDS else MIN_STAKE_PROD
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -583,7 +594,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             return
         db.mark_lead_start_clicked(user_id)
-        min_r = MIN_STAKE_KOPECKS // 100
+        min_r = _min_stake_for(user_id) // 100
         stake_text = (
             f"🎯 *Хочешь добавить ставку на себя?*\n\n"
             f"Ставка добавляется к стоимости программы.\n"
@@ -611,7 +622,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
         context.user_data["awaiting_stake"] = True
-        min_r = MIN_STAKE_KOPECKS // 100
+        min_r = _min_stake_for(user_id) // 100
         ask_text = f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):"
         _remember(user_id, ask_text, parse_mode=None)
         await context.bot.send_message(chat_id=user_id, text=ask_text)
@@ -643,21 +654,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. Ждём ввод суммы ставки — обрабатываем как число
     if context.user_data.get("awaiting_stake"):
+        min_stake = _min_stake_for(user_id)
         clean = text.strip().replace(",", ".").replace(" ", "")
         try:
             amount_rub = float(clean)
         except ValueError:
-            min_r = MIN_STAKE_KOPECKS // 100
             await update.message.reply_text(
                 f"⚠️ Некорректный формат ввода данных.\n\nВведи число, например: 100\n"
-                f"Минимальная сумма — {min_r} ₽."
+                f"Минимальная сумма — {min_stake // 100} ₽."
             )
             return
 
         amount_kopecks = int(amount_rub * 100)
-        if amount_kopecks < MIN_STAKE_KOPECKS:
+        if amount_kopecks < min_stake:
             await update.message.reply_text(
-                f"⚠️ Минимальная ставка — {MIN_STAKE_KOPECKS // 100} ₽. Введи другую сумму:"
+                f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
             )
             return
 
@@ -692,7 +703,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Оплата ───────────────────────────────────────────────────
 
-def _build_receipt(stake_kopecks: int = 0) -> str:
+def _build_receipt(course_kopecks: int, stake_kopecks: int = 0) -> str:
     """
     Формирует provider_data с чеком для ЮКасса (54-ФЗ).
     vat_code=1 — без НДС.
@@ -709,7 +720,7 @@ def _build_receipt(stake_kopecks: int = 0) -> str:
         {
             "description": "Программа «Зарик 77 дней»",
             "quantity": "1.00",
-            "amount": {"value": _rub(RECEIPT_PRICE_KOPECKS), "currency": "RUB"},
+            "amount": {"value": _rub(course_kopecks), "currency": "RUB"},
             "vat_code": 1,
             "payment_mode": "full_payment",
             "payment_subject": "service",
@@ -734,11 +745,12 @@ async def send_course_invoice(
     stake_kopecks: int = 0,
 ):
     """Отправляет счёт на оплату: стоимость программы + ставка."""
-    prices = [LabeledPrice("Программа «Зарик 77 дней»", COURSE_PRICE_KOPECKS)]
+    course_kopecks = _price_for(chat_id)
+    prices = [LabeledPrice("Программа «Зарик 77 дней»", course_kopecks)]
     if stake_kopecks > 0:
         prices.append(LabeledPrice("Ставка на себя (вернём при завершении)", stake_kopecks))
 
-    total_rub = (COURSE_PRICE_KOPECKS + stake_kopecks) // 100
+    total_rub = (course_kopecks + stake_kopecks) // 100
     description = (
         f"Доступ к программе 77 дней + ставка {stake_kopecks // 100} ₽"
         if stake_kopecks > 0
@@ -759,7 +771,7 @@ async def send_course_invoice(
             need_phone_number=True,
             send_email_to_provider=True,
             send_phone_number_to_provider=True,
-            provider_data=_build_receipt(stake_kopecks),
+            provider_data=_build_receipt(course_kopecks, stake_kopecks),
         )
         logger.info(f"Инвойс отправлен: user={chat_id}, итого={total_rub}₽, ставка={stake_kopecks // 100}₽")
         db.mark_lead_invoice_sent(chat_id)
@@ -792,7 +804,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     db.save_payment(
         user_id=user.id,
         charge_id=payment.telegram_payment_charge_id,
-        participation_fee=COURSE_PRICE_KOPECKS,
+        participation_fee=_price_for(user.id),
         stake_amount=stake_kopecks,
     )
     db.mark_lead_purchased(user.id)

@@ -911,7 +911,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.log_user_session(user_id)
 
     if text == "Пропустить →":
-        await update.message.reply_text("Окей, без проблем 🦥", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(
+            "Окей, без проблем 🦥\n\nЖди завтра утром — пришлю первые задачи!",
+            reply_markup=MAIN_MENU,
+        )
         return
 
     if text == "🦥 Начать":
@@ -971,8 +974,8 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if phone:
         db.save_user_phone(user_id, phone)
     await update.message.reply_text(
-        "✅ Номер сохранён, спасибо!",
-        reply_markup=ReplyKeyboardRemove(),
+        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи! 🦥",
+        reply_markup=MAIN_MENU,
     )
 
 
@@ -1237,7 +1240,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_setday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in TEST_USER_IDS:
+    if update.effective_user.id not in TEST_USER_IDS and not is_admin(update.effective_user.id):
         return
     args = context.args
     if not args or not args[0].isdigit():

@@ -36,7 +36,7 @@ body{
   -webkit-font-smoothing:antialiased;
   overflow-x:hidden;
 }
-a{color:inherit;text-decoration:none}
+a{color:inherit !important;text-decoration:none}
 img{max-width:100%}
 
 /* ── UTILS ── */
@@ -59,27 +59,27 @@ img{max-width:100%}
 .btn{
   display:inline-flex;align-items:center;gap:8px;
   background:var(--green);
-  color:#0C1A06;
+  color:#0C1A06 !important;
   padding:16px 32px;
   border-radius:100px;
   font-size:16px;font-weight:700;
   cursor:pointer;border:none;
   transition:background var(--tr),transform var(--tr),box-shadow var(--tr);
-  text-decoration:none;
+  text-decoration:none !important;
   white-space:nowrap;
 }
 .btn:hover{background:var(--green2);transform:translateY(-2px);box-shadow:0 12px 32px rgba(126,201,74,0.3)}
 .btn:active{transform:translateY(0)}
 .btn-outline{
   background:transparent;
-  color:var(--text);
+  color:var(--text) !important;
   border:1px solid var(--border2);
   padding:14px 28px;
   border-radius:100px;
   font-size:15px;font-weight:600;
   cursor:pointer;
   transition:border-color var(--tr),background var(--tr);
-  text-decoration:none;
+  text-decoration:none !important;
   white-space:nowrap;
 }
 .btn-outline:hover{border-color:var(--border2);background:var(--bg3)}
@@ -119,6 +119,8 @@ nav.scrolled{
   display:flex;align-items:center;gap:10px;
   font-size:18px;font-weight:800;
   letter-spacing:-0.01em;
+  color:var(--text) !important;
+  text-decoration:none !important;
 }
 .nav-logo-icon{font-size:24px}
 .nav-cta{padding:10px 22px;font-size:14px}
@@ -189,8 +191,10 @@ nav.scrolled{
   position:relative;z-index:1;
 }
 .sloth-wrap img{
-  width:340px;
-  height:auto;
+  width:320px;
+  height:426px;
+  object-fit:cover;
+  object-position:center top;
   border-radius:28px;
   display:block;
 }
@@ -236,10 +240,24 @@ nav.scrolled{
 }
 .philosophy-inner{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:80px;
+  grid-template-columns:260px 1fr;
+  gap:64px;
   align-items:center;
 }
+.phil-img{
+  border-radius:24px;
+  overflow:hidden;
+  height:460px;
+  flex-shrink:0;
+  box-shadow:0 24px 56px rgba(0,0,0,0.5);
+}
+.phil-img img{
+  width:100%;height:100%;
+  object-fit:cover;
+  object-position:center 20%;
+  display:block;
+}
+.phil-text-group{display:flex;flex-direction:column;gap:36px}
 .phil-quote{
   font-size:clamp(28px,4vw,42px);
   font-weight:900;
@@ -296,15 +314,23 @@ nav.scrolled{
 .how-link{
   display:inline-block;margin-top:16px;
   font-size:14px;font-weight:600;
-  color:var(--green);
+  color:var(--green) !important;
   border-bottom:1px solid rgba(126,201,74,0.3);
   padding-bottom:2px;
+  text-decoration:none !important;
 }
 
 /* ── TASKS ── */
 #tasks{padding:100px 0;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.tasks-header{margin-bottom:48px}
+.tasks-header{margin-bottom:48px;text-align:center}
+.tasks-header .section-sub{margin:16px auto 0}
 .tasks-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+.tasks-bottom-row{
+  grid-column:1/-1;
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:16px;
@@ -424,10 +450,17 @@ nav.scrolled{
 .testi-text strong{color:var(--text);font-style:normal;font-weight:700}
 .testi-author{display:flex;align-items:center;gap:12px}
 .testi-avatar{
-  width:40px;height:40px;border-radius:50%;
+  width:48px;height:48px;border-radius:50%;
   background:var(--bg4);
   display:flex;align-items:center;justify-content:center;
   font-size:18px;flex-shrink:0;
+  overflow:hidden;
+}
+.testi-avatar img{
+  width:100%;height:100%;
+  object-fit:cover;border-radius:50%;
+  display:block;
+  filter:brightness(0.92) saturate(0.85);
 }
 .testi-name{font-size:14px;font-weight:700}
 .testi-meta{font-size:12px;color:var(--text3)}
@@ -556,45 +589,77 @@ nav.scrolled{
 /* ── FINAL CTA ── */
 #final{
   padding:120px 0;
-  text-align:center;
   position:relative;overflow:hidden;
 }
 .final-bg{
   position:absolute;inset:0;
-  background:radial-gradient(ellipse 70% 80% at 50% 50%,rgba(126,201,74,0.07) 0%,transparent 70%);
+  background:radial-gradient(ellipse 70% 80% at 30% 50%,rgba(126,201,74,0.07) 0%,transparent 70%);
   pointer-events:none;
 }
-.final-emoji{font-size:64px;margin-bottom:24px;display:block}
+.final-inner{
+  display:grid;
+  grid-template-columns:1fr 400px;
+  gap:80px;
+  align-items:center;
+}
+.final-text{position:relative}
+.final-emoji{font-size:56px;margin-bottom:20px;display:block}
 .final-title{
-  font-size:clamp(40px,6vw,72px);
+  font-size:clamp(36px,5vw,64px);
   font-weight:900;letter-spacing:-0.03em;
   line-height:1.05;margin-bottom:20px;
 }
 .final-title span{color:var(--green)}
 .final-sub{
   font-size:18px;color:var(--text2);
-  max-width:520px;margin:0 auto 40px;line-height:1.65;
+  max-width:480px;margin:0 0 40px;line-height:1.65;
 }
-.final-cta{font-size:20px;padding:20px 48px}
+.final-cta{font-size:18px;padding:18px 40px}
 .final-note{
   font-size:13px;color:var(--text3);
   margin-top:16px;
 }
+.final-img{
+  position:relative;
+  border-radius:28px;
+  overflow:hidden;
+  box-shadow:0 32px 72px rgba(0,0,0,0.55);
+}
+.final-img img{
+  width:100%;
+  height:520px;
+  object-fit:cover;
+  object-position:center top;
+  display:block;
+  border-radius:28px;
+}
 
 /* ── FOOTER ── */
 footer{
-  padding:40px 0;
+  padding:48px 0 40px;
   border-top:1px solid var(--border);
 }
-.footer-inner{
+.footer-top{
   display:flex;align-items:center;justify-content:space-between;
   flex-wrap:wrap;gap:16px;
+  margin-bottom:28px;
 }
 .footer-logo{font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
-.footer-links{display:flex;gap:24px}
-.footer-link{font-size:14px;color:var(--text3);transition:color var(--tr)}
+.footer-links{display:flex;gap:24px;flex-wrap:wrap}
+.footer-link{font-size:14px;color:var(--text3) !important;transition:color var(--tr);text-decoration:none !important}
 .footer-link:hover{color:var(--text)}
 .footer-copy{font-size:13px;color:var(--text3)}
+.footer-bottom{
+  padding-top:24px;
+  border-top:1px solid var(--border);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 32px;
+}
+.footer-req{font-size:12px;color:var(--text3);line-height:1.65;flex:1;min-width:260px}
+.footer-req a{color:var(--text3) !important;transition:color var(--tr);text-decoration:none !important}
+.footer-req a:hover{color:var(--text2)}
+.footer-legal{display:flex;gap:20px;flex-wrap:wrap}
+.footer-legal a{font-size:12px;color:var(--text3) !important;text-decoration:underline !important;transition:color var(--tr);white-space:nowrap}
+.footer-legal a:hover{color:var(--text2)}
 
 /* ── FLOATING CTA ── */
 .float-btn{
@@ -609,25 +674,31 @@ footer{
 @media(max-width:900px){
   .hero-grid{grid-template-columns:1fr;gap:48px}
   .hero-visual{order:-1}
-  .sloth-wrap img{width:260px;height:auto;border-radius:20px}
+  .sloth-wrap img{width:260px;height:346px;border-radius:20px}
   .glow-ring{width:220px;height:220px}
   .hero-stats{gap:20px}
   .pain-cards{grid-template-columns:1fr}
-  .philosophy-inner{grid-template-columns:1fr;gap:40px}
+  .philosophy-inner{grid-template-columns:1fr;gap:32px}
+  .phil-img{height:300px}
   .how-steps{grid-template-columns:1fr}
-  .tasks-grid{grid-template-columns:1fr}
-  .task-card.full{grid-column:auto}
+  .tasks-grid{grid-template-columns:1fr 1fr}
+  .tasks-bottom-row{grid-template-columns:1fr 1fr}
   .achievements{grid-template-columns:repeat(2,1fr)}
   .testi-grid{grid-template-columns:1fr}
   .pricing-card{padding:32px 24px}
   .footer-inner{flex-direction:column;text-align:center}
   .footer-links{flex-wrap:wrap;justify-content:center}
   .float-btn{bottom:20px;right:16px}
+  .final-inner{grid-template-columns:1fr;gap:40px}
+  .final-img img{height:380px}
+  .final-img{order:-1}
 }
 @media(max-width:560px){
   .hero-cta-row{flex-direction:column;align-items:flex-start}
   .achievements{grid-template-columns:1fr 1fr}
   .hero-stats{flex-wrap:wrap;gap:16px}
+  .tasks-grid{grid-template-columns:1fr}
+  .tasks-bottom-row{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -686,7 +757,7 @@ footer{
       <div class="hero-visual reveal reveal-delay-2">
         <div class="glow-ring"></div>
         <div class="sloth-wrap">
-          <img src="https://i.ibb.co/hxh1Wj2p/Zarik-site.png" alt="Зарик — твой ленивый наставник">
+          <img src="https://static.tildacdn.com/tild3637-6432-4737-b366-343534666464/photo_2026-05-21_173.jpeg" alt="Зарик — твой ленивый наставник">
         </div>
       </div>
     </div>
@@ -725,18 +796,23 @@ footer{
 <section id="philosophy">
   <div class="container">
     <div class="philosophy-inner">
-      <div>
-        <div class="section-label reveal">Философия Зарика</div>
-        <div class="phil-quote reveal reveal-delay-1">
-          Ленивец не торопится.<br>
-          Ленивец <span class="accent">всегда добирается</span><br>
-          куда нужно.
-        </div>
+      <div class="phil-img reveal">
+        <img src="https://static.tildacdn.com/tild3633-3436-4062-b639-636265393139/zarik_2.PNG" alt="Зарик">
       </div>
-      <div class="phil-body reveal reveal-delay-2">
-        <p>Зарик не верит в героизм. Он верит в <strong>маленькие ежедневные действия</strong>, которые через 77 дней превращаются в человека, которого ты хочешь увидеть в зеркале.</p>
-        <p>Не 4-часовые тренировки. Не жёсткие диеты. Не «либо всё, либо ничего».</p>
-        <p><strong>5 задач в день</strong> — выполнимых, конкретных, твоих. Каждое утро в твоём Telegram. Отметил выполненные — день зачтён. Всё.</p>
+      <div class="phil-text-group">
+        <div>
+          <div class="section-label reveal">Философия Зарика</div>
+          <div class="phil-quote reveal reveal-delay-1">
+            Ленивец не торопится.<br>
+            Ленивец <span class="accent">всегда добирается</span><br>
+            куда нужно.
+          </div>
+        </div>
+        <div class="phil-body reveal reveal-delay-2">
+          <p>Зарик не верит в героизм. Он верит в <strong>маленькие ежедневные действия</strong>, которые через 77 дней превращаются в человека, которого ты хочешь увидеть в зеркале.</p>
+          <p>Не 4-часовые тренировки. Не жёсткие диеты. Не «либо всё, либо ничего».</p>
+          <p><strong>5 задач в день</strong> — выполнимых, конкретных, твоих. Каждое утро в твоём Telegram. Отметил выполненные — день зачтён. Всё.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -777,16 +853,15 @@ footer{
 <!-- DAILY TASKS -->
 <section id="tasks">
   <div class="container">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start">
-      <div class="tasks-header">
-        <div class="section-label reveal">Ежедневные задачи</div>
-        <h2 class="section-title reveal reveal-delay-1">5 задач.<br>Каждый день.</h2>
-        <p class="section-sub reveal reveal-delay-2" style="margin-top:16px">
-          Не больше. Не меньше. Минимум усилий — максимум стабильности.
-          Именно поэтому это работает.
-        </p>
-      </div>
-      <div class="tasks-grid reveal reveal-delay-1">
+    <div class="tasks-header">
+      <div class="section-label reveal">Ежедневные задачи</div>
+      <h2 class="section-title reveal reveal-delay-1">5 задач.<br>Каждый день.</h2>
+      <p class="section-sub reveal reveal-delay-2">
+        Не больше. Не меньше. Минимум усилий — максимум стабильности.
+        Именно поэтому это работает.
+      </p>
+    </div>
+    <div class="tasks-grid reveal reveal-delay-1">
         <div class="task-card">
           <div class="task-emoji">💪</div>
           <div class="task-content">
@@ -809,21 +884,22 @@ footer{
             <div class="task-desc">Книга в месяц. Без давления. За 77 дней ты прочтёшь 2–3 книги.</div>
           </div>
         </div>
-        <div class="task-card">
-          <div class="task-emoji">🥗</div>
-          <div class="task-content">
-            <div class="task-title">Без фастфуда</div>
-            <div class="task-desc">Не диета — просто один день без лишнего. День за днём это меняет всё.</div>
+        <div class="tasks-bottom-row">
+          <div class="task-card">
+            <div class="task-emoji">🥗</div>
+            <div class="task-content">
+              <div class="task-title">Без фастфуда</div>
+              <div class="task-desc">Не диета — просто один день без лишнего. День за днём это меняет всё.</div>
+            </div>
+          </div>
+          <div class="task-card">
+            <div class="task-emoji">🚫</div>
+            <div class="task-content">
+              <div class="task-title">День без алкоголя</div>
+              <div class="task-desc">Ещё один маленький шаг. После 77 дней ты удивишься как много это меняет.</div>
+            </div>
           </div>
         </div>
-        <div class="task-card full">
-          <div class="task-emoji">🚫</div>
-          <div class="task-content">
-            <div class="task-title">День без алкоголя</div>
-            <div class="task-desc">Ещё один маленький шаг. После 77 дней ты удивишься как много это меняет.</div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -897,7 +973,7 @@ footer{
         <div class="stars">★★★★★</div>
         <p class="testi-text">«Прошёл 40 дней и даже не заметил как. <strong>Минус 6 кг</strong>, читаю каждый вечер — и это просто стало частью жизни. Думал что это очередная ерунда, оказалось нет.»</p>
         <div class="testi-author">
-          <div class="testi-avatar">🧔</div>
+          <div class="testi-avatar"><img src="https://i.pravatar.cc/96?img=12" alt="Алексей"></div>
           <div>
             <div class="testi-name">Алексей, 34</div>
             <div class="testi-meta">Предприниматель, Москва</div>
@@ -909,7 +985,7 @@ footer{
         <div class="stars">★★★★★</div>
         <p class="testi-text">«Я никогда не думала, что <strong>5 простых задач</strong> так изменят жизнь. Это не про спорт — это про то, как ты думаешь о себе. После 30 дней я уже другой человек.»</p>
         <div class="testi-author">
-          <div class="testi-avatar">👩</div>
+          <div class="testi-avatar"><img src="https://i.pravatar.cc/96?img=47" alt="Марина"></div>
           <div>
             <div class="testi-name">Марина, 27</div>
             <div class="testi-meta">Маркетолог, Санкт-Петербург</div>
@@ -921,7 +997,7 @@ footer{
         <div class="stars">★★★★★</div>
         <p class="testi-text">«Ставка на себя — огонь. Я поставил 3000 ₽ и просто <strong>не мог позволить себе сдаться</strong>. Получил их обратно. И ещё новую версию себя бонусом.»</p>
         <div class="testi-author">
-          <div class="testi-avatar">👨‍💼</div>
+          <div class="testi-avatar"><img src="https://i.pravatar.cc/96?img=57" alt="Дмитрий"></div>
           <div>
             <div class="testi-name">Дмитрий, 41</div>
             <div class="testi-meta">Отец двоих детей, Казань</div>
@@ -966,6 +1042,12 @@ footer{
           Начать за 1990 ₽ →
         </a>
         <div class="pricing-footnote">Оплата через Telegram · ЮКасса · Безопасно</div>
+        <div class="pricing-footnote" style="margin-top:8px">
+          Нажимая кнопку, вы принимаете условия
+          <a href="http://myeasystart.ru/zarik_oferta" style="color:var(--text2) !important;text-decoration:underline !important">Публичной оферты</a>
+          и
+          <a href="http://myeasystart.ru/zarik_privacy" style="color:var(--text2) !important;text-decoration:underline !important">Политики конфиденциальности</a>
+        </div>
       </div>
     </div>
   </div>
@@ -1041,26 +1123,33 @@ footer{
 <section id="final">
   <div class="final-bg"></div>
   <div class="container" style="position:relative">
-    <span class="final-emoji reveal">🦥</span>
-    <h2 class="final-title reveal reveal-delay-1">
-      77 дней — это<br>
-      <span>не так долго.</span>
-    </h2>
-    <p class="final-sub reveal reveal-delay-2">
-      Зато через 77 дней ты будешь смотреть на себя в зеркало и видеть человека, который сделал это.
-      Без надрыва. Маленькими шагами.
-    </p>
-    <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn final-cta reveal reveal-delay-3">
-      Начать прямо сейчас →
-    </a>
-    <div class="final-note reveal reveal-delay-4">Оплата в Telegram · 1990 ₽ · Следующий день — первые задачи</div>
+    <div class="final-inner">
+      <div class="final-text">
+        <span class="final-emoji reveal">🦥</span>
+        <h2 class="final-title reveal reveal-delay-1">
+          77 дней — это<br>
+          <span>не так долго.</span>
+        </h2>
+        <p class="final-sub reveal reveal-delay-2">
+          Зато через 77 дней ты будешь смотреть на себя в зеркало и видеть человека, который сделал это.
+          Без надрыва. Маленькими шагами.
+        </p>
+        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn final-cta reveal reveal-delay-3">
+          Начать прямо сейчас →
+        </a>
+        <div class="final-note reveal reveal-delay-4">Оплата в Telegram · 1990 ₽ · Следующий день — первые задачи</div>
+      </div>
+      <div class="final-img reveal reveal-delay-2">
+        <img src="https://static.tildacdn.com/tild6264-3965-4163-a631-666437363135/zarik_3.jpeg" alt="Зарик">
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- FOOTER -->
 <footer>
   <div class="container">
-    <div class="footer-inner">
+    <div class="footer-top">
       <div class="footer-logo">
         <span>🦥</span> Зарик
       </div>
@@ -1071,7 +1160,18 @@ footer{
         <a href="#faq" class="footer-link">FAQ</a>
         <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="footer-link" style="color:var(--green)">@Shagov77_bot</a>
       </div>
-      <div class="footer-copy">© Зарик 2025 · 77 дней к другой жизни</div>
+      <div class="footer-copy">© 2025 · 77 дней к другой жизни</div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-req">
+        ИП Круч Федор Игоревич · ИНН 244202994716 · ОГРНИП 324665800007338<br>
+        Адрес: Красноярский край, Шушенский район, пгт. Шушенское, ул. Светлая, д. 34<br>
+        <a href="mailto:fedorkruch@gmail.com">fedorkruch@gmail.com</a>
+      </div>
+      <div class="footer-legal">
+        <a href="http://myeasystart.ru/zarik_oferta">Публичная оферта</a>
+        <a href="http://myeasystart.ru/zarik_privacy">Политика конфиденциальности</a>
+      </div>
     </div>
   </div>
 </footer>
