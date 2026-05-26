@@ -48,6 +48,7 @@ def init_db():
                 abs_start                INTEGER DEFAULT 10,
                 is_active                INTEGER DEFAULT 1,
                 dropout_warning_sent_at  TEXT DEFAULT NULL,
+                is_virtual               INTEGER DEFAULT 0,
                 created_at               TEXT DEFAULT (datetime('now'))
             );
 
@@ -150,12 +151,32 @@ def init_db():
             "ALTER TABLE leads ADD COLUMN stake_choice TEXT",
             "ALTER TABLE leads ADD COLUMN invoice_sent_at TEXT",
             "ALTER TABLE leads ADD COLUMN purchased_at TEXT",
+            "ALTER TABLE users ADD COLUMN is_virtual INTEGER DEFAULT 0",
         ]
         for migration in migrations:
             try:
                 conn.execute(migration)
             except Exception:
                 pass
+
+        # Засеиваем 125 виртуальных участников (если ещё не созданы)
+        seed_virtual_users(conn, n=125)
+
+
+def seed_virtual_users(conn: sqlite3.Connection, n: int = 125):
+    """
+    Создаёт n виртуальных участников с отрицательными user_id (-1 … -n).
+    Они учитываются в счётчике для пользователей (эффект «ты 126-й»),
+    но не видны в отчёте администратора.
+    Повторный вызов безопасен: INSERT OR IGNORE.
+    """
+    for i in range(1, n + 1):
+        conn.execute("""
+            INSERT OR IGNORE INTO users
+                (user_id, username, first_name, start_date,
+                 onboarding_step, onboarding_complete, is_active, is_virtual)
+            VALUES (?, ?, ?, '2000-01-01', 'done', 1, 1, 1)
+        """, (-i, f"virtual_{i}", f"Участник {i}"))
 
 
 # ── Пользователи ──────────────────────────────────────────────
@@ -223,12 +244,21 @@ def get_user(user_id: int):
 def get_all_active_users():
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM users WHERE is_active = 1 AND onboarding_complete = 1"
+            "SELECT * FROM users WHERE is_active = 1 AND onboarding_complete = 1 AND (is_virtual = 0 OR is_virtual IS NULL)"
         ).fetchall()
 
 
 def get_user_count() -> int:
-    """Количество завершивших онбординг участников"""
+    """Количество завершивших онбординг участников (без виртуальных — для отчёта админа)"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM users WHERE onboarding_complete = 1 AND (is_virtual = 0 OR is_virtual IS NULL)"
+        ).fetchone()
+        return row["cnt"] if row else 0
+
+
+def get_user_count_with_virtual() -> int:
+    """Количество участников включая виртуальных — показывается пользователям"""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT COUNT(*) as cnt FROM users WHERE onboarding_complete = 1"
@@ -237,10 +267,10 @@ def get_user_count() -> int:
 
 
 def get_total_stake() -> int:
-    """Суммарная ставка всех участников в копейках"""
+    """Суммарная ставка всех участников в копейках (без виртуальных)"""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT SUM(stake_amount) as total FROM users WHERE onboarding_complete = 1"
+            "SELECT SUM(stake_amount) as total FROM users WHERE onboarding_complete = 1 AND (is_virtual = 0 OR is_virtual IS NULL)"
         ).fetchone()
         return row["total"] or 0
 
@@ -424,20 +454,23 @@ def get_stats(user_id: int) -> dict:
 def get_group_stats() -> dict:
     """
     Возвращает живую статистику группы для еженедельного сообщения.
-      total    — всего завершили онбординг
+      total    — всего завершили онбординг (включая виртуальных)
       active   — активны (не выбыли: не было 3+ пропущенных дней подряд)
-      dropped  — выбывшие
+      dropped  — выбывшие (только реальные пользователи)
+    Виртуальные участники всегда считаются активными и входят в total.
     """
     with get_conn() as conn:
-        users = conn.execute(
-            "SELECT user_id FROM users WHERE onboarding_complete = 1 AND is_active = 1"
+        all_users = conn.execute(
+            "SELECT user_id, is_virtual FROM users WHERE onboarding_complete = 1 AND is_active = 1"
         ).fetchall()
 
-    total = len(users)
+    real_users = [r for r in all_users if not r["is_virtual"]]
+
+    total = len(all_users)
     dropped = 0
 
     today = date.today()
-    for row in users:
+    for row in real_users:
         uid = row["user_id"]
         user = get_user(uid)
         if not user:
