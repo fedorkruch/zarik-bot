@@ -1375,16 +1375,18 @@ async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_id = int(args[0]) if args and args[0].isdigit() else update.effective_user.id
 
     if target_id in TEST_USER_IDS:
+        # Сначала гарантируем наличие строки в users (INSERT OR IGNORE)
+        # — иначе UPDATE в reset/save_payment ничего не сделает
+        db.register_user(target_id, "", "Тест")
         # Мягкий сброс: история удаляется, оплата сохраняется
         db.reset_user_keep_payment(target_id)
-        # Убеждаемся что оплата всё ещё проставлена
-        if not db.is_payment_confirmed(target_id):
-            db.save_payment(
-                user_id=target_id,
-                charge_id=f"test_{target_id}",
-                participation_fee=0,
-                stake_amount=0,
-            )
+        # Гарантируем что оплата проставлена
+        db.save_payment(
+            user_id=target_id,
+            charge_id=f"test_{target_id}",
+            participation_fee=0,
+            stake_amount=0,
+        )
         # Автоматически запускаем онбординг для этого пользователя
         try:
             await context.bot.send_message(
