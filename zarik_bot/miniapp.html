@@ -157,7 +157,6 @@ body{
   border:none;border-radius:14px;padding:15px;cursor:pointer;
   transition:opacity .15s;-webkit-tap-highlight-color:transparent}
 .copy-btn:active{opacity:.8}
-.hashtags{text-align:center;font-size:11px;color:var(--dim);padding:0 16px 8px}
 /* Loader */
 #loader{position:fixed;inset:0;background:#0f0f13;
   display:flex;align-items:center;justify-content:center;
@@ -307,7 +306,6 @@ body{
   <div class="slabel">ТЕКСТ ДЛЯ СОЦ. СЕТЕЙ</div>
   <div id="sh-options"></div>
   <button class="copy-btn" onclick="copyText()">Копировать текст</button>
-  <div class="hashtags">#77Soft &nbsp;#77SoftRU &nbsp;#ЗарикОдобряет</div>
 </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -580,7 +578,8 @@ function renderShare() {
   if (!STATE) return;
   const s = STATE;
   document.getElementById('sh-day').textContent   = s.day || '—';
-  document.getElementById('sh-dayof').textContent = 'из 77 · ' + (s.pct_num || 0) + '% пути';
+  const pctLabel = (s.day === 1 && (s.pct_num || 0) === 0) ? 'чуть меньше процента' : (s.pct_num || 0) + '%';
+  document.getElementById('sh-dayof').textContent = 'из 77 · ' + pctLabel + ' пути';
   document.getElementById('sh-bar').style.width   = (s.pct_num || 0) + '%';
   const shPct = calcDailyPlanetPct(s.completed_tasks, s.days_done);
   document.getElementById('sh-planet').textContent =

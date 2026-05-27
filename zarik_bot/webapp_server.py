@@ -374,12 +374,13 @@ def build_full_state(user_id: int) -> dict:
 
     # Тексты для шаринга
     n_done = len(completed)
+    pct_label = "чуть меньше процента" if (day == 1 and pct_num == 0) else f"{pct_num}%"
     share_texts = []
     if day > 0:
         share_texts = [
-            f"День {day}/77 🦥 Иду к {percentile} планеты. Сегодня — {n_done}/5 задач. Кто ещё в игре?",
-            f"{pct_num}% пути пройдено в #77SoftChallenge. Без алкоголя, со спортом и книгами. Ленивец гордится. 🦥",
-            f"Факт: только 6% людей читают 10 страниц в день. Я — один из них уже {day} дней подряд. #77Soft",
+            f"День {day}/77 🦥 Иду к {percentile} планеты. Сегодня — {n_done}/5 задач. Кто ещё в игре? t.me/shagov77_bot",
+            f"{pct_label} пути пройдено. Без алкоголя, со спортом и книгами. Ленивец гордится. 🦥 t.me/shagov77_bot",
+            f"Факт: только 6% людей читают 10 страниц в день. Я — один из них уже {day} дней подряд. t.me/shagov77_bot",
         ]
 
     return {
