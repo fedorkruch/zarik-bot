@@ -408,6 +408,28 @@ def complete_task(user_id: int, day_number: int, task_index: int):
         """, (user_id, day_number, task_index))
 
 
+def toggle_task(user_id: int, day_number: int, task_index: int) -> bool:
+    """Переключает задачу: если выполнена — снимает отметку, если нет — ставит.
+    Возвращает True если задача теперь отмечена выполненной."""
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT id FROM task_completions WHERE user_id=? AND day_number=? AND task_index=?",
+            (user_id, day_number, task_index)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "DELETE FROM task_completions WHERE user_id=? AND day_number=? AND task_index=?",
+                (user_id, day_number, task_index)
+            )
+            return False
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO task_completions (user_id, day_number, task_index) VALUES (?,?,?)",
+                (user_id, day_number, task_index)
+            )
+            return True
+
+
 def is_day_complete(user_id: int, day_number: int) -> bool:
     """День засчитывается если отмечены все 5 задач"""
     return len(get_completed_tasks(user_id, day_number)) >= TASKS_PER_DAY
@@ -942,6 +964,29 @@ def reset_user(user_id: int):
         conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_photos WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+
+
+def reset_user_keep_payment(user_id: int):
+    """Сброс истории для «постоянных» тест-пользователей.
+    Удаляет прогресс и возвращает в начало онбординга,
+    НО сохраняет payment_charge_id — повторная оплата не требуется."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM task_completions WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_photos WHERE user_id = ?", (user_id,))
+        conn.execute("""UPDATE users SET
+                onboarding_step     = 'payment',
+                onboarding_complete = 0,
+                start_date          = '2099-01-01',
+                dropout_warning_sent_at = NULL,
+                share_photos        = NULL,
+                pushup_start        = 10,
+                squat_start         = 10,
+                abs_start           = 10,
+                is_active           = 1
+               WHERE user_id = ?""",
+            (user_id,)
+        )
 
 
 def reset_to_onboarding(user_id: int):

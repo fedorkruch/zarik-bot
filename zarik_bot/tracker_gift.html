@@ -158,6 +158,17 @@ input:focus{outline:none;border-color:var(--accent)}
 .sval{font-size:22px;font-weight:800;line-height:1}
 .slbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.4px}
 .sval.green{color:var(--done)}.sval.fire{color:var(--warn)}.sval.purple{color:var(--accent)}
+
+/* ── Multi-goal selector ── */
+.goal-bar{display:flex;gap:6px;padding:8px var(--p) 6px;border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.goal-bar::-webkit-scrollbar{display:none}
+.goal-chip{background:var(--card2);border:1.5px solid var(--border);border-radius:20px;padding:5px 13px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;flex-shrink:0;font-family:inherit;white-space:nowrap;transition:all .15s;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.goal-chip.active{border-color:var(--accent);color:var(--accent);background:#1a1438}
+.goal-chip:active{opacity:.7}
+.goal-add-chip{background:none;border:1.5px dashed var(--border);border-radius:20px;padding:5px 13px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;font-family:inherit;white-space:nowrap;transition:all .15s}
+.goal-add-chip:active{border-color:var(--accent);color:var(--accent)}
+/* Setup multi: goal counter pill */
+.setup-count{font-size:11px;color:var(--muted);text-align:center;margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -166,8 +177,9 @@ input:focus{outline:none;border-color:var(--accent)}
 <div id="setup">
   <div class="setup-hero">
     <img id="si0" src="" alt="Зарик">
-    <div class="setup-h">Трекер целей</div>
-    <div class="setup-sub">Настрой за 1 минуту — и начни путь к своей цели</div>
+    <div class="setup-count" id="setup-count"></div>
+    <div class="setup-h" id="setup-title">Трекер целей</div>
+    <div class="setup-sub" id="setup-sub">Настрой за 1 минуту — и начни путь к своей цели</div>
   </div>
   <div class="field">
     <label>Моя цель</label>
@@ -203,6 +215,9 @@ input:focus{outline:none;border-color:var(--accent)}
   </div>
   <div class="hdr-pill" id="hdr-day">День 1</div>
 </div>
+
+<!-- GOAL SELECTOR BAR -->
+<div class="goal-bar" id="goal-bar" style="display:none"></div>
 
 <!-- TODAY -->
 <div class="screen active" id="sc-today">
@@ -285,11 +300,6 @@ input:focus{outline:none;border-color:var(--accent)}
     <div id="t-tasks"></div>
   </div>
 
-  <!-- Note -->
-  <div class="card">
-    <div class="card-title">Заметка дня</div>
-    <textarea id="t-note" rows="3" placeholder="Как прошёл день? Что получилось, что было сложно?"></textarea>
-  </div>
 </div>
 
 <!-- CALENDAR -->
@@ -324,6 +334,12 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="card-title">По неделям</div>
     <div id="ss-weeks" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
+  <!-- Заметка дня -->
+  <div class="card">
+    <div class="card-title">Заметка дня</div>
+    <textarea id="t-note" rows="3" placeholder="Как прошёл день? Что получилось, что было сложно?"></textarea>
+  </div>
+
   <a class="sloth-hero" href="https://t.me/Shagov77_bot" target="_blank" style="margin-top:4px">
     <img class="sloth-av" id="si2" src="" alt="Зарик">
     <div>
@@ -337,7 +353,7 @@ input:focus{outline:none;border-color:var(--accent)}
 <!-- SETTINGS -->
 <div class="screen" id="sc-settings">
   <div class="card">
-    <div class="card-title">Цель</div>
+    <div class="card-title">Активная цель</div>
     <div style="font-size:16px;font-weight:700;margin-bottom:4px" id="set-goal"></div>
     <div style="font-size:13px;color:var(--muted)" id="set-info"></div>
   </div>
@@ -345,7 +361,9 @@ input:focus{outline:none;border-color:var(--accent)}
     <div class="card-title">Задачи</div>
     <div id="set-tasks"></div>
   </div>
-  <button class="btn btn-danger" id="set-reset">Сбросить трекер</button>
+  <button class="btn btn-secondary" id="set-add-goal" style="display:none">+ Добавить ещё цель</button>
+  <button class="btn btn-danger" id="set-del-goal">Удалить текущую цель</button>
+  <button class="btn btn-danger" id="set-reset" style="background:#1a0f0f;border-color:#6b3333;color:#e05252">Сбросить все данные</button>
   <div style="height:10px"></div>
 </div>
 
@@ -393,19 +411,42 @@ const S = {
   rm(k){localStorage.removeItem('ztrk_'+k)}
 };
 
-let cfg = S.get('cfg');
-let data = S.get('data') || {c:{},n:{}};
+// ── Миграция старого формата (одна цель) в новый (массив целей) ──
+(function migrate(){
+  const oldCfg = S.get('cfg');
+  if(oldCfg && !S.get('goals')){
+    const oldData = S.get('data') || {c:{},n:{}};
+    S.set('goals',[oldCfg]);
+    S.set('gdata',[{c:oldData.c||{},n:oldData.n||{}}]);
+    S.set('aidx',0);
+    S.rm('cfg'); S.rm('data');
+  }
+})();
+
+let goals = S.get('goals') || [];   // [{goal,days,start,tasks}, ...]
+let gdata = S.get('gdata') || [];   // [{c:{dayKey:[idx,...]}, n:{dayKey:note}}, ...]
+let aidx  = Math.min(S.get('aidx')||0, Math.max(goals.length-1,0));
+
+// Флаг: какую цель сейчас редактирует setup-экран
+let _setupIdx = -1;  // -1 = новая цель
+
+function cfg(){  return goals[aidx] || null; }
+function data(){ return gdata[aidx] || {c:{},n:{}}; }
+function saveGoals(){ S.set('goals',goals); S.set('gdata',gdata); S.set('aidx',aidx); }
+
+// Обратная совместимость — старые функции saveData()
+function saveData(){ saveGoals(); }
 
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function today(){return new Date().toISOString().slice(0,10)}
 function dk(n){return String(n)}
 function curDay(){
-  if(!cfg)return 1;
-  const d=Math.floor((new Date(today())-new Date(cfg.start))/86400000)+1;
-  return Math.min(Math.max(d,1),cfg.days);
+  const c=cfg(); if(!c)return 1;
+  const d=Math.floor((new Date(today())-new Date(c.start))/86400000)+1;
+  return Math.min(Math.max(d,1),c.days);
 }
-function isDone(d){const c=data.c[dk(d)]||[];return cfg&&c.length>=cfg.tasks.length&&cfg.tasks.length>0}
-function isPartial(d){const c=data.c[dk(d)]||[];return c.length>0&&!isDone(d)}
+function isDone(d){const c=cfg();const dt=data();const comp=dt.c[dk(d)]||[];return c&&comp.length>=c.tasks.length&&c.tasks.length>0}
+function isPartial(d){const dt=data();const comp=dt.c[dk(d)]||[];return comp.length>0&&!isDone(d)}
 function doneDays(){let n=0;for(let i=1;i<=curDay();i++)if(isDone(i))n++;return n;}
 function streak(){
   const cur=curDay();let s=0;
@@ -418,12 +459,11 @@ function bestStreak(){
   return best;
 }
 function totalPct(){
-  const cur=curDay();if(!cfg||cur===0||cfg.tasks.length===0)return 0;
-  let done=0,total=0;
-  for(let d=1;d<=cur;d++){total+=cfg.tasks.length;done+=(data.c[dk(d)]||[]).length;}
+  const c=cfg();const cur=curDay();if(!c||cur===0||c.tasks.length===0)return 0;
+  const dt=data();let done=0,total=0;
+  for(let d=1;d<=cur;d++){total+=c.tasks.length;done+=(dt.c[dk(d)]||[]).length;}
   return total>0?Math.round(done/total*100):0;
 }
-function saveData(){S.set('data',data);}
 
 const MOTIVS=[
   {i:"🦥",t:"Начни с первого шага — <strong>он самый важный</strong>"},
@@ -474,14 +514,17 @@ function setSlothImgs(){
 
 // ── RENDER TODAY ──
 function renderToday(){
-  if(!cfg)return;
+  const c=cfg(); if(!c)return;
+  const dt=data();
   const day=curDay(), dd=doneDays(), str=streak(), pct=totalPct();
-  const comp=new Set(data.c[dk(day)]||[]);
-  const tDone=comp.size, tTotal=cfg.tasks.length;
+  const comp=new Set(dt.c[dk(day)]||[]);
+  const tDone=comp.size, tTotal=c.tasks.length;
 
-  $('hdr-goal').textContent=cfg.goal||'Трекер целей';
+  $('hdr-goal').textContent=c.goal||'Трекер целей';
   $('hdr-date').textContent=today();
-  $('hdr-day').textContent='День '+day+' / '+cfg.days;
+  $('hdr-day').textContent='День '+day+' / '+c.days;
+
+  renderGoalBar();
 
   // Ring 1 — today tasks
   const r1=tTotal>0?tDone/tTotal:0;
@@ -491,19 +534,19 @@ function renderToday(){
   $('r1-bot').textContent=tDone+' из '+tTotal;
 
   // Ring 2 — journey days done
-  const r2=cfg.days>0?dd/cfg.days:0;
+  const r2=c.days>0?dd/c.days:0;
   $('r2-fill').style.strokeDashoffset=CIRC*(1-r2);
   $('r2-num').textContent=dd;
   $('r2-sub').textContent='дней ✓';
-  $('r2-bot').textContent='из '+cfg.days+' дней';
+  $('r2-bot').textContent='из '+c.days+' дней';
 
   // Motivation
   let m=tDone>=tTotal&&tTotal>0 ? DONE_MOTIVS[Math.floor(Date.now()/3600000)%DONE_MOTIVS.length] : MOTIVS[Math.floor((day+str)%MOTIVS.length)];
   $('m-icon').textContent=m.i; $('m-text').innerHTML=m.t;
 
   // Progress bar — day/total (day 1 already visible)
-  const dayPct=Math.round(day/cfg.days*100);
-  $('p-days').textContent='День '+day+' из '+cfg.days;
+  const dayPct=Math.round(day/c.days*100);
+  $('p-days').textContent='День '+day+' из '+c.days;
   $('p-pct').textContent=dayPct+'%';
   $('p-fill').style.width=dayPct+'%';
 
@@ -514,10 +557,10 @@ function renderToday(){
     if(line)$(line).classList.toggle('hit',hit);
   });
 
-  // Tasks list
+  // Tasks list — поддержка снятия галочки
   const tEl=$('t-tasks');
   if(!tTotal){tEl.innerHTML='<div style="color:var(--muted);font-size:14px;text-align:center;padding:12px 0">Задачи не добавлены</div>';return;}
-  tEl.innerHTML=cfg.tasks.map((t,i)=>`
+  tEl.innerHTML=c.tasks.map((t,i)=>`
     <div class="task-item ${comp.has(i)?'done':''}" data-i="${i}">
       <div class="chk"></div>
       <div class="task-lbl">${esc(t)}</div>
@@ -525,24 +568,21 @@ function renderToday(){
   tEl.querySelectorAll('.task-item').forEach(el=>{
     el.addEventListener('click',()=>{
       const i=parseInt(el.dataset.i);
-      const c=new Set(data.c[dk(day)]||[]);
-      if(c.has(i))c.delete(i);
-      else{c.add(i);if(c.size===tTotal){setTimeout(confetti,200);toast('Все задачи выполнены! 🎉');}}
-      data.c[dk(day)]=[...c];saveData();renderToday();
+      const d2=data();
+      const s=new Set(d2.c[dk(day)]||[]);
+      if(s.has(i))s.delete(i);
+      else{s.add(i);if(s.size===tTotal){setTimeout(confetti,200);toast('Все задачи выполнены! 🎉');}}
+      gdata[aidx].c[dk(day)]=[...s];saveGoals();renderToday();
     });
   });
-
-  const nEl=$('t-note');
-  nEl.value=data.n[dk(day)]||'';
-  nEl.oninput=()=>{data.n[dk(day)]=nEl.value;saveData();};
 }
 
 // ── CALENDAR ──
 function renderCal(){
-  if(!cfg)return;
+  const c=cfg(); if(!c)return;
   const cur=curDay(), grid=$('cal-grid');
   grid.innerHTML='';
-  for(let d=1;d<=cfg.days;d++){
+  for(let d=1;d<=c.days;d++){
     const el=document.createElement('div');
     el.className='ccell'+(d>cur?' future':'')+(d===cur?' today':'');
     if(d<=cur){if(isDone(d))el.classList.add('done');else if(isPartial(d))el.classList.add('partial');}
@@ -554,51 +594,64 @@ function renderCal(){
 
 // ── STATS ──
 function renderStats(){
-  if(!cfg)return;
+  const c=cfg(); if(!c)return;
+  const dt=data();
   const cur=curDay();
   $('ss-done').textContent=doneDays();
   $('ss-streak').textContent=streak();
   $('ss-best').textContent=bestStreak();
-  const tots=cfg.tasks.map(()=>0), dns=cfg.tasks.map(()=>0);
+  const tots=c.tasks.map(()=>0), dns=c.tasks.map(()=>0);
   for(let d=1;d<=cur;d++){
-    (data.c[dk(d)]||[]).forEach(i=>{if(i<cfg.tasks.length)dns[i]++;});
-    cfg.tasks.forEach((_,i)=>tots[i]++);
+    (dt.c[dk(d)]||[]).forEach(i=>{if(i<c.tasks.length)dns[i]++;});
+    c.tasks.forEach((_,i)=>tots[i]++);
   }
-  $('ss-tasks').innerHTML=cfg.tasks.map((t,i)=>{
+  $('ss-tasks').innerHTML=c.tasks.map((t,i)=>{
     const p=tots[i]>0?Math.round(dns[i]/tots[i]*100):0;
     return `<div class="tbar"><div class="tbar-row"><span>${esc(t)}</span><span class="tbar-pct">${dns[i]}/${tots[i]} · ${p}%</span></div><div class="tbar-bg"><div class="tbar-fill" style="width:${p}%"></div></div></div>`;
   }).join('');
-  const wc=Math.ceil(cfg.days/7);
+  const wc=Math.ceil(c.days/7);
   let wh='';
   for(let w=1;w<=wc;w++){
-    const ws=(w-1)*7+1,we=Math.min(w*7,cfg.days);
+    const ws=(w-1)*7+1,we=Math.min(w*7,c.days);
     let wd=0,wt=0;
     for(let d=ws;d<=we&&d<=cur;d++){wt++;if(isDone(d))wd++;}
     const wp=wt>0?Math.round(wd/wt*100):0;
     wh+=`<div style="display:flex;align-items:center;gap:10px;font-size:13px"><span style="color:var(--muted);min-width:66px">Неделя ${w}</span><div class="tbar-bg" style="flex:1;height:6px"><div class="tbar-fill" style="width:${wp}%"></div></div><span style="min-width:34px;text-align:right;color:var(--muted)">${wp}%</span></div>`;
   }
   $('ss-weeks').innerHTML=wh||'<span style="color:var(--muted);font-size:14px">Нет данных</span>';
+  // Заметка дня — привязана к активной цели
+  const nEl=$('t-note');
+  nEl.value=dt.n[dk(cur)]||'';
+  nEl.oninput=()=>{gdata[aidx].n[dk(cur)]=nEl.value;saveGoals();};
 }
 
 // ── SETTINGS ──
 function renderSettings(){
-  if(!cfg)return;
-  $('set-goal').textContent=cfg.goal||'—';
-  $('set-info').textContent=cfg.days+' дней · начат '+cfg.start;
-  $('set-tasks').innerHTML=cfg.tasks.map((t,i)=>`<div class="set-task"><span style="color:var(--muted);font-size:12px;min-width:20px">${i+1}.</span><span>${esc(t)}</span></div>`).join('');
+  const c=cfg(); if(!c)return;
+  $('set-goal').textContent=c.goal||'—';
+  $('set-info').textContent=c.days+' дней · начат '+c.start+' · цель '+(aidx+1)+' из '+goals.length;
+  $('set-tasks').innerHTML=c.tasks.map((t,i)=>`<div class="set-task"><span style="color:var(--muted);font-size:12px;min-width:20px">${i+1}.</span><span>${esc(t)}</span></div>`).join('');
+  $('set-add-goal').style.display = goals.length < 5 ? 'block' : 'none';
 }
-// export removed
-if(false){
-  const b=new Blob([JSON.stringify({cfg,data},null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tracker.json';a.click();
+$('set-add-goal').onclick=()=>openSetup(-1);
+$('set-del-goal').onclick=()=>{
+  if(goals.length<=1){
+    if(confirm('Это последняя цель. Удалить и начать заново?')){S.rm('goals');S.rm('gdata');S.rm('aidx');location.reload();}
+    return;
+  }
+  if(!confirm('Удалить текущую цель «'+(cfg()?.goal||'')+'»?'))return;
+  goals.splice(aidx,1); gdata.splice(aidx,1);
+  aidx=Math.min(aidx,goals.length-1);
+  saveGoals(); location.reload();
 };
-$('set-reset').onclick=()=>{if(confirm('Сбросить трекер? Все данные будут удалены.')){S.rm('cfg');S.rm('data');location.reload();}};
+$('set-reset').onclick=()=>{if(confirm('Сбросить ВСЕ данные трекера?')){S.rm('goals');S.rm('gdata');S.rm('aidx');location.reload();}};
 
 // ── MODAL ──
 function openModal(d){
-  const comp=new Set(data.c[dk(d)]||[]);
+  const c=cfg();const dt=data();
+  const comp=new Set(dt.c[dk(d)]||[]);
   $('modal-ttl').textContent='День '+d+(isDone(d)?' ✅':'');
-  $('modal-body').innerHTML=cfg.tasks.map((t,i)=>`<div class="modal-task"><span style="font-size:16px">${comp.has(i)?'✅':'⬜'}</span><span style="${comp.has(i)?'color:var(--muted);text-decoration:line-through':''}">${esc(t)}</span></div>`).join('')+(data.n[dk(d)]?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">📝 ${esc(data.n[dk(d)])}</div>`:'');
+  $('modal-body').innerHTML=(c?c.tasks:[]).map((t,i)=>`<div class="modal-task"><span style="font-size:16px">${comp.has(i)?'✅':'⬜'}</span><span style="${comp.has(i)?'color:var(--muted);text-decoration:line-through':''}">${esc(t)}</span></div>`).join('')+(dt.n[dk(d)]?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">📝 ${esc(dt.n[dk(d)])}</div>`:'');
   $('modal').classList.add('active');
 }
 $('modal-x').onclick=()=>$('modal').classList.remove('active');
@@ -643,17 +696,58 @@ $('s-start').onclick=()=>{
   const goal=$('s-goal').value.trim()||'Моя цель';
   const tasks=[...$('s-tasks').querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean);
   if(!tasks.length){toast('Добавь хотя бы одну задачу');return;}
-  cfg={goal,days:setupDays,start:today(),tasks};
-  data={c:{},n:{}};
-  S.set('cfg',cfg);S.set('data',data);
+  const newCfg={goal,days:setupDays,start:today(),tasks};
+  if(_setupIdx>=0 && _setupIdx<goals.length){
+    // редактирование существующей цели (пока не используется, но на будущее)
+    goals[_setupIdx]=newCfg;
+    aidx=_setupIdx;
+  } else {
+    // новая цель
+    goals.push(newCfg);
+    gdata.push({c:{},n:{}});
+    aidx=goals.length-1;
+  }
+  saveGoals();
   $('setup').classList.remove('active');
   renderToday();
 };
+
+function openSetup(idx){
+  _setupIdx=idx;
+  const isNew=idx<0||idx>=goals.length;
+  $('setup-count').textContent=isNew?(goals.length>0?`Добавляешь цель ${goals.length+1} из 5`:''):'';
+  $('setup-title').textContent=isNew?'Новая цель':'Редактировать цель';
+  $('setup-sub').textContent=isNew?'Настрой за 1 минуту — и начни путь к своей цели':'Измени параметры цели';
+  $('s-goal').value=isNew?'':(goals[idx]?.goal||'');
+  $('s-tasks').innerHTML='';
+  const existTasks=isNew?['','','']:(goals[idx]?.tasks||['','','']);
+  existTasks.forEach(t=>addTaskRow(t));
+  setupDays=isNew?77:(goals[idx]?.days||77);
+  document.querySelectorAll('.dopt').forEach(x=>{x.classList.toggle('sel',parseInt(x.dataset.d)===setupDays)});
+  $('setup').classList.add('active');
+}
+
+function renderGoalBar(){
+  const bar=$('goal-bar');
+  if(goals.length<=1){bar.style.display='none';return;}
+  bar.style.display='flex';
+  let html=goals.map((g,i)=>`<button class="goal-chip${i===aidx?' active':''}" onclick="switchGoal(${i})">${esc(g.goal||('Цель '+(i+1)))}</button>`).join('');
+  if(goals.length<5) html+=`<button class="goal-add-chip" onclick="openSetup(-1)">+ Цель</button>`;
+  bar.innerHTML=html;
+}
+
+function switchGoal(i){
+  if(i===aidx)return;
+  aidx=i;
+  saveGoals();
+  renderToday();
+}
+
 addTaskRow('');addTaskRow('');addTaskRow('');
 
 // ── INIT ──
 setSlothImgs();
-if(!cfg){$('setup').classList.add('active');}
+if(!goals.length){openSetup(-1);}
 else{renderToday();}
 
 // ── PWA: Service Worker ──

@@ -54,6 +54,9 @@ WEBAPP_URL        = os.environ.get("WEBAPP_URL", "")   # https://xxx.up.railway.
 MAIN_MENU         = main_menu(WEBAPP_URL)              # ← собирается с WebApp-кнопкой если URL задан
 TOTAL_DAYS        = 77
 BEFORE_EXAMPLE    = Path(__file__).parent / "before_example.jpg"   # пример фото «до» для онбординга
+HAPPY_IMG         = Path(__file__).parent / "Happy.png"
+NORM_IMG          = Path(__file__).parent / "Norm.png"
+SAD_IMG           = Path(__file__).parent / "Sad.png"
 # Тест-пользователи: обходят проверку оплаты и сбрасываются при каждом /start
 # Загружаем из env — никаких ID в репозитории
 _test_ids_raw     = os.environ.get("TEST_USER_IDS", "")
@@ -67,6 +70,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _last_start: dict[int, float] = {}
+
+
+def get_mood_image(completed_count: int) -> Path:
+    """Возвращает путь к картинке настроения: happy/norm/sad."""
+    if completed_count >= 5:
+        return HAPPY_IMG
+    elif completed_count > 0:
+        return NORM_IMG
+    else:
+        return SAD_IMG
+
+
+async def send_mood_message(bot, chat_id: int, text: str, completed_count: int,
+                             parse_mode: str | None = None):
+    """Отправляет сообщение с картинкой-настроением (happy/norm/sad)."""
+    img_path = get_mood_image(completed_count)
+    try:
+        if img_path.exists():
+            with open(img_path, "rb") as f:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=f,
+                    caption=text,
+                    parse_mode=parse_mode,
+                )
+            return
+    except Exception:
+        pass
+    # Фоллбек: просто текст
+    await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
 
 
 def make_miniapp_url(user_id: int) -> str:
@@ -812,9 +845,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=all_done_keyboard(active_tab="tasks")
         )
         evening_text = ct.get_evening(day, all_done=True)
-        await query.message.reply_text(
+        await send_mood_message(
+            context.bot, user_id,
             f"{evening_text}\n\n<i>День {day} засчитан! 🎉</i>",
-            parse_mode=ParseMode.HTML
+            completed_count=5,
+            parse_mode=ParseMode.HTML,
         )
         if day == TOTAL_DAYS:
             await query.message.reply_text(ct.FINAL_MESSAGE, parse_mode=ParseMode.MARKDOWN)
@@ -828,7 +863,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         return
 
-    # ── Отметка задач ─────────────────────────────────────────
+    # ── Отметка задач (с поддержкой снятия галочки) ──────────
     if data.startswith("task:"):
         _, day_str, task_str = data.split(":")
         day        = int(day_str)
@@ -840,7 +875,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await query.answer()
-        db.complete_task(user_id, day, task_index)
+        now_done = db.toggle_task(user_id, day, task_index)  # True = задача теперь отмечена
         completed = db.get_completed_tasks(user_id, day)
 
         if db.has_dropout_warning(user_id):
@@ -855,16 +890,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=all_done_keyboard(active_tab="tasks")
             )
             evening_text = ct.get_evening(day, all_done=True)
-            await query.message.reply_text(
+            await send_mood_message(
+                context.bot, user_id,
                 f"{evening_text}\n\n<i>День {day} засчитан! 🎉</i>",
-                parse_mode=ParseMode.HTML
+                completed_count=5,
+                parse_mode=ParseMode.HTML,
             )
-
             if day == TOTAL_DAYS:
                 await query.message.reply_text(
                     ct.FINAL_MESSAGE, parse_mode=ParseMode.MARKDOWN
                 )
-
             stats = db.get_stats(user_id)
             new_achievements = ct.check_achievements(stats["days_completed"])
             for ach_id in new_achievements:
@@ -1091,10 +1126,11 @@ async def job_afternoon(context: ContextTypes.DEFAULT_TYPE):
             completed = db.get_completed_tasks(user["user_id"], day)
             all_done  = len(completed) >= 5
 
-            # 1. Умное дневное послание (текст отдельно)
-            await context.bot.send_message(
-                chat_id=user["user_id"],
-                text=ct.get_afternoon_smart(day, completed),
+            # 1. Умное дневное послание с картинкой настроения
+            await send_mood_message(
+                context.bot, user["user_id"],
+                ct.get_afternoon_smart(day, completed),
+                completed_count=len(completed),
             )
             # 2. Трекер отдельным сообщением если не все выполнены
             if not all_done:
@@ -1125,10 +1161,11 @@ async def job_evening(context: ContextTypes.DEFAULT_TYPE):
             completed = db.get_completed_tasks(user["user_id"], day)
             all_done  = len(completed) >= 5
 
-            # Умное вечернее послание с учётом незакрытых задач
-            await context.bot.send_message(
-                chat_id=user["user_id"],
-                text=ct.get_evening_smart(day, completed),
+            # Умное вечернее послание с картинкой настроения
+            await send_mood_message(
+                context.bot, user["user_id"],
+                ct.get_evening_smart(day, completed),
+                completed_count=len(completed),
             )
             # Затем экран задач если не все выполнены
             if not all_done:
@@ -1336,8 +1373,35 @@ async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     args      = context.args
     target_id = int(args[0]) if args and args[0].isdigit() else update.effective_user.id
-    db.reset_user(target_id)
-    await update.message.reply_text(f"🛠 Пользователь {target_id} сброшен.")
+
+    if target_id in TEST_USER_IDS:
+        # Мягкий сброс: история удаляется, оплата сохраняется
+        db.reset_user_keep_payment(target_id)
+        # Убеждаемся что оплата всё ещё проставлена
+        if not db.is_payment_confirmed(target_id):
+            db.save_payment(
+                user_id=target_id,
+                charge_id=f"test_{target_id}",
+                participation_fee=0,
+                stake_amount=0,
+            )
+        # Автоматически запускаем онбординг для этого пользователя
+        try:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text=WELCOME_TEXT,
+                reply_markup=welcome_keyboard(),
+            )
+            db.set_onboarding_step(target_id, "welcome")
+        except Exception as e:
+            logger.warning(f"reset_user: не смог отправить /start для {target_id}: {e}")
+        await update.message.reply_text(
+            f"🛠 Тест-пользователь {target_id} сброшен (оплата сохранена).\n"
+            f"✅ Стартовое сообщение отправлено."
+        )
+    else:
+        db.reset_user(target_id)
+        await update.message.reply_text(f"🛠 Пользователь {target_id} полностью сброшен.")
 
 
 async def cmd_grant(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -219,6 +219,12 @@ body{
     <div class="done-sub">Все 5 задач выполнены. Так держать 💪</div>
   </div>
 
+  <!-- Картинка настроения: happy / norm / sad -->
+  <div style="border-radius:14px;overflow:hidden">
+    <img id="mood-img" src="" alt="" data-mood=""
+         style="display:none;width:100%;border-radius:14px;object-fit:cover">
+  </div>
+
   <div class="card">
     <div class="tasks-hdr-row">
       <span class="tasks-title">Задачи на сегодня</span>
@@ -485,13 +491,28 @@ function renderMain() {
         '<div class="task-name ' + (isDone ? 'done' : '') + '">' + t.icon + ' ' + t.name + '</div>' +
         (sub ? '<div class="task-sub">' + sub + '</div>' : '') +
       '</div>';
-    if (!isDone) row.addEventListener('click', () => toggleTask(i));
+    // Галочку можно и поставить, и снять
+    row.addEventListener('click', () => toggleTask(i));
     wrap.appendChild(row);
   });
+  // Обновляем картинку настроения
+  updateMoodImg(done);
+}
+
+function updateMoodImg(done) {
+  const img = document.getElementById('mood-img');
+  if (!img) return;
+  const name = done >= 5 ? 'happy' : done > 0 ? 'norm' : 'sad';
+  const newSrc = '/img/' + name;
+  if (img.dataset.mood !== name) {
+    img.dataset.mood = name;
+    img.src = newSrc;
+    img.style.display = 'block';
+  }
 }
 
 async function toggleTask(idx) {
-  if (!STATE || STATE.all_tasks_done) return;
+  if (!STATE) return;
   if (tg) tg.HapticFeedback?.impactOccurred('medium');
   try {
     const res = await api('POST', '/api/task', { task_index: idx });

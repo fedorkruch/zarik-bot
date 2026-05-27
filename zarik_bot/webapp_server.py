@@ -32,6 +32,9 @@ _IS_DEV           = os.environ.get("ENV", "production").lower() != "production"
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
+HAPPY_IMG           = Path(__file__).parent / "Happy.png"
+NORM_IMG            = Path(__file__).parent / "Norm.png"
+SAD_IMG             = Path(__file__).parent / "Sad.png"
 
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 
@@ -516,7 +519,7 @@ async def handle_task(request: web.Request) -> web.Response:
         if task_index not in range(5):
             return web.json_response({"error": "invalid task"}, status=400)
         day = db.get_current_day(uid)
-        db.complete_task(uid, day, task_index)
+        db.toggle_task(uid, day, task_index)   # поддерживает и установку, и снятие галочки
         completed_set = db.get_completed_tasks(uid, day)
         # Синхронизируем трекер-сообщение в Telegram
         await _edit_tracker_keyboard(uid, day, completed_set)
@@ -524,6 +527,17 @@ async def handle_task(request: web.Request) -> web.Response:
     except Exception as e:
         logger.exception(f"task error for {uid}")
         return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_mood_img(request: web.Request) -> web.Response:
+    """Отдаёт картинку настроения: /img/happy | /img/norm | /img/sad"""
+    name = request.match_info.get("name", "norm")
+    paths = {"happy": HAPPY_IMG, "norm": NORM_IMG, "sad": SAD_IMG}
+    img_path = paths.get(name, NORM_IMG)
+    if img_path.exists():
+        return web.Response(body=img_path.read_bytes(), content_type="image/png",
+                            headers={"Cache-Control": "public, max-age=86400"})
+    return web.Response(status=404)
 
 
 async def handle_close_day(request: web.Request) -> web.Response:
@@ -635,6 +649,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/task",           handle_task)
     app.router.add_post("/api/close",          handle_close_day)
     app.router.add_post("/api/mode",           handle_set_mode)
+    app.router.add_get("/img/{name}",          handle_mood_img)
     return app
 
 
