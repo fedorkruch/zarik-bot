@@ -374,7 +374,7 @@ def build_full_state(user_id: int) -> dict:
 
     # Тексты для шаринга
     n_done = len(completed)
-    pct_label = "чуть меньше процента" if (day == 1 and pct_num == 0) else f"{pct_num}%"
+    pct_label = "Чуть меньше процента" if (day == 1 and pct_num == 0) else f"{pct_num}%"
     share_texts = []
     if day > 0:
         share_texts = [

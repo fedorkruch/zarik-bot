@@ -578,7 +578,7 @@ function renderShare() {
   if (!STATE) return;
   const s = STATE;
   document.getElementById('sh-day').textContent   = s.day || '—';
-  const pctLabel = (s.day === 1 && (s.pct_num || 0) === 0) ? 'чуть меньше процента' : (s.pct_num || 0) + '%';
+  const pctLabel = (s.day === 1 && (s.pct_num || 0) === 0) ? 'Чуть меньше процента' : (s.pct_num || 0) + '%';
   document.getElementById('sh-dayof').textContent = 'из 77 · ' + pctLabel + ' пути';
   document.getElementById('sh-bar').style.width   = (s.pct_num || 0) + '%';
   const shPct = calcDailyPlanetPct(s.completed_tasks, s.days_done);
