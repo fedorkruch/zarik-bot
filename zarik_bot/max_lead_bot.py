@@ -21,11 +21,15 @@ max_lead_bot.py — лид-бот для Мессенджера MAX (анало�
   MAX_LEAD_WEBHOOK_PATH  — путь вебхука, по умолчанию /webhook/max-lead
 """
 import asyncio
+import base64
 import difflib
+import json as _json
 import logging
 import os
 import re
+import uuid
 
+import aiohttp
 from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -42,6 +46,26 @@ MAX_PROGRAM_BOT_URL = os.environ.get("MAX_PROGRAM_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_LEAD_WEBHOOK_PATH", "/webhook/max-lead")
+
+# ── ЮКасса ────────────────────────────────────────────────────
+YOOKASSA_SHOP_ID    = os.environ.get("YOOKASSA_SHOP_ID", "")
+YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
+
+# ── Тест-пользователи (получают тестовые цены) ───────────────
+_test_ids_raw = os.environ.get("TEST_USER_IDS", "")
+TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
+
+# ── Цены ─────────────────────────────────────────────────────
+COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
+COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
+MIN_STAKE_PROD    = 10_000    # 100 ₽
+MIN_STAKE_TEST    = 1_000     # 10 ₽
+
+def _price_for(max_user_id: int) -> int:
+    return COURSE_PRICE_TEST if max_user_id in TEST_USER_IDS else COURSE_PRICE_PROD
+
+def _min_stake_for(max_user_id: int) -> int:
+    return MIN_STAKE_TEST if max_user_id in TEST_USER_IDS else MIN_STAKE_PROD
 # Если MAX_SKIP_SUB_CHECK=1 — проверка подписки отключена (для каналов-пабликов,
 # где API MAX не позволяет проверить подписчиков)
 MAX_SKIP_SUB_CHECK  = os.environ.get("MAX_SKIP_SUB_CHECK", "0").strip() in ("1", "true", "yes")
@@ -58,6 +82,9 @@ def _parse_channel_id(raw: str) -> int:
     return int(digits) if digits else 0
 
 MAX_CHANNEL_ID = _parse_channel_id(os.environ.get("MAX_CHANNEL_ID", "781109203385"))
+
+# ── Состояние диалога (ожидание ввода суммы ставки) ──────────
+_user_state: dict[int, dict] = {}   # max_user_id → {"awaiting_stake": True}
 
 # ── Глобальный клиент ─────────────────────────────────────────
 _client: MaxClient | None = None
@@ -161,7 +188,11 @@ OFFER_TEXT = (
     "• Трекер задач и прогресса\n"
     "• Еженедельная статистика группы\n"
     "• Ачивки за серии и достижения\n\n"
-    "Нажми кнопку — и вперёд 👇"
+    "🎯 **Плюс — добавь ставку на себя**\n\n"
+    "Положи любую сумму сверху стоимости программы.\n"
+    "Пройдёшь все 77 дней — получишь её обратно.\n\n"
+    "*Это не штраф. Это твой личный договор с собой.*\n\n"
+    "Нажми кнопку — оплата онлайн 👇"
 )
 
 NO_PRESSURE_TEXT = (
@@ -199,8 +230,8 @@ FAREWELL_TEXT = (
 )
 
 PURCHASED_TEXT = (
-    "🎉 Ура, ты в игре!\n\n"
-    "Переходи в основной бот — там тебя уже ждут 👇"
+    "🎉 Оплата подтверждена! Добро пожаловать в программу.\n\n"
+    "Теперь переходи к боту Зарика — он тебя встретит и проведёт через онбординг:"
 )
 
 # ── Кнопки ────────────────────────────────────────────────────
@@ -236,21 +267,155 @@ def _tracker_question_buttons(attempt: int = 1) -> list[list[dict]]:
 
 
 def _offer_buttons() -> list[list[dict]]:
-    if PAYMENT_URL:
-        return [[_btn_link("🚀 Начать — 1990 ₽", PAYMENT_URL)]]
-    return [[_btn_callback("🚀 Начать", "buy_now")]]
+    return [[_btn_callback("🚀 Начать за 1990 ₽", "buy_course")]]
+
+
+def _stake_confirm_buttons() -> list[list[dict]]:
+    return [
+        [_btn_callback("✅ Да, хочу поставить", "stake_yes")],
+        [_btn_callback("➡️ Нет, перейти к оплате", "stake_no")],
+    ]
 
 
 def _follow_buttons() -> list[list[dict]]:
-    if PAYMENT_URL:
-        return [[_btn_link("Присоединиться — 1990 ₽", PAYMENT_URL)]]
-    return []
+    return [[_btn_callback("Присоединиться — 1990 ₽", "buy_course")]]
 
 
 def _program_bot_buttons() -> list[list[dict]]:
     if MAX_PROGRAM_BOT_URL:
         return [[_btn_link("Открыть основной бот 🦥", MAX_PROGRAM_BOT_URL)]]
     return []
+
+
+# ── ЮКасса — создание платежа ────────────────────────────────
+
+def _build_receipt_items(course_kopecks: int, stake_kopecks: int = 0) -> list:
+    """Список позиций чека для ЮКасса (54-ФЗ). vat_code=1 — без НДС."""
+    def _rub(k: int) -> str:
+        return f"{k / 100:.2f}"
+
+    items = [
+        {
+            "description": "Программа «Зарик 77 дней»",
+            "quantity": "1.00",
+            "amount": {"value": _rub(course_kopecks), "currency": "RUB"},
+            "vat_code": 1,
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        }
+    ]
+    if stake_kopecks > 0:
+        items.append({
+            "description": "Ставка на себя (возврат при завершении программы)",
+            "quantity": "1.00",
+            "amount": {"value": _rub(stake_kopecks), "currency": "RUB"},
+            "vat_code": 1,
+            "payment_mode": "full_payment",
+            "payment_subject": "service",
+        })
+    return items
+
+
+async def create_yookassa_payment(
+    max_user_id: int,
+    course_kopecks: int,
+    stake_kopecks: int = 0,
+) -> dict:
+    """
+    Создаёт платёж в ЮКасса через REST API v3.
+    Возвращает объект платежа с confirmation.confirmation_url, или {} при ошибке.
+    """
+    if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
+        logger.error("YooKassa credentials not set (YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY)")
+        return {}
+
+    total_kopecks = course_kopecks + stake_kopecks
+    total_rub = f"{total_kopecks / 100:.2f}"
+    description = (
+        f"Программа «Зарик 77 дней» + ставка {stake_kopecks // 100} ₽"
+        if stake_kopecks > 0
+        else "Программа «Зарик 77 дней» — полный доступ на 77 дней"
+    )
+
+    body = {
+        "amount": {"value": total_rub, "currency": "RUB"},
+        "confirmation": {
+            "type": "redirect",
+            "return_url": MAX_PROGRAM_BOT_URL or "https://max.ru",
+        },
+        "capture": True,
+        "description": description,
+        "metadata": {
+            "max_user_id": str(max_user_id),
+            "stake_kopecks": str(stake_kopecks),
+            "course_kopecks": str(course_kopecks),
+        },
+        "receipt": {"items": _build_receipt_items(course_kopecks, stake_kopecks)},
+    }
+
+    credentials = base64.b64encode(
+        f"{YOOKASSA_SHOP_ID}:{YOOKASSA_SECRET_KEY}".encode()
+    ).decode()
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.yookassa.ru/v3/payments",
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Idempotence-Key": str(uuid.uuid4()),
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                data = await resp.json(content_type=None)
+                if resp.status != 200:
+                    logger.error(f"YooKassa create payment error {resp.status}: {data}")
+                    return {}
+                return data
+    except Exception as e:
+        logger.exception(f"YooKassa payment creation failed: {e}")
+        return {}
+
+
+async def send_course_payment_link(max_user_id: int, stake_kopecks: int = 0):
+    """Создаёт платёж в ЮКасса и отправляет пользователю ссылку для оплаты."""
+    course_kopecks = _price_for(max_user_id)
+    bot = get_client()
+
+    payment = await create_yookassa_payment(max_user_id, course_kopecks, stake_kopecks)
+    if not payment:
+        await bot.send_message(
+            max_user_id,
+            "⚠️ Не удалось создать счёт. Попробуй позже или напиши нам."
+        )
+        return
+
+    pay_url = payment.get("confirmation", {}).get("confirmation_url", "")
+    if not pay_url:
+        await bot.send_message(
+            max_user_id,
+            "⚠️ Не удалось получить ссылку на оплату. Попробуй позже."
+        )
+        return
+
+    total_rub = (course_kopecks + stake_kopecks) // 100
+    if stake_kopecks > 0:
+        label = f"💳 Оплатить {total_rub} ₽ (программа + ставка {stake_kopecks // 100} ₽)"
+    else:
+        label = f"💳 Оплатить {total_rub} ₽"
+
+    await bot.send_message(
+        max_user_id,
+        "✅ Счёт создан! Нажми кнопку для оплаты:",
+        buttons=[[_btn_link(label, pay_url)]]
+    )
+    db.mark_max_lead_invoice_sent(max_user_id)
+    logger.info(
+        f"YooKassa payment link sent: user={max_user_id}, "
+        f"total={total_rub}₽, stake={stake_kopecks // 100}₽"
+    )
 
 
 # ── Вспомогательные ───────────────────────────────────────────
@@ -456,9 +621,46 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             # Второй «нет» — через 30 сек автоматически идём дальше
             _call_later(30, lambda: _step_send_intro(max_user_id))
 
-    # ── Покупка (fallback без PAYMENT_URL) ────────────────────
-    elif payload == "buy_now":
-        await bot.answer_callback(callback_id, "Переходи по ссылке для оплаты!")
+    # ── Покупка курса → предложение ставки ───────────────────
+    elif payload == "buy_course":
+        await bot.answer_callback(callback_id)
+        if db.is_max_lead_purchased(max_user_id):
+            await bot.send_message(
+                max_user_id, ALREADY_IN_PROGRAM_TEXT,
+                buttons=_program_bot_buttons()
+            )
+            return
+        db.mark_max_lead_start_clicked(max_user_id)
+        min_r = _min_stake_for(max_user_id) // 100
+        stake_text = (
+            f"🎯 **Хочешь добавить ставку на себя?**\n\n"
+            f"Ставка добавляется к стоимости программы.\n"
+            f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
+            f"*Минимальная сумма — {min_r} ₽.*"
+        )
+        await bot.send_message(max_user_id, stake_text, buttons=_stake_confirm_buttons())
+        db.mark_max_lead_stake_asked(max_user_id)
+
+    # ── Да, хочу ставку → просим ввести сумму ────────────────
+    elif payload == "stake_yes":
+        await bot.answer_callback(callback_id)
+        if db.is_max_lead_purchased(max_user_id):
+            return
+        db.mark_max_lead_stake_choice(max_user_id, "yes")
+        _user_state[max_user_id] = {"awaiting_stake": True}
+        min_r = _min_stake_for(max_user_id) // 100
+        await bot.send_message(
+            max_user_id,
+            f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):"
+        )
+
+    # ── Нет, без ставки → сразу создаём платёж ───────────────
+    elif payload == "stake_no":
+        await bot.answer_callback(callback_id)
+        if db.is_max_lead_purchased(max_user_id):
+            return
+        db.mark_max_lead_stake_choice(max_user_id, "no")
+        await send_course_payment_link(max_user_id, stake_kopecks=0)
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str):
@@ -471,8 +673,36 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await on_bot_started(max_user_id, username, first_name)
         return
 
-    # Обычные пользователи — реакция на скидку и прочий текст
+    # Обычные пользователи
     if max_user_id != MAX_ADMIN_USER_ID:
+        # 1. Ожидаем ввод суммы ставки
+        if _user_state.get(max_user_id, {}).get("awaiting_stake"):
+            min_stake = _min_stake_for(max_user_id)
+            clean = text.strip().replace(",", ".").replace(" ", "")
+            try:
+                amount_rub = float(clean)
+            except ValueError:
+                await bot.send_message(
+                    max_user_id,
+                    f"⚠️ Некорректный формат ввода данных.\n\n"
+                    f"Введи число, например: 100\n"
+                    f"Минимальная сумма — {min_stake // 100} ₽."
+                )
+                return
+            amount_kopecks = int(amount_rub * 100)
+            if amount_kopecks < min_stake:
+                await bot.send_message(
+                    max_user_id,
+                    f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
+                )
+                return
+            _user_state.pop(max_user_id, None)
+            if db.is_max_lead_purchased(max_user_id):
+                return
+            await send_course_payment_link(max_user_id, stake_kopecks=amount_kopecks)
+            return
+
+        # 2. Запрос скидки — специальный ответ
         if _is_discount_request(text):
             await bot.send_message(
                 max_user_id,
@@ -523,14 +753,17 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         t = f["total"]
         lines = [
             "🔽 **Воронка MAX лид-бот**\n",
-            f"Всего лидов:          {t:>4}  (100%)",
-            f"Подписались:          {f['subscribed']:>4}  ({pct(f['subscribed'], t)}){drop(f['subscribed'], t)}",
-            f"Получили трекер:      {f['tracker_sent']:>4}  ({pct(f['tracker_sent'], t)}){drop(f['tracker_sent'], f['subscribed'])}",
-            f"Увидели вопрос:       {f['question_sent']:>4}  ({pct(f['question_sent'], t)}){drop(f['question_sent'], f['tracker_sent'])}",
-            f"Ответили:             {f['question_replied']:>4}  ({pct(f['question_replied'], t)}) → ✅ {f['replied_yes']} / 😕 {f['replied_no']}",
-            f"Знакомство:           {f['intro_sent']:>4}  ({pct(f['intro_sent'], t)}){drop(f['intro_sent'], f['question_replied'])}",
-            f"Получили оффер:       {f['offer_sent']:>4}  ({pct(f['offer_sent'], t)}){drop(f['offer_sent'], f['intro_sent'])}",
-            f"Оплатили:             {f['purchased']:>4}  ({pct(f['purchased'], t)}){drop(f['purchased'], f['offer_sent'])}",
+            f"Всего лидов:              {t:>4}  (100%)",
+            f"Подписались:              {f['subscribed']:>4}  ({pct(f['subscribed'], t)}){drop(f['subscribed'], t)}",
+            f"Получили трекер:          {f['tracker_sent']:>4}  ({pct(f['tracker_sent'], t)}){drop(f['tracker_sent'], f['subscribed'])}",
+            f"Увидели вопрос:           {f['question_sent']:>4}  ({pct(f['question_sent'], t)}){drop(f['question_sent'], f['tracker_sent'])}",
+            f"Ответили:                 {f['question_replied']:>4}  ({pct(f['question_replied'], t)}) → ✅ {f['replied_yes']} / 😕 {f['replied_no']}",
+            f"Знакомство:               {f['intro_sent']:>4}  ({pct(f['intro_sent'], t)}){drop(f['intro_sent'], f['question_replied'])}",
+            f"Получили оффер:           {f['offer_sent']:>4}  ({pct(f['offer_sent'], t)}){drop(f['offer_sent'], f['intro_sent'])}",
+            f"Нажали «Начать»:          {f.get('start_clicked', 0):>4}  ({pct(f.get('start_clicked', 0), t)}){drop(f.get('start_clicked', 0), f['offer_sent'])}",
+            f"Увидели вопрос о ставке:  {f.get('stake_asked', 0):>4}  ({pct(f.get('stake_asked', 0), t)}) → Да: {f.get('stake_yes') or 0} / Нет: {f.get('stake_no') or 0}",
+            f"Получили счёт:            {f.get('invoice_sent', 0):>4}  ({pct(f.get('invoice_sent', 0), t)}){drop(f.get('invoice_sent', 0), f.get('stake_asked', 0))}",
+            f"Оплатили:                 {f['purchased']:>4}  ({pct(f['purchased'], t)}){drop(f['purchased'], f.get('invoice_sent', 0))}",
             "",
             f"Follow-up 2д:  {f['follow_2']:>3} | 3д: {f['follow_3']:>3} | 7д: {f['follow_7']:>3}",
             f"Прощание:      {f['final_sent']:>3}",

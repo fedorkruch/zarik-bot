@@ -184,6 +184,10 @@ def init_db():
             "ALTER TABLE leads ADD COLUMN invoice_sent_at TEXT",
             "ALTER TABLE leads ADD COLUMN purchased_at TEXT",
             "ALTER TABLE users ADD COLUMN is_virtual INTEGER DEFAULT 0",
+            # max_leads — stake-флоу
+            "ALTER TABLE max_leads ADD COLUMN start_clicked_at TEXT",
+            "ALTER TABLE max_leads ADD COLUMN stake_asked_at TEXT",
+            "ALTER TABLE max_leads ADD COLUMN stake_choice TEXT",
         ]
         for migration in migrations:
             try:
@@ -1257,6 +1261,38 @@ def mark_max_lead_pitch_sent(max_user_id: int):
         )
 
 
+def mark_max_lead_start_clicked(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET start_clicked_at=COALESCE(start_clicked_at, datetime('now')) WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_stake_asked(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET stake_asked_at=COALESCE(stake_asked_at, datetime('now')) WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_stake_choice(max_user_id: int, choice: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET stake_choice=? WHERE max_user_id=?",
+            (choice, max_user_id)
+        )
+
+
+def mark_max_lead_invoice_sent(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET invoice_sent_at=COALESCE(invoice_sent_at, datetime('now')) WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
 def mark_max_lead_purchased(max_user_id: int):
     with get_conn() as conn:
         conn.execute(
@@ -1340,6 +1376,11 @@ def get_max_funnel_stats() -> dict:
                 SUM(tracker_reply_yes = 0)                  AS replied_no,
                 SUM(intro_sent_at IS NOT NULL)              AS intro_sent,
                 SUM(pitch_sent_at IS NOT NULL)              AS offer_sent,
+                SUM(start_clicked_at IS NOT NULL)           AS start_clicked,
+                SUM(stake_asked_at IS NOT NULL)             AS stake_asked,
+                SUM(stake_choice = 'yes')                   AS stake_yes,
+                SUM(stake_choice = 'no')                    AS stake_no,
+                SUM(invoice_sent_at IS NOT NULL)            AS invoice_sent,
                 SUM(lead_status = 'purchased')              AS purchased,
                 SUM(follow_2_sent_at IS NOT NULL)           AS follow_2,
                 SUM(follow_3_sent_at IS NOT NULL)           AS follow_3,

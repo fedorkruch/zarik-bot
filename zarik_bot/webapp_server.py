@@ -719,6 +719,65 @@ async def handle_max_program_webhook(request: web.Request) -> web.Response:
     return web.Response(status=200)
 
 
+async def handle_yookassa_webhook(request: web.Request) -> web.Response:
+    """
+    Принимает уведомления об оплате от ЮКасса для MAX лид-бота.
+    Документация: https://yookassa.ru/developers/using-api/webhooks
+
+    Событие payment.succeeded → подтверждаем оплату MAX-лида и
+    отправляем ссылку на основной бот.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.Response(status=400)
+
+    try:
+        event = data.get("event", "")
+        logger.info(f"YooKassa webhook: event={event}")
+
+        if event != "payment.succeeded":
+            return web.Response(status=200)
+
+        payment_obj = data.get("object", {})
+        metadata    = payment_obj.get("metadata", {})
+        payment_id  = payment_obj.get("id", "")
+        max_user_id_str = metadata.get("max_user_id", "")
+
+        if not max_user_id_str or not max_user_id_str.isdigit():
+            logger.warning(f"YooKassa webhook: max_user_id не найден в metadata: {metadata}")
+            return web.Response(status=200)
+
+        max_user_id = int(max_user_id_str)
+
+        if db.is_max_lead_purchased(max_user_id):
+            logger.info(f"YooKassa webhook: user {max_user_id} уже в программе")
+            return web.Response(status=200)
+
+        db.mark_max_lead_purchased(max_user_id)
+        logger.info(
+            f"YooKassa payment succeeded: max_user_id={max_user_id}, "
+            f"payment_id={payment_id}"
+        )
+
+        # Отправляем подтверждение и ссылку на основной бот
+        import max_lead_bot
+        bot = max_lead_bot.get_client()
+        program_url = max_lead_bot.MAX_PROGRAM_BOT_URL
+        buttons = [[{"type": "link", "text": "Зарик Ленивец 🦥", "url": program_url}]] \
+                  if program_url else None
+        await bot.send_message(
+            max_user_id,
+            max_lead_bot.PURCHASED_TEXT,
+            buttons=buttons,
+        )
+
+    except Exception:
+        logger.exception("YooKassa webhook processing error")
+
+    return web.Response(status=200)
+
+
 def create_app() -> web.Application:
     app = web.Application(
         middlewares=[_security_middleware],
@@ -740,6 +799,8 @@ def create_app() -> web.Application:
     # MAX Мессенджер вебхуки
     app.router.add_post("/webhook/max-lead",    handle_max_lead_webhook)
     app.router.add_post("/webhook/max-program", handle_max_program_webhook)
+    # ЮКасса — уведомления об оплате MAX-лидов
+    app.router.add_post("/webhook/yookassa",    handle_yookassa_webhook)
     return app
 
 
