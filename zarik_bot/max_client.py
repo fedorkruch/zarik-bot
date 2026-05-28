@@ -150,15 +150,27 @@ class MaxClient:
             body["text"] = caption
         return await self._request("POST", "/messages", params={"user_id": user_id}, json=body)
 
-    async def answer_callback(self, callback_id: str, text: str | None = None) -> dict:
-        """Отвечает на callback (убирает индикатор загрузки у кнопки)."""
+    async def answer_callback(
+        self,
+        callback_id: str,
+        notification: str | None = None,
+        new_message: dict | None = None,
+    ) -> dict:
+        """Отвечает на callback.
+
+        notification  — одноразовое всплывающее уведомление пользователю.
+        new_message   — если передан, MAX заменит содержимое исходного сообщения
+                        прямо в чате (inline-edit без отдельного PUT /messages).
+                        Формат: {"text": "...", "format": "markdown", "attachments": [...]}
+        """
         if not callback_id:
             return {}
-        # callback_id передаётся как query-param, а не в теле
         params: dict[str, Any] = {"callback_id": callback_id}
         body: dict[str, Any] = {}
-        if text:
-            body["notification"] = text
+        if notification:
+            body["notification"] = notification
+        if new_message:
+            body["message"] = new_message
         return await self._request("POST", "/answers", params=params, json=body or None)
 
     # ── Загрузка файлов ───────────────────────────────────────

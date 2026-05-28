@@ -677,9 +677,8 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
         return
 
-    await bot.answer_callback(callback_id)
-
-    # Задача
+    # Задача — отвечаем через answer_callback с new_message, чтобы
+    # MAX обновил трекер прямо в чате (inline-edit без message_id).
     if payload.startswith("task:"):
         _, day_s, idx_s = payload.split(":")
         day = int(day_s)
@@ -693,32 +692,18 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         text    = build_today_text(day, completed)
         buttons = _tracker_buttons(day, completed, max_user_id, uid)
 
-        # Пытаемся редактировать трекер на месте
-        # Источники message_id: 1) callback, 2) сохранённый в DB
-        edit_id = message_id or ""
-        if not edit_id:
-            saved_mid = db.get_tracker_message_id(uid, day)
-            if saved_mid:
-                edit_id = str(saved_mid)
+        # Одним вызовом answers: и ack callback, и редактируем сообщение
+        new_msg: dict = {
+            "text": text,
+            "format": "markdown",
+            "attachments": [{"type": "inline_keyboard", "payload": {"buttons": buttons}}],
+        }
+        result = await bot.answer_callback(callback_id, new_message=new_msg)
+        logger.debug(f"answer_callback(new_message) → {result}")
 
-        logger.debug(f"task toggle: message_id={message_id!r} edit_id={edit_id!r}")
-
-        edited = False
-        if edit_id:
-            try:
-                result = await bot.edit_message(edit_id, text, buttons=buttons)
-                edited = bool(result and not result.get("error"))
-            except Exception as e:
-                logger.warning(f"edit_message failed: {e}")
-
-        if not edited:
-            resp = await bot.send_message(max_user_id, text, buttons=buttons)
-            mid = resp.get("message_id") or resp.get("mid")
-            if mid is not None:
-                try:
-                    db.save_tracker_message(uid, day, int(mid))
-                except Exception:
-                    pass
+        # Если API вернул ошибку — шлём новым сообщением как запасной вариант
+        if not (result and result.get("success") is not False):
+            await bot.send_message(max_user_id, text, buttons=buttons)
 
         if all_done:
             evening_text = _md(ct.get_evening(day, all_done=True))
@@ -737,8 +722,9 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             if day == TOTAL_DAYS:
                 await bot.send_message(max_user_id, _md(ct.FINAL_MESSAGE))
 
-    # Меню
+    # Меню (ack здесь, task делает ack сам через answer_callback+new_message)
     elif payload == "menu:today":
+        await bot.answer_callback(callback_id)
         if not db.is_program_started(uid):
             await bot.send_message(
                 max_user_id,
@@ -750,6 +736,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         await show_today(bot, max_user_id, uid)
 
     elif payload == "menu:stats":
+        await bot.answer_callback(callback_id)
         if not db.is_program_started(uid):
             await bot.send_message(
                 max_user_id,
@@ -761,6 +748,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
 
     elif payload == "menu:week":
+        await bot.answer_callback(callback_id)
         if not db.is_program_started(uid):
             await bot.send_message(
                 max_user_id,
@@ -772,10 +760,12 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
 
     elif payload == "menu:achievements":
+        await bot.answer_callback(callback_id)
         text = build_achievements_text(uid)
         await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
 
     elif payload == "onboard:start":
+        await bot.answer_callback(callback_id)
         await start_onboarding(bot, max_user_id, uid)
 
     elif (payload.startswith("tz:") or payload.startswith("pushup:") or
