@@ -212,15 +212,48 @@ def validate_init_data(raw: str) -> dict | None:
         return None
 
 
+def validate_max_init_data(raw: str) -> dict | None:
+    """Проверяет подпись initData от MAX WebApp. Возвращает user-dict или None."""
+    if not MAX_PROGRAM_TOKEN:
+        return None
+    try:
+        params = _parse_init_data_params(raw)
+        hash_recv = params.pop("hash", None)
+        if not hash_recv:
+            return None
+        auth_date = params.get("auth_date", "")
+        if auth_date.isdigit():
+            age = _time.time() - int(auth_date)
+            if age > _INIT_DATA_MAX_AGE:
+                logger.warning(f"MAX initData: устарел (auth_date={auth_date})")
+                return None
+        else:
+            return None
+        data_check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret = hmac.new(b"WebAppData", MAX_PROGRAM_TOKEN.encode(), hashlib.sha256).digest()
+        computed = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(computed, hash_recv):
+            return None
+        return json.loads(params.get("user", "{}"))
+    except Exception as e:
+        logger.warning(f"MAX initData validation error: {e}")
+        return None
+
+
 def get_user_id_from_request(request: web.Request) -> int | None:
     raw = request.headers.get("X-Init-Data") or request.rel_url.query.get("init_data", "")
     if not raw:
         return None
 
-    # Полная валидация (HMAC)
+    # Полная валидация (HMAC) — сначала TG токен, затем MAX токен
     user = validate_init_data(raw)
     if user and "id" in user:
         return int(user["id"])
+    # Пробуем MAX initData (если TG-валидация не прошла)
+    max_user = validate_max_init_data(raw)
+    if max_user and "id" in max_user:
+        logger.info(f"Auth via MAX initData: uid={max_user['id']}")
+        return int(max_user["id"])
 
     # Для тест-юзеров — парсим без проверки подписи (только в dev-окружении)
     if _IS_DEV:
@@ -591,6 +624,7 @@ async def handle_debug(request: web.Request) -> web.Response:
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Debug</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://st.max.ru/js/max-web-app.js"></script>
 <style>
 body{background:#0f0f13;color:#fff;font-family:monospace;padding:16px;font-size:12px}
 h2{color:#e5a012;margin-bottom:12px}
@@ -604,19 +638,25 @@ h2{color:#e5a012;margin-bottom:12px}
 <h2>🦥 Mini App Debug</h2>
 <div id="out"></div>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://st.max.ru/js/max-web-app.js"></script>
 <script>
-const tg = window.Telegram?.WebApp;
+const tg  = window.Telegram?.WebApp;
+const mwa = (window.WebApp && typeof window.WebApp.initData !== 'undefined') ? window.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
 const rows = [
-  ['tg available',   tg ? 'YES' : 'NO'],
-  ['tg.version',     tg?.version || '—'],
-  ['tg.platform',    tg?.platform || '—'],
-  ['tg.initData',    tg?.initData || 'EMPTY'],
-  ['initData.len',   (tg?.initData||'').length],
-  ['unsafe.user',    JSON.stringify(tg?.initDataUnsafe?.user) || '—'],
-  ['location.href',  location.href],
-  ['location.search',location.search || 'EMPTY'],
-  ['location.hash',  location.hash || 'EMPTY'],
+  ['tg available',    tg  ? 'YES' : 'NO'],
+  ['max available',   mwa ? 'YES' : 'NO'],
+  ['tg.version',      tg?.version  || '—'],
+  ['max.version',     mwa?.version || '—'],
+  ['max.platform',    mwa?.platform || '—'],
+  ['tg.initData',     tg?.initData  || 'EMPTY'],
+  ['max.initData',    mwa?.initData || 'EMPTY'],
+  ['initData.len',    ((mwa?.initData || tg?.initData)||'').length],
+  ['unsafe.user(tg)', JSON.stringify(tg?.initDataUnsafe?.user)  || '—'],
+  ['unsafe.user(max)',JSON.stringify(mwa?.initDataUnsafe?.user) || '—'],
+  ['location.href',   location.href],
+  ['location.search', location.search || 'EMPTY'],
+  ['location.hash',   location.hash   || 'EMPTY'],
 ];
 const out = document.getElementById('out');
 rows.forEach(([k,v]) => {

@@ -310,24 +310,48 @@ body{
 </div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://st.max.ru/js/max-web-app.js"></script>
 <script>
-// ── Telegram WebApp init ────────────────────────
-function getTg()  { return window.Telegram?.WebApp || null; }
-function getInitData()  { return getTg()?.initData || ''; }
-function getUnsafeUid() { return getTg()?.initDataUnsafe?.user?.id || 0; }
+// ── Telegram & MAX WebApp init ────────────────────────
+function getTg()    { return window.Telegram?.WebApp || null; }
+function getMaxWA() { return (window.WebApp && typeof window.WebApp.initData !== 'undefined') ? window.WebApp : null; }
+
+function getInitData() {
+  const mwa = getMaxWA();
+  if (mwa?.initData) return mwa.initData;
+  return getTg()?.initData || '';
+}
+function getUnsafeUid() {
+  const mwa = getMaxWA();
+  if (mwa?.initDataUnsafe?.user?.id) return mwa.initDataUnsafe.user.id;
+  return getTg()?.initDataUnsafe?.user?.id || 0;
+}
 
 let _tgReady = false;
 function ensureTg() {
+  if (getMaxWA()) return; // MAX Bridge — не требует ready()/expand()
   tg = getTg();
   if (tg && !_tgReady) { tg.ready(); tg.expand(); _tgReady = true; }
+}
+
+function hapticImpact(style) {
+  const mwa = getMaxWA();
+  if (mwa?.HapticFeedback) { mwa.HapticFeedback.impactOccurred(style).catch(() => {}); return; }
+  getTg()?.HapticFeedback?.impactOccurred(style);
+}
+function hapticNotify(type) {
+  const mwa = getMaxWA();
+  if (mwa?.HapticFeedback) { mwa.HapticFeedback.notificationOccurred(type).catch(() => {}); return; }
+  getTg()?.HapticFeedback?.notificationOccurred(type);
 }
 
 // ── Подписанные URL-параметры от бота ────────────
 const _urlP = new URLSearchParams(window.location.search);
 const BOT_AUTH = {
-  uid: _urlP.get('uid') || '',
-  ts:  _urlP.get('ts')  || '',
-  sig: _urlP.get('sig') || '',
+  uid:      _urlP.get('uid')      || '',
+  ts:       _urlP.get('ts')       || '',
+  sig:      _urlP.get('sig')      || '',
+  platform: _urlP.get('platform') || '',
 };
 function hasBotAuth() { return !!(BOT_AUTH.uid && BOT_AUTH.ts && BOT_AUTH.sig); }
 
@@ -415,7 +439,9 @@ async function api(method, path, body) {
   if (hasBotAuth()) {
     // Подписанный токен от бота — приоритет над initData
     const sep = path.includes('?') ? '&' : '?';
-    path += sep + 'uid=' + BOT_AUTH.uid + '&ts=' + BOT_AUTH.ts + '&sig=' + BOT_AUTH.sig;
+    let q = 'uid=' + BOT_AUTH.uid + '&ts=' + BOT_AUTH.ts + '&sig=' + BOT_AUTH.sig;
+    if (BOT_AUTH.platform) q += '&platform=' + BOT_AUTH.platform;
+    path += sep + q;
   } else if (!initData && unsafeUid) {
     path += (path.includes('?') ? '&' : '?') + 'uid=' + unsafeUid;
   }
@@ -434,7 +460,7 @@ async function loadState() {
 }
 
 function nav(view) {
-  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  hapticImpact('light');
   document.getElementById('s-' + CUR_VIEW).classList.add('hidden');
   CUR_VIEW = view;
   document.getElementById('s-' + view).classList.remove('hidden');
@@ -512,7 +538,7 @@ function updateMoodImg(done) {
 
 async function toggleTask(idx) {
   if (!STATE) return;
-  if (tg) tg.HapticFeedback?.impactOccurred('medium');
+  hapticImpact('medium');
   try {
     const res = await api('POST', '/api/task', { task_index: idx });
     if (!res.error) {
@@ -607,7 +633,7 @@ function copyText() {
   const txt = texts[SEL_SHARE] || '';
   if (!txt) return;
   const done = () => {
-    if (tg) tg.HapticFeedback?.notificationOccurred('success');
+    hapticNotify('success');
     const btn = document.querySelector('.copy-btn');
     btn.textContent = '✅ Скопировано!';
     setTimeout(() => { btn.textContent = 'Копировать текст'; }, 2000);
