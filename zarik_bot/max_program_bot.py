@@ -217,9 +217,8 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     if step == "timezone" and payload.startswith("tz:"):
         tz = payload[3:]
-        db.save_timezone(uid, tz)
+        db.set_user_timezone(uid, tz)          # → сохраняет tz, ставит step='pushup'
         await bot.answer_callback(callback_id)
-        db.set_onboarding_step(uid, "pushup")
         await bot.send_message(
             max_user_id,
             "💪 **Сколько отжиманий ты можешь сделать за один раз?**\n\n"
@@ -229,9 +228,8 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     elif step == "pushup" and payload.startswith("pushup:"):
         val = int(payload.split(":")[1])
-        db.save_workout_starts(uid, pushup=val)
+        db.save_pushup_start(uid, val)          # → сохраняет pushup, ставит step='squat'
         await bot.answer_callback(callback_id)
-        db.set_onboarding_step(uid, "squat")
         await bot.send_message(
             max_user_id,
             "🦵 **Сколько приседаний?**",
@@ -240,29 +238,32 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     elif step == "squat" and payload.startswith("squat:"):
         val = int(payload.split(":")[1])
-        db.save_workout_starts(uid, squat=val)
+        db.save_squat_start(uid, val)           # → сохраняет squat, ставит step='abs'
         await bot.answer_callback(callback_id)
-        db.set_onboarding_step(uid, "abs")
         await bot.send_message(
             max_user_id,
             "🏋️ **Сколько подъёмов корпуса?**",
             buttons=_digits_buttons("abs"),
         )
 
-    elif step == "abs" and payload.startswith("abs:"):
+    elif step in ("abs", "photo") and payload.startswith("abs:"):
         val = int(payload.split(":")[1])
-        db.save_workout_starts(uid, abs_val=val)
+        db.save_abs_start(uid, val)             # → сохраняет abs, ставит step='photo'
         await bot.answer_callback(callback_id)
+        db.complete_onboarding(uid)             # → complete=1, step='done', start=завтра
 
-        # Онбординг завершён — ставим дату старта на завтра
-        start = date.today() + timedelta(days=1)
-        db.set_start_date(uid, start.isoformat())
-        db.set_onboarding_complete(uid)
+        user = db.get_user(uid)
+        start_str = user["start_date"] if user else "завтра"
+        try:
+            from datetime import date as _date
+            start_fmt = _date.fromisoformat(start_str).strftime("%d.%m.%Y")
+        except Exception:
+            start_fmt = start_str
 
         await bot.send_message(
             max_user_id,
             f"🦥 **Всё готово!**\n\n"
-            f"Твой первый день — **{start.strftime('%d.%m.%Y')}**\n\n"
+            f"Твой первый день — **{start_fmt}**\n\n"
             "Утром в 6:00 получишь первое задание. До встречи! 💪",
             buttons=_main_menu_buttons(max_user_id),
         )
@@ -302,7 +303,8 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     step = db.get_onboarding_step(uid)
 
     # Онбординг
-    if step not in ("done", "welcome") and not db.is_onboarding_complete(uid):
+    _u = db.get_user(uid)
+    if step not in ("done", "welcome") and not (_u and _u["onboarding_complete"]):
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
         return
 
@@ -408,7 +410,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                 target_day = int(parts[2])
                 target_uid = db.get_max_internal_id(target_max_id)
                 if target_uid:
-                    db.set_day(target_uid, target_day)
+                    db.set_day_for_testing(target_uid, target_day)
                     await bot.send_message(max_user_id, f"✅ День {target_day} установлен для {target_max_id}")
             return
 
@@ -435,7 +437,8 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         return
 
     if cmd in ("сегодня", "задачи"):
-        if db.is_payment_confirmed(uid) and db.is_onboarding_complete(uid):
+        _u2 = db.get_user(uid)
+        if db.is_payment_confirmed(uid) and (_u2 and _u2["onboarding_complete"]):
             await show_today(bot, max_user_id, uid)
         return
 
@@ -465,9 +468,11 @@ async def _handle_start(bot: MaxClient, max_user_id: int, uid: int,
 
 
 async def _send_welcome_to_max_user(bot: MaxClient, max_user_id: int, uid: int):
-    if db.is_onboarding_complete(uid) and db.is_program_started(uid):
+    user = db.get_user(uid)
+    onboarding_done = bool(user and user["onboarding_complete"])
+    if onboarding_done and db.is_program_started(uid):
         await show_today(bot, max_user_id, uid)
-    elif db.is_onboarding_complete(uid):
+    elif onboarding_done:
         await show_today(bot, max_user_id, uid)
     else:
         await bot.send_message(
