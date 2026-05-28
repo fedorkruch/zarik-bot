@@ -42,6 +42,10 @@ MAX_PROGRAM_BOT_URL = os.environ.get("MAX_PROGRAM_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_LEAD_WEBHOOK_PATH", "/webhook/max-lead")
+# Если MAX_SKIP_SUB_CHECK=1 — проверка подписки отключена (для каналов-пабликов,
+# где API MAX не позволяет проверить подписчиков)
+MAX_SKIP_SUB_CHECK  = os.environ.get("MAX_SKIP_SUB_CHECK", "0").strip() in ("1", "true", "yes")
+
 # ID канала — принимаем и число, и URL вида https://max.ru/id781109203385_biz
 def _parse_channel_id(raw: str) -> int:
     """Извлекает числовой ID из строки или URL типа https://max.ru/id123456_biz."""
@@ -68,20 +72,33 @@ def get_client() -> MaxClient:
 
 async def is_subscribed(max_user_id: int) -> bool:
     """
-    Проверяет, подписан ли пользователь на канал MAX_CHANNEL_ID.
-    Бот должен быть добавлен в канал как участник/администратор.
-    При любой ошибке API возвращает False (не пропускаем).
+    Проверяет подписку пользователя на канал.
+
+    Если MAX_SKIP_SUB_CHECK=1 — всегда возвращает True (для публичных каналов-пабликов,
+    где MAX API не предоставляет доступа к списку подписчиков).
+
+    Если MAX_CHANNEL_ID не задан — тоже не блокируем.
+    При ошибке API — пропускаем (не блокируем пользователя из-за сбоя).
     """
+    if MAX_SKIP_SUB_CHECK:
+        logger.info(f"MAX sub check SKIPPED (MAX_SKIP_SUB_CHECK=1): user={max_user_id}")
+        return True
     if not MAX_CHANNEL_ID:
-        return True  # если канал не задан — не блокируем
+        return True
     try:
         bot = get_client()
         member = await bot.get_chat_member(MAX_CHANNEL_ID, max_user_id)
-        logger.info(f"MAX sub check: user={max_user_id} member={member}")
+        logger.info(f"MAX sub check: user={max_user_id} channel={MAX_CHANNEL_ID} member={member}")
+        if member is None:
+            logger.warning(
+                f"MAX sub check: пустой ответ для user={max_user_id} "
+                f"(возможно, канал — паблик и API не поддерживает проверку подписчиков). "
+                f"Установите MAX_SKIP_SUB_CHECK=1 чтобы отключить проверку."
+            )
         return member is not None
     except Exception as e:
-        logger.error(f"MAX sub check error user={max_user_id}: {e}")
-        return False
+        logger.error(f"MAX sub check error user={max_user_id}: {e} — пропускаем (не блокируем)")
+        return True  # при ошибке API не блокируем пользователя
 
 
 # ── Тексты ────────────────────────────────────────────────────
