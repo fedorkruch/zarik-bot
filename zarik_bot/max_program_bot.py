@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
-from max_client import MaxClient, _btn_callback, _btn_contact, _btn_link
+from max_client import MaxClient, _btn_callback, _btn_contact, _btn_link, _btn_open_app
 import database as db
 import content as ct
 from workout import get_workout
@@ -194,9 +194,8 @@ def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
         _btn_callback("🏆 Ачивки",   "menu:achievements"),
     ]
     buttons = [row_today, row_nav]
-    if WEBAPP_URL:
-        url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
-        buttons.append([_btn_link("📱 МиниАПП", url)])
+    # open_app открывает мини-приложение инлайн внутри MAX (как системная кнопка Open)
+    buttons.append([_btn_open_app("📱 МиниАПП")])
     return buttons
 
 

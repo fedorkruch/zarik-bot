@@ -36,6 +36,12 @@ def _btn_contact(text: str) -> dict:
     return {"type": "request_contact", "text": text}
 
 
+def _btn_open_app(text: str) -> dict:
+    """Кнопка открытия мини-приложения внутри MAX — аналог web_app в Telegram.
+    Открывает мини-приложение, зарегистрированное для бота на business.max.ru."""
+    return {"type": "open_app", "text": text}
+
+
 class MaxClient:
     """
     Тонкая async-обёртка над REST API MAX.
