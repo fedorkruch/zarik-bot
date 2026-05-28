@@ -187,7 +187,7 @@ def _digits_buttons(prefix: str) -> list[list[dict]]:
 
 
 def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
-    buttons = [[_btn_callback("📋 Сегодня", "menu:today")]]
+    buttons = []
     if WEBAPP_URL:
         url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
         buttons.append([_btn_link("📱 Мини-апп", url)])
@@ -195,6 +195,11 @@ def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
     buttons.append([_btn_callback("📅 Неделя", "menu:week")])
     buttons.append([_btn_callback("🏆 Ачивки", "menu:achievements")])
     return buttons
+
+
+def _tracker_buttons(day: int, completed: set, max_user_id: int, uid: int = 0) -> list[list[dict]]:
+    """Трекер = 5 задач + меню под ними (аналог Reply-клавиатуры TG)."""
+    return _tasks_buttons(day, completed) + _main_menu_buttons(max_user_id, uid)
 
 
 def _photo_buttons() -> list[list[dict]]:
@@ -614,7 +619,15 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
         return
     completed = set(db.get_completed_tasks(uid, day))
     text = build_today_text(day, completed)
-    await bot.send_message(max_user_id, text, buttons=_tasks_buttons(day, completed))
+    resp = await bot.send_message(max_user_id, text,
+                                  buttons=_tracker_buttons(day, completed, max_user_id, uid))
+    # Сохраняем message_id для последующего редактирования
+    mid = resp.get("message_id") or resp.get("mid")
+    if mid is not None:
+        try:
+            db.save_tracker_message(uid, day, int(mid))
+        except Exception:
+            pass
 
 
 # ── Обработчики callback ──────────────────────────────────────
@@ -646,13 +659,34 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         all_done  = len(completed) == TASKS_PER_DAY
 
         text    = build_today_text(day, completed)
-        buttons = _tasks_buttons(day, completed)
+        buttons = _tracker_buttons(day, completed, max_user_id, uid)
 
-        # Редактируем трекер на месте (или шлём новый если message_id нет)
-        if message_id:
-            await bot.edit_message(message_id, text, buttons=buttons)
-        else:
-            await bot.send_message(max_user_id, text, buttons=buttons)
+        # Пытаемся редактировать трекер на месте
+        # Источники message_id: 1) callback, 2) сохранённый в DB
+        edit_id = message_id or ""
+        if not edit_id:
+            saved_mid = db.get_tracker_message_id(uid, day)
+            if saved_mid:
+                edit_id = str(saved_mid)
+
+        logger.debug(f"task toggle: message_id={message_id!r} edit_id={edit_id!r}")
+
+        edited = False
+        if edit_id:
+            try:
+                result = await bot.edit_message(edit_id, text, buttons=buttons)
+                edited = bool(result and not result.get("error"))
+            except Exception as e:
+                logger.warning(f"edit_message failed: {e}")
+
+        if not edited:
+            resp = await bot.send_message(max_user_id, text, buttons=buttons)
+            mid = resp.get("message_id") or resp.get("mid")
+            if mid is not None:
+                try:
+                    db.save_tracker_message(uid, day, int(mid))
+                except Exception:
+                    pass
 
         if all_done:
             evening_text = _md(ct.get_evening(day, all_done=True))
@@ -1120,7 +1154,10 @@ async def process_update(data: dict):
         elif update_type == "message_callback":
             cb         = data.get("callback", {})
             user       = cb.get("user", {})
-            message_id = cb.get("message", {}).get("message_id", "")
+            cb_msg     = cb.get("message", {})
+            # Пробуем оба возможных поля (MAX API может отдавать message_id или mid)
+            message_id = str(cb_msg.get("message_id") or cb_msg.get("mid") or "")
+            logger.debug(f"callback keys: {list(cb_msg.keys())} message_id={message_id!r}")
             await on_callback(
                 max_user_id=user.get("user_id", 0),
                 callback_id=cb.get("callback_id", ""),
@@ -1186,12 +1223,18 @@ async def _job_morning():
             # 2. Задания на день с описанием тренировки
             await bot.send_message(max_id, build_tasks_list_max(uid, day))
 
-            # 3. Трекер с галочками
-            await bot.send_message(
+            # 3. Трекер с галочками + меню
+            tracker_resp = await bot.send_message(
                 max_id,
                 build_today_text(day, completed),
-                buttons=_tasks_buttons(day, completed),
+                buttons=_tracker_buttons(day, completed, max_id, uid),
             )
+            mid = tracker_resp.get("message_id") or tracker_resp.get("mid")
+            if mid is not None:
+                try:
+                    db.save_tracker_message(uid, day, int(mid))
+                except Exception:
+                    pass
         except Exception:
             logger.exception(f"Morning job error for MAX user {max_id}")
 
@@ -1226,11 +1269,17 @@ async def _job_afternoon():
             )
             # Трекер отдельным сообщением если не все выполнены
             if not all_done:
-                await bot.send_message(
+                tracker_resp = await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
-                    buttons=_tasks_buttons(day, completed),
+                    buttons=_tracker_buttons(day, completed, max_id, uid),
                 )
+                mid = tracker_resp.get("message_id") or tracker_resp.get("mid")
+                if mid is not None:
+                    try:
+                        db.save_tracker_message(uid, day, int(mid))
+                    except Exception:
+                        pass
         except Exception:
             logger.exception(f"Afternoon job error for MAX user {max_id}")
 
@@ -1265,11 +1314,17 @@ async def _job_evening():
             )
             # Трекер отдельным сообщением если не все выполнены
             if not all_done:
-                await bot.send_message(
+                tracker_resp = await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
-                    buttons=_tasks_buttons(day, completed),
+                    buttons=_tracker_buttons(day, completed, max_id, uid),
                 )
+                mid = tracker_resp.get("message_id") or tracker_resp.get("mid")
+                if mid is not None:
+                    try:
+                        db.save_tracker_message(uid, day, int(mid))
+                    except Exception:
+                        pass
         except Exception:
             logger.exception(f"Evening job error for MAX user {max_id}")
 
