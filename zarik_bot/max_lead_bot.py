@@ -512,6 +512,30 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         ]
         await bot.send_message(max_user_id, "\n".join(lines))
 
+    elif text.startswith("/chats"):
+        # Список чатов бота — нужен чтобы найти правильный chat_id канала
+        result = await bot.get_chats()
+        chats = result.get("chats", [])
+        if not chats:
+            await bot.send_message(max_user_id, f"❌ Чатов нет или ошибка API:\n`{result}`")
+            return
+        lines = [f"📋 Чаты бота ({len(chats)}):"]
+        for c in chats[:20]:
+            lines.append(
+                f"id: `{c.get('chat_id')}` | type: {c.get('type')} | {c.get('title') or c.get('name','?')}"
+            )
+        await bot.send_message(max_user_id, "\n".join(lines))
+
+    elif text.startswith("/check_sub"):
+        # /check_sub <user_id>  или для самого себя
+        parts = text.split()
+        target_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else max_user_id
+        member = await bot.get_chat_member(MAX_CHANNEL_ID, target_id)
+        await bot.send_message(
+            max_user_id,
+            f"🔍 check_sub\nchannel_id: `{MAX_CHANNEL_ID}`\nuser_id: `{target_id}`\nresult: `{member}`"
+        )
+
     elif text.startswith("/broadcast "):
         msg = text[len("/broadcast "):]
         logger.info(f"MAX lead broadcast queued: {msg[:50]}")

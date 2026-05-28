@@ -232,7 +232,12 @@ class MaxClient:
         """
         result = await self._request(
             "GET", f"/chats/{chat_id}/members",
-            params={"user_ids": user_id},
+            params={"user_ids": str(user_id)},
         )
+        logger.info(f"get_chat_member chat={chat_id} user={user_id} → {result}")
         members = result.get("members", [])
         return members[0] if members else None
+
+    async def get_chats(self) -> dict:
+        """GET /chats — список чатов, в которых состоит бот."""
+        return await self._request("GET", "/chats")
