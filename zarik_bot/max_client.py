@@ -146,11 +146,14 @@ class MaxClient:
 
     async def answer_callback(self, callback_id: str, text: str | None = None) -> dict:
         """Отвечает на callback (убирает индикатор загрузки у кнопки)."""
-        body: dict[str, Any] = {"callback_id": callback_id}
+        if not callback_id:
+            return {}
+        # callback_id передаётся как query-param, а не в теле
+        params: dict[str, Any] = {"callback_id": callback_id}
+        body: dict[str, Any] = {}
         if text:
-            body["text"] = text
-            body["notification"] = True
-        return await self._request("POST", "/answers", json=body)
+            body["notification"] = text
+        return await self._request("POST", "/answers", params=params, json=body or None)
 
     # ── Загрузка файлов ───────────────────────────────────────
 
@@ -183,7 +186,15 @@ class MaxClient:
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as up_resp:
                 result = await up_resp.json(content_type=None)
-                token: str = result.get("token", "")
+                # Ответ: {"photos": {"<hash>": {"token": "..."}}}
+                photos = result.get("photos", {})
+                token: str = ""
+                if photos:
+                    first_key = next(iter(photos))
+                    token = photos[first_key].get("token", "")
+                if not token:
+                    # Фолбэк на случай плоской структуры
+                    token = result.get("token", "")
                 if not token:
                     logger.error(f"MAX upload: no token in response: {result}")
                 return token
