@@ -652,13 +652,35 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
 
     # Меню
     elif payload == "menu:today":
+        if not db.is_program_started(uid):
+            await bot.send_message(
+                max_user_id,
+                "🦥 Программа ещё не началась — ждём завтра в 6:00!\n\n"
+                "Загляни сюда утром первого дня 👋",
+                buttons=_main_menu_buttons(max_user_id),
+            )
+            return
         await show_today(bot, max_user_id, uid)
 
     elif payload == "menu:stats":
+        if not db.is_program_started(uid):
+            await bot.send_message(
+                max_user_id,
+                "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
+                buttons=_main_menu_buttons(max_user_id),
+            )
+            return
         text = build_stats_text(uid)
         await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
 
     elif payload == "menu:week":
+        if not db.is_program_started(uid):
+            await bot.send_message(
+                max_user_id,
+                "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
+                buttons=_main_menu_buttons(max_user_id),
+            )
+            return
         text = build_week_screen_max(uid)
         await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
 
@@ -901,11 +923,26 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
     if cmd in ("сегодня", "задачи"):
         _u2 = db.get_user(uid)
         if db.is_payment_confirmed(uid) and (_u2 and _u2["onboarding_complete"]):
+            if not db.is_program_started(uid):
+                await bot.send_message(
+                    max_user_id,
+                    "🦥 Программа ещё не началась — ждём завтра в 6:00!\n\n"
+                    "Загляни сюда утром первого дня 👋",
+                    buttons=_main_menu_buttons(max_user_id),
+                )
+                return
             await show_today(bot, max_user_id, uid)
         return
 
     if cmd in ("прогресс", "статистика", "итоги"):
         if db.is_payment_confirmed(uid):
+            if not db.is_program_started(uid):
+                await bot.send_message(
+                    max_user_id,
+                    "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
+                    buttons=_main_menu_buttons(max_user_id),
+                )
+                return
             text_out = build_stats_text(uid)
             await bot.send_message(max_user_id, text_out, buttons=_main_menu_buttons(max_user_id))
         return
