@@ -419,6 +419,10 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await _handle_start(bot, max_user_id, uid, username, first_name)
         return
 
+    if cmd in ("/myid", "myid"):
+        await bot.send_message(max_user_id, f"Твой MAX user\\_id: `{max_user_id}`")
+        return
+
     if cmd in ("/help", "помощь", "помощь"):
         await bot.send_message(
             max_user_id,
