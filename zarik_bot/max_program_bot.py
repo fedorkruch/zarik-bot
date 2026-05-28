@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
-from max_client import MaxClient, _btn_callback, _btn_link
+from max_client import MaxClient, _btn_callback, _btn_contact, _btn_link
 import database as db
 import content as ct
 from workout import get_workout
@@ -218,7 +218,7 @@ def _photos_done_buttons() -> list[list[dict]]:
 
 def _phone_buttons() -> list[list[dict]]:
     return [
-        [_btn_callback("📱 Поделиться номером телефона", "phone_share")],
+        [_btn_contact("📱 Поделиться номером телефона")],
         [_btn_callback("Пропустить →", "phone_skip")],
     ]
 
@@ -618,15 +618,6 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         await _send_completion_message(bot, max_user_id, uid)
         await _send_phone_request(bot, max_user_id, uid)
 
-    # ── Телефон — поделиться (инструкция) ───────────────────
-    elif payload == "phone_share":
-        await bot.answer_callback(callback_id)
-        await bot.send_message(
-            max_user_id,
-            "Напиши свой номер телефона в чат (например: +79991234567) 👇",
-            buttons=_phone_buttons(),
-        )
-
     # ── Телефон — пропустить ─────────────────────────────────
     elif payload == "phone_skip":
         await bot.answer_callback(callback_id)
@@ -789,18 +780,45 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
 
     elif (payload.startswith("tz:") or payload.startswith("pushup:") or
           payload.startswith("squat:") or payload.startswith("abs:") or
-          payload in ("photo_yes", "photo_no", "photos_done", "phone_skip", "phone_share")):
+          payload in ("photo_yes", "photo_no", "photos_done", "phone_skip")):
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
 
 
 # ── Обработчик текстовых сообщений ───────────────────────────
 
+def _extract_phone_from_vcf(vcf_info: str) -> str:
+    """Извлекает номер телефона из VCard-строки MAX contact attachment."""
+    m = re.search(r"TEL(?:;[^:\r\n]+)?:([^\r\n]+)", vcf_info or "")
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
+async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, phone: str):
+    """Сохраняет телефон, переводит онбординг в done, благодарит пользователя."""
+    db.save_user_phone(uid, phone)
+    db.set_onboarding_step(uid, "done")
+    await bot.send_message(
+        max_user_id,
+        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи! 🦥",
+        buttons=_main_menu_buttons(max_user_id, uid),
+    )
+
+
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
-                     has_photo: bool = False, photo_token: str = ""):
+                     has_photo: bool = False, photo_token: str = "",
+                     contact_phone: str = ""):
     bot = get_client()
     uid = db.get_or_create_max_user(max_user_id, username, first_name)
     db.log_user_session(uid)
     text = (text or "").strip()
+
+    # ── Контакт (кнопка «Поделиться номером телефона») ────────
+    if contact_phone:
+        step = db.get_onboarding_step(uid)
+        if step == "awaiting_phone":
+            await _save_phone_and_finish(bot, max_user_id, uid, contact_phone)
+        return
 
     # ── Фото во время онбординга ──────────────────────────────
     if has_photo:
@@ -815,19 +833,12 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             )
             return
 
-    # ── Ввод телефона (awaiting_phone) ────────────────────────
+    # ── Ввод телефона вручную (awaiting_phone, если не нажали кнопку) ─
     step = db.get_onboarding_step(uid)
     if step == "awaiting_phone":
-        # Очищаем и проверяем номер
         digits = re.sub(r"[^\d+]", "", text)
         if len(digits) >= 7:
-            db.save_user_phone(uid, digits)
-            db.set_onboarding_step(uid, "done")
-            await bot.send_message(
-                max_user_id,
-                "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи! 🦥",
-                buttons=_main_menu_buttons(max_user_id, uid),
-            )
+            await _save_phone_and_finish(bot, max_user_id, uid, digits)
         else:
             await bot.send_message(
                 max_user_id,
@@ -1213,6 +1224,13 @@ async def process_update(data: dict):
                     if att.get("type") == "image":
                         photo_token = att.get("payload", {}).get("token", "")
                         break
+            # Контакт: кнопка «Поделиться номером телефона» (request_contact)
+            contact_phone = ""
+            for att in attachments:
+                if att.get("type") == "contact":
+                    vcf_info = att.get("payload", {}).get("vcf_info", "")
+                    contact_phone = _extract_phone_from_vcf(vcf_info)
+                    break
             await on_message(
                 max_user_id=sender.get("user_id", 0),
                 text=text,
@@ -1220,6 +1238,7 @@ async def process_update(data: dict):
                 first_name=sender.get("name", ""),
                 has_photo=has_photo,
                 photo_token=photo_token,
+                contact_phone=contact_phone,
             )
 
         elif update_type == "message_callback":

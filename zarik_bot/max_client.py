@@ -30,6 +30,12 @@ def _btn_msg(text: str, msg: str) -> dict:
     return {"type": "message", "text": text, "payload": msg}
 
 
+def _btn_contact(text: str) -> dict:
+    """Кнопка запроса контакта — пользователь нажимает и автоматически
+    отправляет свой номер телефона (аналог request_contact=True в Telegram)."""
+    return {"type": "request_contact", "text": text}
+
+
 class MaxClient:
     """
     Тонкая async-обёртка над REST API MAX.
