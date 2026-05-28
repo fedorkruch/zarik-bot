@@ -187,17 +187,16 @@ def _digits_buttons(prefix: str) -> list[list[dict]]:
 
 
 def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
-    """Навигационные кнопки — отправляются отдельным сообщением под трекером,
-    имитируя Reply Keyboard в нижней части экрана."""
-    row1 = [
+    """Навигационные кнопки — всегда показываются после каждого ответа бота."""
+    row_today = [_btn_callback("📋 Мои задачи на сегодня", "menu:today")]
+    row_nav   = [
         _btn_callback("📊 Прогресс", "menu:stats"),
-        _btn_callback("📅 Неделя",   "menu:week"),
         _btn_callback("🏆 Ачивки",   "menu:achievements"),
     ]
-    buttons = [row1]
+    buttons = [row_today, row_nav]
     if WEBAPP_URL:
         url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
-        buttons.append([_btn_link("📱 Мини-апп", url)])
+        buttons.append([_btn_link("📱 МиниАПП", url)])
     return buttons
 
 
@@ -344,22 +343,18 @@ def build_stats_text(uid: int) -> str:
 
 
 def build_week_screen_max(uid: int) -> str:
-    """Экран «Неделя» — итоги текущей недели и группы."""
-    import re as _re
-    stats = db.get_stats(uid)
-    day = stats["current_day"]
-    done = stats["days_completed"]
-    week_num = (day - 1) // 7 + 1
+    """Экран «Неделя» — итоги текущей недели и группы (аналог TG build_week_screen)."""
+    stats      = db.get_stats(uid)
+    day        = stats["current_day"]
+    done       = stats["days_completed"]
+    week_num   = (day - 1) // 7 + 1
     week_start = (week_num - 1) * 7 + 1
-    all_compl = db.get_completed_days_set(uid)
-    week_done = len({d for d in all_compl if week_start <= d <= day})
+    all_compl  = db.get_completed_days_set(uid)
+    week_done  = len({d for d in all_compl if week_start <= d <= day})
     percentile, ctx = ct.get_planet_percentile(done)
-    week_bar = make_mini_bar(week_done, 7)
-
-    raw_header = ct.get_weekly_header(week_num)
-    header = _re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'**\1**', raw_header)
-
-    group = db.get_group_stats()
+    week_bar   = make_mini_bar(week_done, 7)
+    header     = _md(ct.get_weekly_header(week_num))
+    group      = db.get_group_stats()
 
     lines = [
         f"**📅  Неделя {week_num} · {week_done} из 7 дней**",
@@ -377,10 +372,12 @@ def build_week_screen_max(uid: int) -> str:
         lines.append(f"      _ещё {d} {day_word(d)} → {pct}_")
 
     if group and group.get("total", 0) > 0:
+        total_g  = group["total"]
+        active_g = group["active"]
         lines += [
             "",
-            f"👥  Группа:           {group['total']} участников",
-            f"🏃  Продолжают:   **{group['active']}**",
+            f"👥  Группа:           {total_g} участников",
+            f"🏃  Продолжают:   **{active_g}**",
         ]
 
     return "\n".join(lines)
@@ -402,17 +399,18 @@ def build_achievements_text(uid: int) -> str:
 
 
 def build_weekly_milestone_text(uid: int) -> str:
-    """Итог недели для milestone-дней (7, 14, 21 ...)."""
-    stats     = db.get_stats(uid)
-    day       = stats["current_day"]
-    week_num  = (day - 1) // 7 + 1
-    user_row  = db.get_user(uid)
-    all_compl = db.get_completed_days_set(uid)
+    """Итог недели для milestone-дней (7, 14, 21 ...) — аналог TG build_weekly_milestone_screen."""
+    stats      = db.get_stats(uid)
+    day        = stats["current_day"]
+    week_num   = (day - 1) // 7 + 1
+    user_row   = db.get_user(uid)
+    all_compl  = db.get_completed_days_set(uid)
     week_start = (week_num - 1) * 7 + 1
     week_end   = week_num * 7
 
     total_pushups = total_squats = total_abs = 0
     week_pushups  = week_squats  = week_abs  = w_train = 0
+
     for d in all_compl:
         tasks = db.get_completed_tasks(uid, d)
         if 0 in tasks and user_row:
@@ -436,30 +434,36 @@ def build_weekly_milestone_text(uid: int) -> str:
                 if t in weekly_task_counts:
                     weekly_task_counts[t] += 1
 
-    user_counts = db.get_task_completion_counts(uid)
+    user_counts  = db.get_task_completion_counts(uid)
+    w_water      = weekly_task_counts[1] * 2
+    w_pages      = weekly_task_counts[2] * 20
+    w_nojunk     = weekly_task_counts[3]
+    w_noalc      = weekly_task_counts[4]
+    total_water  = user_counts.get(1, 0) * 2
+    total_pages  = user_counts.get(2, 0) * 20
+    total_nojunk = user_counts.get(3, 0)
+    total_noalc  = user_counts.get(4, 0)
 
     try:
-        header_text = ct.format_weekly_header(
+        raw = ct.format_weekly_header(
             week_num,
             train=w_train,
             pushups=week_pushups,
             abs=week_abs,
             squats=week_squats,
-            water=weekly_task_counts[1] * 2,
-            pages=weekly_task_counts[2] * 20,
-            nojunk=weekly_task_counts[3],
-            noalc=weekly_task_counts[4],
+            water=w_water,
+            pages=w_pages,
+            nojunk=w_nojunk,
+            noalc=w_noalc,
             total_pushups=total_pushups,
             total_abs=total_abs,
             total_squats=total_squats,
-            total_water=user_counts.get(1, 0) * 2,
-            total_pages=user_counts.get(2, 0) * 20,
-            total_nojunk=user_counts.get(3, 0),
-            total_noalc=user_counts.get(4, 0),
+            total_water=total_water,
+            total_pages=total_pages,
+            total_nojunk=total_nojunk,
+            total_noalc=total_noalc,
         )
-        # Конвертируем Telegram markdown (*bold*) → MAX markdown (**bold**)
-        import re
-        header_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'**\1**', header_text)
+        header_text = _md(raw)
     except Exception:
         week_done   = len({d for d in all_compl if week_start <= d <= week_end})
         header_text = f"**Неделя {week_num} завершена!** {week_done} из 7 дней ✅"
@@ -643,20 +647,22 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
         await bot.send_message(
             max_user_id,
             f"🦥 Программа стартует **{start}**.\n\nЗагляни сюда утром первого дня!",
+            buttons=_main_menu_buttons(max_user_id, uid),
         )
-        await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
         return
     if day > TOTAL_DAYS:
         await bot.send_message(
             max_user_id,
             "🏆 Ты прошёл все 77 дней! Это легенда! 🦥",
+            buttons=_main_menu_buttons(max_user_id, uid),
         )
-        await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
         return
     completed = set(db.get_completed_tasks(uid, day))
-    text = build_today_text(day, completed)
+    # Описание тренировки + задания на день
+    await bot.send_message(max_user_id, build_tasks_list_max(uid, day))
     # Трекер — только задачи (без навигации)
-    await bot.send_message(max_user_id, text, buttons=_tracker_buttons(day, completed))
+    await bot.send_message(max_user_id, build_today_text(day, completed),
+                           buttons=_tracker_buttons(day, completed))
     # Навигация — отдельным сообщением ниже (имитация Reply Keyboard)
     await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
@@ -721,6 +727,9 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             if day == TOTAL_DAYS:
                 await bot.send_message(max_user_id, _md(ct.FINAL_MESSAGE))
 
+            # Меню всегда доступно
+            await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
+
     # Меню (ack здесь, task делает ack сам через answer_callback+new_message)
     elif payload == "menu:today":
         await bot.answer_callback(callback_id)
@@ -743,25 +752,13 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
                 buttons=_main_menu_buttons(max_user_id, uid),
             )
             return
-        text = build_stats_text(uid)
-        await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
-
-    elif payload == "menu:week":
-        await bot.answer_callback(callback_id)
-        if not db.is_program_started(uid):
-            await bot.send_message(
-                max_user_id,
-                "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
-                buttons=_main_menu_buttons(max_user_id, uid),
-            )
-            return
-        text = build_week_screen_max(uid)
-        await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
+        await bot.send_message(max_user_id, build_stats_text(uid),
+                               buttons=_main_menu_buttons(max_user_id, uid))
 
     elif payload == "menu:achievements":
         await bot.answer_callback(callback_id)
-        text = build_achievements_text(uid)
-        await bot.send_message(max_user_id, text, buttons=_main_menu_buttons(max_user_id))
+        await bot.send_message(max_user_id, build_achievements_text(uid),
+                               buttons=_main_menu_buttons(max_user_id, uid))
 
     elif payload == "onboard:start":
         await bot.answer_callback(callback_id)
@@ -1053,7 +1050,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await bot.send_message(
             max_user_id,
             "🦥 **Помощь**\n\n"
-            "Напиши **старт** или **сегодня** — покажу твои задачи.\n"
+            "Напиши **старт** или **сегодня** — покажу задачи и тренировку.\n"
             "Напиши **прогресс** или **статистика** — покажу прогресс.\n"
             "Напиши **ачивки** — покажу достижения.\n\n"
             "Используй кнопки меню 👇",
@@ -1084,14 +1081,14 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                     buttons=_main_menu_buttons(max_user_id, uid),
                 )
                 return
-            text_out = build_stats_text(uid)
-            await bot.send_message(max_user_id, text_out, buttons=_main_menu_buttons(max_user_id))
+            await bot.send_message(max_user_id, build_stats_text(uid),
+                                   buttons=_main_menu_buttons(max_user_id, uid))
         return
 
     if cmd == "ачивки":
         if db.is_payment_confirmed(uid):
             await bot.send_message(max_user_id, build_achievements_text(uid),
-                                   buttons=_main_menu_buttons(max_user_id))
+                                   buttons=_main_menu_buttons(max_user_id, uid))
         return
 
 
@@ -1341,14 +1338,15 @@ async def _job_afternoon():
                 _md(ct.get_afternoon_smart(day, completed)),
                 len(completed),
             )
-            # Трекер + меню если не все выполнены
+            # Трекер если не все выполнены
             if not all_done:
                 await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
                     buttons=_tracker_buttons(day, completed),
                 )
-                await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            # Меню всегда
+            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Afternoon job error for MAX user {max_id}")
 
@@ -1381,14 +1379,15 @@ async def _job_evening():
                 _md(ct.get_evening_smart(day, completed)),
                 len(completed),
             )
-            # Трекер + меню если не все выполнены
+            # Трекер если не все выполнены
             if not all_done:
                 await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
                     buttons=_tracker_buttons(day, completed),
                 )
-                await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            # Меню всегда
+            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Evening job error for MAX user {max_id}")
 
@@ -1413,6 +1412,7 @@ async def _job_weekly():
             if day not in WEEKLY_MILESTONE_DAYS:
                 continue
             await bot.send_message(max_id, build_weekly_milestone_text(uid))
+            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Weekly job error for MAX user {max_id}")
 
