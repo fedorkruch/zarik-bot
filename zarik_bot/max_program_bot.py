@@ -36,9 +36,10 @@ WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_PROGRAM_WEBHOOK_PATH", "/webhook/max-program")
 
-HAPPY_IMG = Path(__file__).parent / "Happy.png"
-NORM_IMG  = Path(__file__).parent / "Norm.png"
-SAD_IMG   = Path(__file__).parent / "Sad.png"
+HAPPY_IMG      = Path(__file__).parent / "Happy.png"
+NORM_IMG       = Path(__file__).parent / "Norm.png"
+SAD_IMG        = Path(__file__).parent / "Sad.png"
+BEFORE_EXAMPLE = Path(__file__).parent / "before_example.jpg"
 
 _test_ids_raw = os.environ.get("MAX_TEST_USER_IDS", "")
 MAX_TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
@@ -171,6 +172,20 @@ def _main_menu_buttons(max_user_id: int) -> list[list[dict]]:
     buttons.append([_btn_callback("📅 Неделя", "menu:week")])
     buttons.append([_btn_callback("🏆 Ачивки", "menu:achievements")])
     return buttons
+
+
+def _photo_buttons() -> list[list[dict]]:
+    return [
+        [_btn_callback("📸 Да, хочу!", "photo_yes")],
+        [_btn_callback("➡️ Нет, пропустить", "photo_no")],
+    ]
+
+
+def _photos_done_buttons() -> list[list[dict]]:
+    return [
+        [_btn_callback("✅ Готово, все фото отправил(а)", "photos_done")],
+        [_btn_callback("➡️ Пропустить этот шаг", "photo_no")],
+    ]
 
 
 def _pay_buttons() -> list[list[dict]]:
@@ -423,11 +438,22 @@ def build_weekly_milestone_text(uid: int) -> str:
 
 # ── Онбординг ─────────────────────────────────────────────────
 
+async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
+    """Финальное сообщение после завершения онбординга."""
+    await bot.send_message(
+        max_user_id,
+        "Отлично, твоя программа сформирована под тебя 🎯\n\n"
+        "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
+        "А пока — отдыхай)",
+        buttons=_main_menu_buttons(max_user_id),
+    )
+
+
 async def start_onboarding(bot: MaxClient, max_user_id: int, uid: int):
     db.set_onboarding_step(uid, "timezone")
     await bot.send_message(
         max_user_id,
-        "🦥 Шаг 1 из 3 · Часовой пояс\n\n"
+        "🦥 Шаг 1 из 4 · Часовой пояс\n\n"
         "**Выбери свой часовой пояс** — буду присылать задания в 6:00 по твоему времени 👇",
         buttons=_timezone_buttons(),
     )
@@ -437,61 +463,110 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
                                      callback_id: str, payload: str):
     step = db.get_onboarding_step(uid)
 
+    # ── Шаг 1: Часовой пояс ──────────────────────────────────
     if step == "timezone" and payload.startswith("tz:"):
         tz = payload[3:]
         db.set_user_timezone(uid, tz)
         await bot.answer_callback(callback_id)
         tz_label = next((l for l, t in TIMEZONES if t == tz), tz)
+        await bot.send_message(max_user_id, f"✅ Часовой пояс: {tz_label}")
         await bot.send_message(
             max_user_id,
-            f"✅ Часовой пояс: {tz_label}\n\n"
-            "🦥 Шаг 2 из 3 · Тренировка\n\n"
-            "**Сколько отжиманий можешь сделать прямо сейчас?**",
+            "🦥 Теперь давай подберём тренировку под тебя.\n\n"
+            "Сколько отжиманий можешь сделать прямо сейчас?",
             buttons=_digits_buttons("pushup"),
         )
 
+    # ── Шаг 2: Отжимания ─────────────────────────────────────
     elif step == "pushup" and payload.startswith("pushup:"):
         val = int(payload.split(":")[1])
         db.save_pushup_start(uid, val)
         await bot.answer_callback(callback_id)
         await bot.send_message(
             max_user_id,
-            f"💪 Отжимания: {val} — записал!\n\n**Сколько приседаний?**",
+            f"💪 Отжимания: {val} — записал!\n\nСколько приседаний?",
             buttons=_digits_buttons("squat"),
         )
 
+    # ── Шаг 2: Приседания ────────────────────────────────────
     elif step == "squat" and payload.startswith("squat:"):
         val = int(payload.split(":")[1])
         db.save_squat_start(uid, val)
         await bot.answer_callback(callback_id)
         await bot.send_message(
             max_user_id,
-            f"🦵 Приседания: {val} — отлично!\n\n**Сколько подъёмов корпуса (пресс)?**",
+            f"🦵 Приседания: {val} — отлично!\n\nСколько раз пресс?",
             buttons=_digits_buttons("abs"),
         )
 
+    # ── Шаг 3: Пресс → переход к фото ───────────────────────
     elif step in ("abs", "photo") and payload.startswith("abs:"):
         val = int(payload.split(":")[1])
         db.save_abs_start(uid, val)
         await bot.answer_callback(callback_id)
-        db.complete_onboarding(uid)
-
-        user = db.get_user(uid)
-        start_str = user["start_date"] if user else "завтра"
-        try:
-            from datetime import date as _date
-            start_fmt = _date.fromisoformat(start_str).strftime("%d.%m.%Y")
-        except Exception:
-            start_fmt = start_str
-
         await bot.send_message(
             max_user_id,
             f"🔥 Пресс: {val} — красава!\n\n"
-            f"🦥 **Всё готово!**\n\n"
-            f"Твой первый день — **{start_fmt}**\n\n"
-            "Утром в 6:00 получишь первое задание. Жди — и не ленись сильно 🦥",
-            buttons=_main_menu_buttons(max_user_id),
+            "🦥 Шаг 4 из 4 · Фото до/после\n\n"
+            "Хочешь делиться результатами до/после? "
+            "Это поможет увидеть свой прогресс за 77 дней.",
+            buttons=_photo_buttons(),
         )
+
+    # ── Шаг 4: Фото — да ────────────────────────────────────
+    elif payload == "photo_yes":
+        await bot.answer_callback(callback_id)
+        db.set_share_photos(uid, True)
+        db.set_onboarding_step(uid, "awaiting_photos")
+        await bot.send_message(max_user_id, "📸 Отлично! Сейчас объясню что нужно сделать 👇")
+        instruction = (
+            "Сделай 2 фото «до»:\n"
+            "• Фронтальное (анфас)\n"
+            "• Боковое (профиль)\n\n"
+            "На фото закрой лицо листом бумаги с датой старта в формате число/месяц/год "
+            "и надписью «Для Зарика» ✍️\n\n"
+            "👗 Девушки — купальник или нижнее бельё\n"
+            "🩳 Парни — шорты или трусы\n\n"
+            "Надевайте что вам комфортнее, но в рамках приличия "
+            "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
+            "Отправляй фото сюда — я сохраню 👇\n"
+            "Когда закончишь — нажми кнопку ниже.\n\n"
+            "🔒 Мы не делимся твоими фото, не выкладываем их никуда — это только для тебя."
+        )
+        if BEFORE_EXAMPLE.exists():
+            await bot.send_photo(
+                max_user_id, BEFORE_EXAMPLE,
+                caption=instruction,
+                buttons=_photos_done_buttons(),
+            )
+        else:
+            await bot.send_message(max_user_id, instruction, buttons=_photos_done_buttons())
+
+    # ── Шаг 4: Фото — нет ───────────────────────────────────
+    elif payload == "photo_no":
+        await bot.answer_callback(callback_id)
+        db.set_share_photos(uid, False)
+        db.complete_onboarding(uid)
+        await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
+        await _send_completion_message(bot, max_user_id, uid)
+
+    # ── Шаг 4: Фото отправлены ──────────────────────────────
+    elif payload == "photos_done":
+        await bot.answer_callback(callback_id)
+        count = db.count_user_photos(uid, "before")
+        if count < 1:
+            await bot.send_message(
+                max_user_id,
+                "📸 Фото пока не получено.\n\n"
+                "Отправь 2 фото в чат (анфас и профиль) "
+                "или пропусти этот шаг, если не хочешь делиться фото 👇",
+                buttons=_photos_done_buttons(),
+            )
+            return
+        db.complete_onboarding(uid)
+        noun = "фото" if count in (2, 3, 4) else "фото"
+        await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
+        await _send_completion_message(bot, max_user_id, uid)
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -595,17 +670,32 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         await start_onboarding(bot, max_user_id, uid)
 
     elif (payload.startswith("tz:") or payload.startswith("pushup:") or
-          payload.startswith("squat:") or payload.startswith("abs:")):
-        await handle_onboarding_callback(bot, max_user_id, uid, "", payload)
+          payload.startswith("squat:") or payload.startswith("abs:") or
+          payload in ("photo_yes", "photo_no", "photos_done")):
+        await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
 
 
 # ── Обработчик текстовых сообщений ───────────────────────────
 
-async def on_message(max_user_id: int, text: str, username: str, first_name: str):
+async def on_message(max_user_id: int, text: str, username: str, first_name: str,
+                     has_photo: bool = False, photo_token: str = ""):
     bot = get_client()
     uid = db.get_or_create_max_user(max_user_id, username, first_name)
     db.log_user_session(uid)
     text = (text or "").strip()
+
+    # ── Фото во время онбординга ──────────────────────────────
+    if has_photo:
+        step = db.get_onboarding_step(uid)
+        if step == "awaiting_photos":
+            db.save_user_photo(uid, "before", photo_token or f"max_{max_user_id}")
+            count = db.count_user_photos(uid, "before")
+            await bot.send_message(
+                max_user_id,
+                f"📸 Фото {count} сохранено!\n\nКогда отправишь все — нажми кнопку 👇",
+                buttons=_photos_done_buttons(),
+            )
+            return
 
     # ── Команды администратора ────────────────────────────────
     if max_user_id == MAX_ADMIN_USER_ID:
@@ -874,11 +964,27 @@ async def _send_welcome_to_max_user(bot: MaxClient, max_user_id: int, uid: int):
                 "🦥 Продолжаем\n\n**Сколько приседаний?**",
                 buttons=_digits_buttons("squat")
             )
-        elif step in ("abs", "photo"):
+        elif step == "abs":
             await bot.send_message(
                 max_user_id,
                 "🦥 Продолжаем\n\n**Сколько подъёмов корпуса?**",
                 buttons=_digits_buttons("abs")
+            )
+        elif step == "photo":
+            await bot.send_message(
+                max_user_id,
+                "🦥 Шаг 4 из 4 · Фото до/после\n\n"
+                "**Хочешь делиться результатами до/после?** "
+                "Это поможет увидеть прогресс за 77 дней.",
+                buttons=_photo_buttons()
+            )
+        elif step == "awaiting_photos":
+            count = db.count_user_photos(uid, "before")
+            saved = f" Уже сохранено: {count} фото." if count else ""
+            await bot.send_message(
+                max_user_id,
+                f"📸 Жду твои фото «до».{saved}\n\nКогда всё отправишь — нажми кнопку 👇",
+                buttons=_photos_done_buttons()
             )
         else:
             await bot.send_message(
@@ -910,14 +1016,24 @@ async def process_update(data: dict):
             )
 
         elif update_type == "message_created":
-            msg    = data.get("message", {})
-            sender = msg.get("sender", {})
-            text   = msg.get("body", {}).get("text", "") or ""
+            msg         = data.get("message", {})
+            sender      = msg.get("sender", {})
+            text        = msg.get("body", {}).get("text", "") or ""
+            attachments = msg.get("body", {}).get("attachments", []) or []
+            has_photo   = any(a.get("type") == "image" for a in attachments)
+            photo_token = ""
+            if has_photo:
+                for att in attachments:
+                    if att.get("type") == "image":
+                        photo_token = att.get("payload", {}).get("token", "")
+                        break
             await on_message(
                 max_user_id=sender.get("user_id", 0),
                 text=text,
                 username=sender.get("username", ""),
                 first_name=sender.get("name", ""),
+                has_photo=has_photo,
+                photo_token=photo_token,
             )
 
         elif update_type == "message_callback":
