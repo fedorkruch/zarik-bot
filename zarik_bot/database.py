@@ -120,6 +120,38 @@ def init_db():
                 updated_at TEXT DEFAULT (datetime('now')),
                 PRIMARY KEY (user_id, day_number)
             );
+
+            -- ── MAX Мессенджер ─────────────────────────────────────
+            -- Маппинг MAX user_id → internal_id (отрицательные ≤ -1_000_001)
+            CREATE TABLE IF NOT EXISTS max_users (
+                max_user_id  INTEGER PRIMARY KEY,
+                internal_id  INTEGER NOT NULL UNIQUE,
+                username     TEXT,
+                first_name   TEXT,
+                created_at   TEXT DEFAULT (datetime('now'))
+            );
+
+            -- Воронка лидов из MAX-лид-бота
+            CREATE TABLE IF NOT EXISTS max_leads (
+                max_user_id          INTEGER PRIMARY KEY,
+                username             TEXT,
+                first_name           TEXT,
+                subscribed_at        TEXT,
+                tracker_sent_at      TEXT,
+                tracker_question_at  TEXT,
+                tracker_reply_yes    INTEGER,
+                intro_sent_at        TEXT,
+                pitch_sent_at        TEXT,
+                start_clicked_at     TEXT,
+                invoice_sent_at      TEXT,
+                purchased_at         TEXT,
+                follow_2_sent_at     TEXT,
+                follow_3_sent_at     TEXT,
+                follow_7_sent_at     TEXT,
+                final_sent_at        TEXT,
+                lead_status          TEXT DEFAULT 'new',
+                created_at           TEXT DEFAULT (datetime('now'))
+            );
         """)
 
         # Миграции для существующих баз данных
@@ -1106,3 +1138,153 @@ def set_day_for_testing(user_id: int, target_day: int):
             "DELETE FROM task_completions WHERE user_id = ? AND day_number >= ?",
             (user_id, target_day)
         )
+
+
+# ── MAX Мессенджер ─────────────────────────────────────────────
+
+_MAX_INTERNAL_ID_START = -1_000_001   # MAX-пользователи: -1_000_001, -1_000_002, …
+
+
+def get_or_create_max_user(max_user_id: int, username: str, first_name: str) -> int:
+    """
+    Возвращает internal_id для пользователя MAX.
+    При первом вызове создаёт строку в max_users и users (INSERT OR IGNORE).
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT internal_id FROM max_users WHERE max_user_id = ?",
+            (max_user_id,)
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE max_users SET username=?, first_name=? WHERE max_user_id=?",
+                (username or "", first_name or "Участник", max_user_id)
+            )
+            return row["internal_id"]
+
+        # Генерируем следующий internal_id
+        last_row = conn.execute(
+            "SELECT MIN(internal_id) as min_id FROM max_users"
+        ).fetchone()
+        if last_row and last_row["min_id"] is not None:
+            internal_id = last_row["min_id"] - 1
+        else:
+            internal_id = _MAX_INTERNAL_ID_START
+
+        conn.execute(
+            "INSERT INTO max_users (max_user_id, internal_id, username, first_name) VALUES (?,?,?,?)",
+            (max_user_id, internal_id, username or "", first_name or "Участник")
+        )
+        conn.execute("""
+            INSERT OR IGNORE INTO users
+                (user_id, username, first_name, start_date, onboarding_step, onboarding_complete)
+            VALUES (?, ?, ?, '2099-01-01', 'payment', 0)
+        """, (internal_id, username or "", first_name or "Участник"))
+
+        return internal_id
+
+
+def get_max_internal_id(max_user_id: int) -> int | None:
+    """Возвращает internal_id для MAX-пользователя или None."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT internal_id FROM max_users WHERE max_user_id = ?",
+            (max_user_id,)
+        ).fetchone()
+        return row["internal_id"] if row else None
+
+
+def get_max_user_id_by_internal(internal_id: int) -> int | None:
+    """Обратный маппинг: internal_id → max_user_id."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT max_user_id FROM max_users WHERE internal_id = ?",
+            (internal_id,)
+        ).fetchone()
+        return row["max_user_id"] if row else None
+
+
+# ── MAX-лиды ──────────────────────────────────────────────────
+
+def upsert_max_lead(max_user_id: int, username: str, first_name: str):
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT OR IGNORE INTO max_leads (max_user_id, username, first_name)
+            VALUES (?, ?, ?)
+        """, (max_user_id, username or "", first_name or ""))
+        conn.execute(
+            "UPDATE max_leads SET username=?, first_name=? WHERE max_user_id=?",
+            (username or "", first_name or "", max_user_id)
+        )
+
+
+def get_max_lead(max_user_id: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM max_leads WHERE max_user_id = ?", (max_user_id,)
+        ).fetchone()
+
+
+def mark_max_lead_subscribed(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET subscribed_at=datetime('now'), lead_status='subscribed' WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_tracker_sent(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET tracker_sent_at=datetime('now') WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_tracker_reply(max_user_id: int, yes: bool):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET tracker_question_at=datetime('now'), tracker_reply_yes=? WHERE max_user_id=?",
+            (1 if yes else 0, max_user_id)
+        )
+
+
+def mark_max_lead_pitch_sent(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET pitch_sent_at=datetime('now'), lead_status='pitched' WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_purchased(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET purchased_at=datetime('now'), lead_status='purchased' WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_follow(max_user_id: int, day: int):
+    col = {2: "follow_2_sent_at", 3: "follow_3_sent_at", 7: "follow_7_sent_at"}.get(day)
+    if col:
+        with get_conn() as conn:
+            conn.execute(
+                f"UPDATE max_leads SET {col}=datetime('now') WHERE max_user_id=?",
+                (max_user_id,)
+            )
+
+
+def get_max_leads_for_followup(day: int):
+    """Возвращает лидов, которым нужно отправить follow-up на N-й день."""
+    col = {2: "follow_2_sent_at", 3: "follow_3_sent_at", 7: "follow_7_sent_at"}.get(day)
+    if not col:
+        return []
+    with get_conn() as conn:
+        return conn.execute(f"""
+            SELECT * FROM max_leads
+            WHERE purchased_at IS NULL
+              AND {col} IS NULL
+              AND subscribed_at IS NOT NULL
+              AND (julianday('now') - julianday(subscribed_at)) >= ?
+        """, (day,)).fetchall()

@@ -633,6 +633,36 @@ async def handle_set_mode(request: web.Request) -> web.Response:
 
 # ── Сборка ───────────────────────────────────────────────────
 
+# ── MAX Мессенджер — вебхук-обработчики ──────────────────────
+
+async def handle_max_lead_webhook(request: web.Request) -> web.Response:
+    """Принимает обновления от MAX для лид-бота."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.Response(status=400)
+    try:
+        import max_lead_bot
+        await max_lead_bot.process_update(data)
+    except Exception:
+        logger.exception("MAX lead webhook error")
+    return web.Response(status=200)
+
+
+async def handle_max_program_webhook(request: web.Request) -> web.Response:
+    """Принимает обновления от MAX для основного бота."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.Response(status=400)
+    try:
+        import max_program_bot
+        await max_program_bot.process_update(data)
+    except Exception:
+        logger.exception("MAX program webhook error")
+    return web.Response(status=200)
+
+
 def create_app() -> web.Application:
     app = web.Application(
         middlewares=[_security_middleware],
@@ -651,15 +681,28 @@ def create_app() -> web.Application:
     app.router.add_post("/api/close",          handle_close_day)
     app.router.add_post("/api/mode",           handle_set_mode)
     app.router.add_get("/img/{name}",          handle_mood_img)
+    # MAX Мессенджер вебхуки
+    app.router.add_post("/webhook/max-lead",    handle_max_lead_webhook)
+    app.router.add_post("/webhook/max-program", handle_max_program_webhook)
     return app
 
 
 async def run_server():
+    import asyncio
     app = create_app()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
     logger.info(f"🌐 WebApp сервер запущен на :{PORT}")
-    import asyncio
+
+    # Регистрируем вебхуки MAX если токены заданы
+    if WEBAPP_URL:
+        try:
+            import max_lead_bot, max_program_bot
+            await max_lead_bot.setup(WEBAPP_URL)
+            await max_program_bot.setup(WEBAPP_URL)
+        except Exception:
+            logger.exception("Ошибка инициализации MAX ботов")
+
     await asyncio.Event().wait()
