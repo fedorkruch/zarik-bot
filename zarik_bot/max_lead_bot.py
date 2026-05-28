@@ -153,9 +153,11 @@ def _program_bot_buttons() -> list[list[dict]]:
 # ── Обработчики событий ───────────────────────────────────────
 
 async def on_bot_started(max_user_id: int, username: str, first_name: str):
+    logger.info(f"MAX lead on_bot_started: sending to user_id={max_user_id}")
     bot = get_client()
     db.upsert_max_lead(max_user_id, username, first_name)
-    await bot.send_message(max_user_id, SUBSCRIBE_TEXT, buttons=_subscribe_buttons())
+    result = await bot.send_message(max_user_id, SUBSCRIBE_TEXT, buttons=_subscribe_buttons())
+    logger.info(f"MAX lead send_message result: {result}")
 
 
 async def on_callback(max_user_id: int, callback_id: str, payload: str,
@@ -242,12 +244,15 @@ def _schedule_broadcast(text: str):
 async def process_update(data: dict):
     """Обрабатывает один входящий объект Update от MAX."""
     update_type = data.get("update_type", "")
+    logger.info(f"MAX lead update: type={update_type!r} keys={list(data.keys())}")
 
     try:
         if update_type == "bot_started":
             user = data.get("user", {})
+            max_user_id = user.get("user_id", 0)
+            logger.info(f"MAX lead bot_started: user_id={max_user_id} user={user}")
             await on_bot_started(
-                max_user_id=user.get("user_id", 0),
+                max_user_id=max_user_id,
                 username=user.get("username", ""),
                 first_name=user.get("name", ""),
             )
@@ -256,6 +261,7 @@ async def process_update(data: dict):
             msg = data.get("message", {})
             sender = msg.get("sender", {})
             text = msg.get("body", {}).get("text", "") or ""
+            logger.info(f"MAX lead message: user_id={sender.get('user_id')} text={text!r}")
             await on_message(
                 max_user_id=sender.get("user_id", 0),
                 text=text,
@@ -266,13 +272,18 @@ async def process_update(data: dict):
         elif update_type == "message_callback":
             cb = data.get("callback", {})
             user = cb.get("user", {})
+            payload = cb.get("payload", "")
+            logger.info(f"MAX lead callback: user_id={user.get('user_id')} payload={payload!r}")
             await on_callback(
                 max_user_id=user.get("user_id", 0),
                 callback_id=cb.get("callback_id", ""),
-                payload=cb.get("payload", ""),
+                payload=payload,
                 username=user.get("username", ""),
                 first_name=user.get("name", ""),
             )
+
+        else:
+            logger.info(f"MAX lead unhandled update_type={update_type!r} data={data}")
 
     except Exception:
         logger.exception(f"Error processing MAX lead update: {update_type}")
