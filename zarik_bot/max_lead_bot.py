@@ -2,12 +2,15 @@
 max_lead_bot.py — лид-бот для Мессенджера MAX (аналог @Shagov77_bot).
 
 Воронка:
-  1. bot_started → подписка на канал
+  1. /start → предложение подписаться на канал
   2. «Я подписался» → трекер-подарок (ссылка) + вопрос через 20 сек
-  3. «Всё получилось» / «Нет» → знакомство с программой
-  4. +10 сек → оффер с кнопкой «Купить»
-  5. Follow-up через 2 / 3 / 7 дней
-  6. После покупки → ссылка на основной бот
+  3. «Всё получилось» (попытка 1 или 2) → +2 сек → знакомство с программой → +10 сек → оффер
+  4. «Нет, не вышло» попытка 1 → инструкция iOS/Android → +20 сек → вопрос снова
+  5. «Нет, не вышло» попытка 2 → инструкция → +30 сек → автоматически знакомство + оффер
+  6. +60 сек без покупки → «без давления»
+  7. Follow-up через 2 / 3 / 7 дней (APScheduler, каждый час)
+  8. Через 1 час после day-7 → прощальное сообщение
+  9. После покупки → ссылка на основной бот
 
 Переменные окружения:
   MAX_LEAD_BOT_TOKEN     — токен лид-бота в MAX
@@ -20,7 +23,10 @@ max_lead_bot.py — лид-бот для Мессенджера MAX (анало�
 import asyncio
 import logging
 import os
-import time as _time
+
+from datetime import datetime
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from max_client import MaxClient, _btn_callback, _btn_link
 import database as db
@@ -46,52 +52,99 @@ def get_client() -> MaxClient:
 
 # ── Тексты ────────────────────────────────────────────────────
 
-WELCOME_TEXT = (
-    "Привет! 🦥 Я Зарик — ленивый, но результативный.\n\n"
-    "Помогаю людям меняться мягко — без насилия над собой.\n\n"
-    "Подпишись на канал **@kabanovofficial** — и я пришлю тебе подарок 🎁"
-)
-
 SUBSCRIBE_TEXT = (
-    "Подпишись на канал — там я рассказываю, как меняться без боли 🦥\n\n"
+    "🦥 Привет!\n\n"
+    "Я подготовил тебе подарок — интерактивный трекер для достижения твоих задач.\n\n"
+    "Чтобы получить его, подпишись на канал — там всё самое важное о программе.\n\n"
     "👉 t.me/kabanovofficial\n\n"
     "Как подпишешься — нажми кнопку ниже 👇"
 )
 
+ALREADY_IN_PROGRAM_TEXT = (
+    "✅ Ты уже в программе!\n\n"
+    "Переходи к боту — там тебя ждут 👇"
+)
+
 TRACKER_TEXT = (
-    "🎁 Держи трекер привычек — мой подарок!\n\n"
-    "Открой его и попробуй поставить задачи на сегодня 👇"
+    "🎁 **Держи трекер достижений — твой подарок!**\n\n"
+    "Устанавливай количество дней на пути к цели, прописывай ежедневные задачи. "
+    "Отмечай каждый день выполнение и наблюдай свой путь.\n\n"
+    "Это твой личный дашборд прогресса 👇\n\n"
+    "*iPhone:* нажми ··· → Открыть в Safari → Поделиться → На экран Домой\n"
+    "*Android:* открой в Chrome → меню ⋮ → Добавить на главный экран"
 )
 
-TRACKER_QUESTION_TEXT = (
-    "Ну как, всё получилось с трекером? 🦥"
-)
+TRACKER_QUESTION_TEXT = "🦥 Ну как? Всё получилось с трекером? Нравится? 👇"
 
-TRACKER_NO_TEXT = (
-    "Понял, бывает 😅\n\n"
-    "Вот инструкция:\n"
-    "**iOS:** Safari → кнопка «Поделиться» → «На экран Домой»\n"
-    "**Android:** Chrome → меню ⋮ → «Добавить на главный экран»\n\n"
-    "Попробуй ещё раз — должно получиться 👇"
+TRACKER_INSTRUCTIONS_TEXT = (
+    "📱 **Как открыть трекер и сохранить на экран:**\n\n"
+    "**Если у тебя iPhone (iOS):**\n"
+    "1️⃣ Нажми кнопку «📊 Открыть трекер» выше\n"
+    "2️⃣ Нажми *···* (три точки) вверху браузера\n"
+    "3️⃣ Выбери *Открыть в Safari*\n"
+    "4️⃣ В Safari: *Поделиться* → *На экран Домой*\n\n"
+    "**Если у тебя Android:**\n"
+    "1️⃣ Нажми кнопку «📊 Открыть трекер» выше\n"
+    "2️⃣ Chrome покажет баннер — нажми *Добавить*\n"
+    "Или: меню *⋮* → *Добавить на главный экран*\n\n"
+    "Сделай это — и трекер будет работать как отдельное приложение 👆"
 )
 
 INTRO_TEXT = (
-    "Супер, рад что всё получилось! 🎉\n\n"
-    "Хочу рассказать тебе про одну вещь, которая изменила мою жизнь.\n\n"
-    "Это **77 Soft Challenge** — 77 дней без алкоголя, без фастфуда, "
-    "с ежедневным спортом, чтением и водой. Ничего жёсткого.\n\n"
-    "Просто мягкий сдвиг — каждый день по чуть-чуть."
+    "🦥 Кстати, мы уже собрали **программу 77 дней** — "
+    "для тех, кто хочет реальных изменений без надрыва.\n\n"
+    "Каждое утро твой личный бот-наставник присылает тебе задачи дня. "
+    "Ты отмечаешь что выполнил — и видишь как растёт прогресс.\n\n"
+    "Никакого жёсткого расписания.\n"
+    "Никаких часовых тренировок.\n"
+    "Никакого «начну с понедельника».\n\n"
+    "Просто маленькие шаги каждый день — "
+    "и через 77 дней ты не узнаешь себя.\n\n"
+    "*Это работает, потому что не требует героизма — только привычки.*"
 )
 
 OFFER_TEXT = (
-    "🦥 **77 Soft Challenge — старт!**\n\n"
-    "Что включено:\n"
-    "• Ежедневные задания и трекер в боте\n"
-    "• Утренние и вечерние чекины\n"
-    "• Персональные тренировки по нарастающей\n"
-    "• Поддержка и мотивация от Зарика\n\n"
-    "**Стоимость: 1990 ₽**\n\n"
-    "Нажми «Начать» — и вперёд 👇"
+    "💳 **Сегодня — 1990 ₽ вместо 4990 ₽**\n\n"
+    "Полный доступ к программе на 77 дней:\n"
+    "• Персональный наставник-бот\n"
+    "• Трекер задач и прогресса\n"
+    "• Еженедельная статистика группы\n"
+    "• Ачивки за серии и достижения\n\n"
+    "Нажми кнопку — и вперёд 👇"
+)
+
+NO_PRESSURE_TEXT = (
+    "🦥 Никакого давления.\n\n"
+    "Ты можешь вернуться в любой момент — кнопка доступна выше."
+)
+
+FOLLOWUP_TEXTS = {
+    2: (
+        "🦥 Как ты?\n\n"
+        "Вчера смотрел трекер — решил попробовать?\n\n"
+        "77 дней начинаются с одного шага.\n"
+        "Цена пока 1990 ₽ 👇"
+    ),
+    3: (
+        "📊 Три дня, как ты видел трекер.\n\n"
+        "Знаешь что объединяет тех, кто прошёл 77 дней?\n"
+        "Они просто **начали**.\n\n"
+        "Не «когда будет время». Не «с понедельника».\n"
+        "Сегодня. Прямо сейчас 👇"
+    ),
+    7: (
+        "🏁 Прошла неделя.\n\n"
+        "Ты видел трекер, читал о программе.\n\n"
+        "Это последнее напоминание — я не хочу быть навязчивым.\n\n"
+        "Если решишь начать — кнопка ниже.\n"
+        "Если нет — всё равно желаю тебе результата 🦥"
+    ),
+}
+
+FAREWELL_TEXT = (
+    "🦥 Окей, не буду больше напоминать.\n\n"
+    "Если захочешь вернуться — просто напиши /start.\n\n"
+    "Удачи тебе, что бы ты ни выбрал 🙌"
 )
 
 PURCHASED_TEXT = (
@@ -99,49 +152,34 @@ PURCHASED_TEXT = (
     "Переходи в основной бот — там тебя уже ждут 👇"
 )
 
-FOLLOW_2_TEXT = (
-    "🦥 Привет! Как трекер — пользуешься?\n\n"
-    "Если понравилась идея — присоединяйся к 77 Soft Challenge.\n"
-    "Ещё не поздно начать 👇"
-)
-
-FOLLOW_3_TEXT = (
-    "Заметил, что ты ещё не начал программу.\n\n"
-    "Понимаю — начать всегда тяжело. Но у нас никакого насилия 🦥\n"
-    "Просто 5 маленьких задач в день. Без боли."
-)
-
-FOLLOW_7_TEXT = (
-    "Последний раз пишу — не хочу надоедать 🙂\n\n"
-    "Если передумаешь — я здесь. Трекером пользуйся, он навсегда твой."
-)
-
+# ── Кнопки ────────────────────────────────────────────────────
 
 def _subscribe_buttons() -> list[list[dict]]:
     return [[_btn_callback("✅ Я подписался", "sub_check")]]
 
 
-def _tracker_question_buttons() -> list[list[dict]]:
+def _tracker_buttons() -> list[list[dict]]:
+    tracker_url = f"{WEBAPP_URL.rstrip('/')}/tracker" if WEBAPP_URL else "https://t.me/shagov77_bot"
+    return [[_btn_link("📊 Открыть трекер", tracker_url)]]
+
+
+def _tracker_question_buttons(attempt: int = 1) -> list[list[dict]]:
     return [[
-        _btn_callback("👍 Всё получилось", "tracker_yes"),
-        _btn_callback("Нет, не вышло", "tracker_no"),
+        _btn_callback("✅ Да, всё отлично!", "tracker_ok"),
+        _btn_callback("😕 Нет, не вышло", f"tracker_fail_{attempt}"),
     ]]
 
 
 def _offer_buttons() -> list[list[dict]]:
-    buttons = []
     if PAYMENT_URL:
-        buttons.append([_btn_link("🚀 Начать — 1990 ₽", PAYMENT_URL)])
-    if MAX_PROGRAM_BOT_URL:
-        buttons.append([_btn_link("💬 Основной бот", MAX_PROGRAM_BOT_URL)])
-    return buttons or [[_btn_callback("🚀 Начать", "buy_now")]]
+        return [[_btn_link("🚀 Начать — 1990 ₽", PAYMENT_URL)]]
+    return [[_btn_callback("🚀 Начать", "buy_now")]]
 
 
 def _follow_buttons() -> list[list[dict]]:
-    buttons = []
     if PAYMENT_URL:
-        buttons.append([_btn_link("Присоединиться", PAYMENT_URL)])
-    return buttons
+        return [[_btn_link("Присоединиться — 1990 ₽", PAYMENT_URL)]]
+    return []
 
 
 def _program_bot_buttons() -> list[list[dict]]:
@@ -150,71 +188,200 @@ def _program_bot_buttons() -> list[list[dict]]:
     return []
 
 
+# ── Вспомогательные ───────────────────────────────────────────
+
+def _call_later(delay: float, coro_factory):
+    """Планирует корутину через delay секунд в текущем event loop."""
+    loop = asyncio.get_event_loop()
+    loop.call_later(delay, lambda: asyncio.ensure_future(coro_factory()))
+
+
+# ── Шаги воронки ─────────────────────────────────────────────
+
+async def _step_send_tracker(max_user_id: int):
+    """Шаг 2: отправляем трекер-подарок."""
+    bot = get_client()
+    await bot.send_message(max_user_id, TRACKER_TEXT, buttons=_tracker_buttons())
+    db.mark_max_lead_tracker_sent(max_user_id)
+    # Через 20 сек — вопрос о трекере (попытка 1)
+    _call_later(20, lambda: _step_ask_tracker(max_user_id, attempt=1))
+
+
+async def _step_ask_tracker(max_user_id: int, attempt: int = 1):
+    """Шаг 3: спрашиваем, всё ли получилось с трекером."""
+    if db.is_max_lead_purchased(max_user_id):
+        return
+    bot = get_client()
+    await bot.send_message(
+        max_user_id, TRACKER_QUESTION_TEXT,
+        buttons=_tracker_question_buttons(attempt)
+    )
+
+
+async def _step_send_intro(max_user_id: int):
+    """Шаг 4: знакомство с программой."""
+    if db.is_max_lead_purchased(max_user_id):
+        return
+    bot = get_client()
+    await bot.send_message(max_user_id, INTRO_TEXT)
+    db.mark_max_lead_intro_sent(max_user_id)
+    # Через 10 сек — оффер
+    _call_later(10, lambda: _step_send_offer(max_user_id))
+
+
+async def _step_send_offer(max_user_id: int):
+    """Шаг 5: оффер с ценой."""
+    if db.is_max_lead_purchased(max_user_id):
+        return
+    bot = get_client()
+    await bot.send_message(max_user_id, OFFER_TEXT, buttons=_offer_buttons())
+    db.mark_max_lead_pitch_sent(max_user_id)
+    # Через 60 сек без покупки → «без давления»
+    _call_later(60, lambda: _step_no_pressure(max_user_id))
+
+
+async def _step_no_pressure(max_user_id: int):
+    """Шаг 6: без давления — если не купил за 60 сек."""
+    if db.is_max_lead_purchased(max_user_id):
+        return
+    bot = get_client()
+    await bot.send_message(max_user_id, NO_PRESSURE_TEXT)
+
+
+async def _step_farewell(max_user_id: int):
+    """Шаг: прощальное сообщение после day-7 follow-up."""
+    if db.is_max_lead_purchased(max_user_id):
+        return
+    bot = get_client()
+    try:
+        await bot.send_message(max_user_id, FAREWELL_TEXT)
+        db.mark_max_lead_final(max_user_id)
+    except Exception as e:
+        logger.warning(f"MAX farewell error user={max_user_id}: {e}")
+
+
+# ── Follow-up (APScheduler) ───────────────────────────────────
+
+async def _job_followup():
+    """Периодический follow-up: каждый час, аналог Telegram job_followup_check."""
+    leads = db.get_all_max_pitched_leads()
+    now = datetime.utcnow()
+    bot = get_client()
+
+    for lead in leads:
+        uid = lead["max_user_id"]
+        pitch_at = lead.get("pitch_sent_at")
+        if not pitch_at:
+            continue
+        try:
+            pitch_dt = datetime.fromisoformat(pitch_at)
+        except Exception:
+            continue
+
+        hours = (now - pitch_dt).total_seconds() / 3600
+
+        if db.is_max_lead_purchased(uid):
+            continue
+
+        # Day 7: последний follow-up + прощание через 1ч
+        if hours >= 168 and not lead.get("follow_7_sent_at") and not lead.get("final_sent_at"):
+            await _send_followup(bot, uid, day=7)
+            _call_later(3600, lambda u=uid: _step_farewell(u))
+            continue
+
+        # Day 3
+        if (hours >= 48
+                and not lead.get("follow_3_sent_at")
+                and not lead.get("follow_7_sent_at")
+                and not lead.get("final_sent_at")):
+            await _send_followup(bot, uid, day=3)
+            continue
+
+        # Day 2
+        if hours >= 24 and not lead.get("follow_2_sent_at"):
+            await _send_followup(bot, uid, day=2)
+            continue
+
+
+async def _send_followup(bot: MaxClient, max_user_id: int, day: int):
+    text = FOLLOWUP_TEXTS.get(day, "")
+    if not text:
+        return
+    try:
+        await bot.send_message(max_user_id, text, buttons=_follow_buttons())
+        db.mark_max_lead_follow(max_user_id, day)
+        logger.info(f"MAX follow-up day {day} → user={max_user_id}")
+    except Exception as e:
+        logger.warning(f"MAX follow-up day {day} error user={max_user_id}: {e}")
+
+
 # ── Обработчики событий ───────────────────────────────────────
 
 async def on_bot_started(max_user_id: int, username: str, first_name: str):
-    logger.info(f"MAX lead on_bot_started: sending to user_id={max_user_id}")
+    logger.info(f"MAX lead on_bot_started: user_id={max_user_id}")
     bot = get_client()
     db.upsert_max_lead(max_user_id, username, first_name)
-    result = await bot.send_message(max_user_id, SUBSCRIBE_TEXT, buttons=_subscribe_buttons())
-    logger.info(f"MAX lead send_message result: {result}")
+
+    # Уже купил — редирект в основной бот
+    if db.is_max_lead_purchased(max_user_id):
+        await bot.send_message(
+            max_user_id, ALREADY_IN_PROGRAM_TEXT,
+            buttons=_program_bot_buttons()
+        )
+        return
+
+    await bot.send_message(max_user_id, SUBSCRIBE_TEXT, buttons=_subscribe_buttons())
 
 
 async def on_callback(max_user_id: int, callback_id: str, payload: str,
                       username: str, first_name: str):
     bot = get_client()
 
+    # ── Проверка подписки ─────────────────────────────────────
     if payload == "sub_check":
         await bot.answer_callback(callback_id)
         db.upsert_max_lead(max_user_id, username, first_name)
         db.mark_max_lead_subscribed(max_user_id)
 
-        # Отправляем трекер
-        tracker_url = f"{WEBAPP_URL}/tracker" if WEBAPP_URL else "https://t.me/shagov77_bot"
-        await bot.send_message(
-            max_user_id, TRACKER_TEXT,
-            buttons=[[_btn_link("📋 Открыть трекер", tracker_url)]]
-        )
-        db.mark_max_lead_tracker_sent(max_user_id)
-
-        # Через 20 сек — вопрос о трекере
-        asyncio.get_event_loop().call_later(
-            20,
-            lambda: asyncio.create_task(
-                bot.send_message(max_user_id, TRACKER_QUESTION_TEXT,
-                                 buttons=_tracker_question_buttons())
+        if db.is_max_lead_purchased(max_user_id):
+            await bot.send_message(
+                max_user_id, ALREADY_IN_PROGRAM_TEXT,
+                buttons=_program_bot_buttons()
             )
-        )
+            return
 
-    elif payload == "tracker_yes":
+        await _step_send_tracker(max_user_id)
+
+    # ── Трекер: всё получилось ────────────────────────────────
+    elif payload == "tracker_ok":
         await bot.answer_callback(callback_id)
         db.mark_max_lead_tracker_reply(max_user_id, yes=True)
-        await bot.send_message(max_user_id, INTRO_TEXT)
-        # Через 10 сек — оффер
-        asyncio.get_event_loop().call_later(
-            10,
-            lambda: asyncio.create_task(
-                _send_offer(max_user_id)
-            )
-        )
+        await bot.send_message(max_user_id, "🎉 Супер, я очень рад что всё получилось!")
+        # Через 2 сек — знакомство с программой
+        _call_later(2, lambda: _step_send_intro(max_user_id))
 
-    elif payload == "tracker_no":
+    # ── Трекер: не получилось ─────────────────────────────────
+    elif payload.startswith("tracker_fail_"):
         await bot.answer_callback(callback_id)
         db.mark_max_lead_tracker_reply(max_user_id, yes=False)
-        tracker_url = f"{WEBAPP_URL}/tracker" if WEBAPP_URL else "https://t.me/shagov77_bot"
+        attempt = int(payload.split("_")[-1])
+
+        # Инструкция
         await bot.send_message(
-            max_user_id, TRACKER_NO_TEXT,
-            buttons=[[_btn_link("📋 Попробовать снова", tracker_url)]]
+            max_user_id, TRACKER_INSTRUCTIONS_TEXT,
+            buttons=_tracker_buttons()
         )
 
+        if attempt < 2:
+            # Спрашиваем снова через 20 сек (попытка 2)
+            _call_later(20, lambda: _step_ask_tracker(max_user_id, attempt=2))
+        else:
+            # Второй «нет» — через 30 сек автоматически идём дальше
+            _call_later(30, lambda: _step_send_intro(max_user_id))
+
+    # ── Покупка (fallback без PAYMENT_URL) ────────────────────
     elif payload == "buy_now":
-        await bot.answer_callback(callback_id, "Скоро добавим оплату!")
-
-
-async def _send_offer(max_user_id: int):
-    bot = get_client()
-    await bot.send_message(max_user_id, OFFER_TEXT, buttons=_offer_buttons())
-    db.mark_max_lead_pitch_sent(max_user_id)
+        await bot.answer_callback(callback_id, "Переходи по ссылке для оплаты!")
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str):
@@ -222,29 +389,72 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
     bot = get_client()
     cmd = text.strip().lower().split()[0] if text.strip() else ""
 
-    # /start — обычный пользователь
+    # /start — любой пользователь
     if cmd in ("/start", "start", "старт"):
         await on_bot_started(max_user_id, username, first_name)
         return
 
-    # Остальное — только для администратора
+    # Только для администратора
     if max_user_id != MAX_ADMIN_USER_ID:
         return
 
-    if text.startswith("/stats"):
-        leads = db.get_max_leads_for_followup(0) or []
-        total = len(db.get_client_stats_max() if hasattr(db, "get_client_stats_max") else [])
-        await bot.send_message(max_user_id, f"📊 MAX лид-бот\nВсего лидов: {total}")
+    if text.startswith("/stats") or text.startswith("/leads"):
+        f = db.get_max_funnel_stats()
+        if not f or not f.get("total"):
+            await bot.send_message(max_user_id, "📊 Лидов пока нет.")
+            return
+        msg = (
+            f"📊 **CRM — MAX лид-бот**\n\n"
+            f"Всего лидов: {f['total']}\n"
+            f"Подписались на канал: {f['subscribed']}\n"
+            f"Получили трекер: {f['tracker_sent']}\n"
+            f"Увидели вопрос: {f['question_sent']}\n"
+            f"Ответили: {f['question_replied']} (✅ {f['replied_yes']} / 😕 {f['replied_no']})\n"
+            f"Получили оффер: {f['offer_sent']}\n"
+            f"Купили: {f['purchased']} 🎉\n"
+            f"Follow-up 2д/3д/7д: {f['follow_2']}/{f['follow_3']}/{f['follow_7']}\n\n"
+            f"Конверсия: {f['purchased'] / max(f['tracker_sent'], 1) * 100:.1f}% (купили / трекер)"
+        )
+        await bot.send_message(max_user_id, msg)
+
+    elif text.startswith("/funnel"):
+        f = db.get_max_funnel_stats()
+        if not f or not f.get("total"):
+            await bot.send_message(max_user_id, "📊 Данных пока нет.")
+            return
+
+        def pct(n, base):
+            return f"{n / base * 100:.0f}%" if base else "—"
+
+        def drop(current, prev):
+            if not prev:
+                return ""
+            lost = prev - current
+            return f" (−{lost}, {lost / prev * 100:.0f}% отвал)" if lost > 0 else ""
+
+        t = f["total"]
+        lines = [
+            "🔽 **Воронка MAX лид-бот**\n",
+            f"Всего лидов:          {t:>4}  (100%)",
+            f"Подписались:          {f['subscribed']:>4}  ({pct(f['subscribed'], t)}){drop(f['subscribed'], t)}",
+            f"Получили трекер:      {f['tracker_sent']:>4}  ({pct(f['tracker_sent'], t)}){drop(f['tracker_sent'], f['subscribed'])}",
+            f"Увидели вопрос:       {f['question_sent']:>4}  ({pct(f['question_sent'], t)}){drop(f['question_sent'], f['tracker_sent'])}",
+            f"Ответили:             {f['question_replied']:>4}  ({pct(f['question_replied'], t)}) → ✅ {f['replied_yes']} / 😕 {f['replied_no']}",
+            f"Знакомство:           {f['intro_sent']:>4}  ({pct(f['intro_sent'], t)}){drop(f['intro_sent'], f['question_replied'])}",
+            f"Получили оффер:       {f['offer_sent']:>4}  ({pct(f['offer_sent'], t)}){drop(f['offer_sent'], f['intro_sent'])}",
+            f"Оплатили:             {f['purchased']:>4}  ({pct(f['purchased'], t)}){drop(f['purchased'], f['offer_sent'])}",
+            "",
+            f"Follow-up 2д:  {f['follow_2']:>3} | 3д: {f['follow_3']:>3} | 7д: {f['follow_7']:>3}",
+            f"Прощание:      {f['final_sent']:>3}",
+            "",
+            f"🎯 Конверсия: **{pct(f['purchased'], f['tracker_sent'])}** (оплатили / трекер)",
+        ]
+        await bot.send_message(max_user_id, "\n".join(lines))
 
     elif text.startswith("/broadcast "):
         msg = text[len("/broadcast "):]
-        _schedule_broadcast(msg)
-        await bot.send_message(max_user_id, "✅ Рассылка поставлена в очередь")
-
-
-def _schedule_broadcast(text: str):
-    """Заглушка для будущей рассылки."""
-    logger.info(f"Broadcast queued: {text[:50]}")
+        logger.info(f"MAX lead broadcast queued: {msg[:50]}")
+        await bot.send_message(max_user_id, "✅ Рассылка поставлена в очередь (not implemented)")
 
 
 # ── Dispatcher (точка входа для вебхука) ─────────────────────
@@ -291,16 +501,16 @@ async def process_update(data: dict):
             )
 
         else:
-            logger.info(f"MAX lead unhandled update_type={update_type!r} data={data}")
+            logger.info(f"MAX lead unhandled update_type={update_type!r}")
 
     except Exception:
         logger.exception(f"Error processing MAX lead update: {update_type}")
 
 
-# ── Инициализация вебхука ─────────────────────────────────────
+# ── Инициализация вебхука и планировщика ─────────────────────
 
 async def setup(webapp_base_url: str):
-    """Регистрирует вебхук в MAX. Вызывается при старте webapp_server."""
+    """Регистрирует вебхук в MAX и запускает APScheduler. Вызывается при старте webapp_server."""
     if not MAX_LEAD_TOKEN:
         logger.warning("MAX_LEAD_BOT_TOKEN не задан — MAX лид-бот не запущен")
         return
@@ -310,3 +520,16 @@ async def setup(webapp_base_url: str):
     webhook_url = f"{webapp_base_url.rstrip('/')}{WEBHOOK_PATH}"
     await bot.setup_webhook(webhook_url)
     logger.info(f"MAX лид-бот вебхук: {webhook_url}")
+
+    # APScheduler: follow-up каждый час
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        _job_followup,
+        trigger="interval",
+        hours=1,
+        id="max_lead_followup",
+        replace_existing=True,
+        next_run_time=datetime.utcnow(),  # первый запуск сразу
+    )
+    scheduler.start()
+    logger.info("MAX лид-бот follow-up scheduler запущен")

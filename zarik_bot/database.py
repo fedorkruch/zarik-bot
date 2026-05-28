@@ -1288,3 +1288,63 @@ def get_max_leads_for_followup(day: int):
               AND subscribed_at IS NOT NULL
               AND (julianday('now') - julianday(subscribed_at)) >= ?
         """, (day,)).fetchall()
+
+
+def mark_max_lead_intro_sent(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET intro_sent_at=COALESCE(intro_sent_at, datetime('now')) WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def mark_max_lead_final(max_user_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET final_sent_at=datetime('now'), lead_status='cold' WHERE max_user_id=?",
+            (max_user_id,)
+        )
+
+
+def is_max_lead_purchased(max_user_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT purchased_at FROM max_leads WHERE max_user_id=?", (max_user_id,)
+        ).fetchone()
+    return bool(row and row["purchased_at"])
+
+
+def get_all_max_pitched_leads() -> list:
+    """Возвращает все лиды, получившие оффер и не купившие — для периодической проверки follow-up."""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT * FROM max_leads
+            WHERE purchased_at IS NULL
+              AND final_sent_at IS NULL
+              AND pitch_sent_at IS NOT NULL
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_max_funnel_stats() -> dict:
+    """Статистика воронки MAX-лид-бота для команд /leads и /funnel."""
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT
+                COUNT(*)                                    AS total,
+                SUM(subscribed_at IS NOT NULL)              AS subscribed,
+                SUM(tracker_sent_at IS NOT NULL)            AS tracker_sent,
+                SUM(tracker_question_at IS NOT NULL)        AS question_sent,
+                SUM(tracker_reply_yes IS NOT NULL)          AS question_replied,
+                SUM(tracker_reply_yes = 1)                  AS replied_yes,
+                SUM(tracker_reply_yes = 0)                  AS replied_no,
+                SUM(intro_sent_at IS NOT NULL)              AS intro_sent,
+                SUM(pitch_sent_at IS NOT NULL)              AS offer_sent,
+                SUM(lead_status = 'purchased')              AS purchased,
+                SUM(follow_2_sent_at IS NOT NULL)           AS follow_2,
+                SUM(follow_3_sent_at IS NOT NULL)           AS follow_3,
+                SUM(follow_7_sent_at IS NOT NULL)           AS follow_7,
+                SUM(final_sent_at IS NOT NULL)              AS final_sent
+            FROM max_leads
+        """).fetchone()
+    return dict(row) if row else {}
