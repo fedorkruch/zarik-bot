@@ -21,7 +21,8 @@ from workout import get_workout
 
 logger = logging.getLogger(__name__)
 
-PROGRAM_BOT_TOKEN = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
+PROGRAM_BOT_TOKEN   = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
+MAX_PROGRAM_TOKEN   = os.environ.get("MAX_PROGRAM_BOT_TOKEN", "")
 PORT              = int(os.environ.get("PORT", 8080))
 ADMIN_ID          = int(os.environ["ADMIN_ID"])
 # Тест-пользователи загружаются из env — никаких ID в репозитории
@@ -232,33 +233,43 @@ def get_user_id_from_request(request: web.Request) -> int | None:
         except Exception:
             pass
 
-    # Подписанный токен от бота: ?uid=X&ts=Y&sig=Z (работает для всех пользователей)
-    uid_q = request.rel_url.query.get("uid", "")
-    ts_q  = request.rel_url.query.get("ts",  "")
-    sig_q = request.rel_url.query.get("sig", "")
-    if uid_q.isdigit() and ts_q.isdigit() and sig_q:
+    # Подписанный токен от бота: ?uid=X&ts=Y&sig=Z
+    # Работает для Telegram (PROGRAM_BOT_TOKEN) и MAX (MAX_PROGRAM_TOKEN)
+    uid_q    = request.rel_url.query.get("uid", "")
+    ts_q     = request.rel_url.query.get("ts",  "")
+    sig_q    = request.rel_url.query.get("sig", "")
+    platform = request.rel_url.query.get("platform", "")
+    _uid_is_negative = uid_q.lstrip("-").isdigit() and uid_q.startswith("-")
+    if (uid_q.lstrip("-").isdigit()) and ts_q.isdigit() and sig_q:
         try:
             uid = int(uid_q)
             ts  = int(ts_q)
             # Токен действителен 10 минут
             if abs(_time.time() - ts) <= 600:
-                expected = hmac.new(
-                    PROGRAM_BOT_TOKEN.encode(),
-                    f"{uid}:{ts}".encode(),
-                    hashlib.sha256,
+                msg = f"{uid}:{ts}".encode()
+                # Пробуем TG-токен (для обычных пользователей и при platform != max)
+                tg_expected = hmac.new(
+                    PROGRAM_BOT_TOKEN.encode(), msg, hashlib.sha256
                 ).hexdigest()
-                if hmac.compare_digest(expected, sig_q):
-                    logger.info(f"Auth via signed URL token: uid={uid}")
+                if hmac.compare_digest(tg_expected, sig_q):
+                    logger.info(f"Auth via TG signed URL: uid={uid}")
                     return uid
-                else:
-                    logger.warning(f"Signed token HMAC mismatch for uid={uid}")
+                # Пробуем MAX-токен (для MAX пользователей, platform=max или uid < 0)
+                if MAX_PROGRAM_TOKEN and (platform == "max" or _uid_is_negative):
+                    max_expected = hmac.new(
+                        MAX_PROGRAM_TOKEN.encode(), msg, hashlib.sha256
+                    ).hexdigest()
+                    if hmac.compare_digest(max_expected, sig_q):
+                        logger.info(f"Auth via MAX signed URL: uid={uid}")
+                        return uid
+                logger.warning(f"Signed token HMAC mismatch for uid={uid}")
             else:
                 logger.warning(f"Signed token expired for uid={uid_q}")
         except Exception as e:
             logger.warning(f"Token validation error: {e}")
 
     # Последний фоллбек: ?uid=XXX без подписи (только для TEST_USER_IDS в dev-окружении)
-    if _IS_DEV and uid_q.isdigit():
+    if _IS_DEV and uid_q.lstrip("-").isdigit():
         uid = int(uid_q)
         if uid in TEST_USER_IDS:
             logger.warning(f"DEV fallback: test user {uid} via unsigned ?uid param")

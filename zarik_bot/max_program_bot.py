@@ -12,8 +12,12 @@ max_program_bot.py — основной бот 77 Soft Challenge для Месс
   MAX_PROGRAM_WEBHOOK_PATH — путь вебхука, по умолчанию /webhook/max-program
 """
 import asyncio
+import hashlib
+import hmac as _hmac
 import logging
 import os
+import re
+import time as _time
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -115,6 +119,24 @@ NOT_PAID_TEXT = (
 
 # ── Утилиты ───────────────────────────────────────────────────
 
+def _md(text: str) -> str:
+    """Конвертирует TG markdown (*bold*) → MAX markdown (**bold**)."""
+    return re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'**\1**', text)
+
+
+def _make_miniapp_url(internal_uid: int) -> str:
+    """Генерирует подписанный URL для мини-аппа (MAX-версия, подпись MAX токеном)."""
+    if not WEBAPP_URL or not MAX_PROGRAM_TOKEN:
+        return f"{WEBAPP_URL}?uid={internal_uid}" if WEBAPP_URL else ""
+    ts  = int(_time.time())
+    sig = _hmac.new(
+        MAX_PROGRAM_TOKEN.encode(),
+        f"{internal_uid}:{ts}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{WEBAPP_URL}?uid={internal_uid}&ts={ts}&sig={sig}&platform=max"
+
+
 def get_rank(days_done: int) -> str:
     if days_done >= 63: return "🏆 Легенда"
     if days_done >= 49: return "💎 Мастер"
@@ -164,10 +186,11 @@ def _digits_buttons(prefix: str) -> list[list[dict]]:
     return rows
 
 
-def _main_menu_buttons(max_user_id: int) -> list[list[dict]]:
+def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
     buttons = [[_btn_callback("📋 Сегодня", "menu:today")]]
     if WEBAPP_URL:
-        buttons.append([_btn_link("📱 Мини-апп", f"{WEBAPP_URL}?uid={max_user_id}")])
+        url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
+        buttons.append([_btn_link("📱 Мини-апп", url)])
     buttons.append([_btn_callback("📊 Прогресс", "menu:stats")])
     buttons.append([_btn_callback("📅 Неделя", "menu:week")])
     buttons.append([_btn_callback("🏆 Ачивки", "menu:achievements")])
@@ -445,7 +468,7 @@ async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
         "Отлично, твоя программа сформирована под тебя 🎯\n\n"
         "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
         "А пока — отдыхай)",
-        buttons=_main_menu_buttons(max_user_id),
+        buttons=_main_menu_buttons(max_user_id, uid),
     )
 
 
@@ -579,14 +602,14 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
         await bot.send_message(
             max_user_id,
             f"🦥 Программа стартует **{start}**.\n\nЗагляни сюда утром первого дня!",
-            buttons=_main_menu_buttons(max_user_id),
+            buttons=_main_menu_buttons(max_user_id, uid),
         )
         return
     if day > TOTAL_DAYS:
         await bot.send_message(
             max_user_id,
             "🏆 Ты прошёл все 77 дней! Это легенда! 🦥",
-            buttons=_main_menu_buttons(max_user_id),
+            buttons=_main_menu_buttons(max_user_id, uid),
         )
         return
     completed = set(db.get_completed_tasks(uid, day))
@@ -597,7 +620,7 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
 # ── Обработчики callback ──────────────────────────────────────
 
 async def on_callback(max_user_id: int, callback_id: str, payload: str,
-                      username: str, first_name: str):
+                      username: str, first_name: str, message_id: str = ""):
     bot = get_client()
     uid = db.get_or_create_max_user(max_user_id, username, first_name)
     db.log_user_session(uid)
@@ -625,8 +648,14 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         text    = build_today_text(day, completed)
         buttons = _tasks_buttons(day, completed)
 
+        # Редактируем трекер на месте (или шлём новый если message_id нет)
+        if message_id:
+            await bot.edit_message(message_id, text, buttons=buttons)
+        else:
+            await bot.send_message(max_user_id, text, buttons=buttons)
+
         if all_done:
-            evening_text = ct.get_evening(day, all_done=True)
+            evening_text = _md(ct.get_evening(day, all_done=True))
             celebrate_text = f"{evening_text}\n\n_День {day} засчитан! 🎉_"
             await send_mood_message(bot, max_user_id, celebrate_text, 5)
 
@@ -636,19 +665,11 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             for ach_id in new_achievements:
                 if not db.has_achievement(uid, ach_id):
                     db.award_achievement(uid, ach_id)
-                    # Конвертируем markdown Telegram → MAX
-                    import re
-                    ach_text = ct.get_achievement_text(ach_id)
-                    ach_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'**\1**', ach_text)
-                    await bot.send_message(max_user_id, ach_text)
+                    await bot.send_message(max_user_id, _md(ct.get_achievement_text(ach_id)))
 
             # Финальное сообщение
             if day == TOTAL_DAYS:
-                import re
-                final = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'**\1**', ct.FINAL_MESSAGE)
-                await bot.send_message(max_user_id, final)
-        else:
-            await bot.send_message(max_user_id, text, buttons=buttons)
+                await bot.send_message(max_user_id, _md(ct.FINAL_MESSAGE))
 
     # Меню
     elif payload == "menu:today":
@@ -657,7 +678,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
                 max_user_id,
                 "🦥 Программа ещё не началась — ждём завтра в 6:00!\n\n"
                 "Загляни сюда утром первого дня 👋",
-                buttons=_main_menu_buttons(max_user_id),
+                buttons=_main_menu_buttons(max_user_id, uid),
             )
             return
         await show_today(bot, max_user_id, uid)
@@ -667,7 +688,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             await bot.send_message(
                 max_user_id,
                 "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
-                buttons=_main_menu_buttons(max_user_id),
+                buttons=_main_menu_buttons(max_user_id, uid),
             )
             return
         text = build_stats_text(uid)
@@ -678,7 +699,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             await bot.send_message(
                 max_user_id,
                 "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
-                buttons=_main_menu_buttons(max_user_id),
+                buttons=_main_menu_buttons(max_user_id, uid),
             )
             return
         text = build_week_screen_max(uid)
@@ -832,48 +853,71 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
 
         if text.startswith("/setday"):
             parts = text.split()
-            if len(parts) >= 3:
-                target_max_id = int(parts[1]) if parts[1].isdigit() else max_user_id
+            # Форматы: /setday N (для себя) или /setday max_user_id N (для другого)
+            if len(parts) == 2 and parts[1].isdigit():
+                target_max_id = max_user_id
+                target_day    = int(parts[1])
+                target_uid    = uid
+            elif len(parts) >= 3 and parts[1].isdigit() and parts[2].isdigit():
+                target_max_id = int(parts[1])
                 target_day    = int(parts[2])
                 target_uid    = db.get_max_internal_id(target_max_id)
-                if target_uid:
-                    db.set_day_for_testing(target_uid, target_day)
-                    completed = set(db.get_completed_tasks(target_uid, target_day))
+            else:
+                await bot.send_message(max_user_id, "Использование: /setday 7  или  /setday max_id 7")
+                return
 
-                    await bot.send_message(max_user_id,
-                        f"🛠 **DEV · День {target_day} из {TOTAL_DAYS}**")
+            if not target_uid:
+                await bot.send_message(max_user_id, f"❌ MAX-пользователь {target_max_id} не найден")
+                return
 
-                    # ☀️ 6:00 утро
-                    await bot.send_message(target_max_id,
-                        ct.get_morning(target_day))
-                    await bot.send_message(target_max_id,
-                        build_tasks_list_max(target_uid, target_day))
-                    await bot.send_message(target_max_id,
-                        build_today_text(target_day, completed),
-                        buttons=_tasks_buttons(target_day, completed))
+            db.set_day_for_testing(target_uid, target_day)
+            completed = set(db.get_completed_tasks(target_uid, target_day))
+            partial   = {0}   # только тренировка — для примера частичного выполнения
 
-                    # 🌤 14:00 — без галочек
-                    await bot.send_message(target_max_id,
-                        f"_— 14:00 · ноль галочек —_\n\n"
-                        + ct.get_afternoon_smart(target_day, set()))
-                    # 🌤 14:00 — частично
-                    await bot.send_message(target_max_id,
-                        f"_— 14:00 · частично —_\n\n"
-                        + ct.get_afternoon_smart(target_day, {0}))
-                    # 🌙 21:00 — без галочек
-                    await bot.send_message(target_max_id,
-                        f"_— 21:00 · ноль галочек —_\n\n"
-                        + ct.get_evening_smart(target_day, set()))
-                    # 🌙 21:00 — частично
-                    await bot.send_message(target_max_id,
-                        f"_— 21:00 · частично —_\n\n"
-                        + ct.get_evening_smart(target_day, {0}))
+            await bot.send_message(max_user_id,
+                f"🛠 **DEV · День {target_day} из {TOTAL_DAYS}**")
 
-                    if target_day in WEEKLY_MILESTONE_DAYS:
-                        await bot.send_message(target_max_id,
-                            build_weekly_milestone_text(target_uid))
+            # ☀️ 6:00 — мотивация + задания + трекер
+            await bot.send_message(target_max_id,
+                _md(ct.get_morning(target_day)))
+            await bot.send_message(target_max_id,
+                build_tasks_list_max(target_uid, target_day))
+            await bot.send_message(target_max_id,
+                build_today_text(target_day, completed),
+                buttons=_tasks_buttons(target_day, completed))
 
-                    await bot.send_message(max_user_id, f"✅ День {target_day} установлен для {target_max_id}")
+            # 🌤 14:00 — 0 галочек
+            await bot.send_message(target_max_id,
+                f"_— 14:00 · ноль галочек —_\n\n"
+                + _md(ct.get_afternoon_smart(target_day, set())))
+            # 🌤 14:00 — частично
+            await bot.send_message(target_max_id,
+                f"_— 14:00 · частично (только тренировка) —_\n\n"
+                + _md(ct.get_afternoon_smart(target_day, partial)))
+            # 🌤 14:00 — все выполнено
+            await bot.send_message(target_max_id,
+                f"_— 14:00 · все галочки —_\n\n"
+                + _md(ct.get_afternoon_smart(target_day, {0, 1, 2, 3, 4})))
+
+            # 🌙 21:00 — 0 галочек
+            await bot.send_message(target_max_id,
+                f"_— 21:00 · ноль галочек —_\n\n"
+                + _md(ct.get_evening_smart(target_day, set())))
+            # 🌙 21:00 — частично
+            await bot.send_message(target_max_id,
+                f"_— 21:00 · частично (только тренировка) —_\n\n"
+                + _md(ct.get_evening_smart(target_day, partial)))
+            # 🌙 21:00 — все выполнено
+            await bot.send_message(target_max_id,
+                f"_— 21:00 · все галочки —_\n\n"
+                + _md(ct.get_evening_smart(target_day, {0, 1, 2, 3, 4})))
+
+            if target_day in WEEKLY_MILESTONE_DAYS:
+                await bot.send_message(target_max_id,
+                    build_weekly_milestone_text(target_uid))
+
+            await bot.send_message(max_user_id,
+                f"✅ День {target_day} установлен для MAX {target_max_id}")
             return
 
         if text.startswith("/debug"):
@@ -916,7 +960,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             "Напиши **прогресс** или **статистика** — покажу прогресс.\n"
             "Напиши **ачивки** — покажу достижения.\n\n"
             "Используй кнопки меню 👇",
-            buttons=_main_menu_buttons(max_user_id),
+            buttons=_main_menu_buttons(max_user_id, uid),
         )
         return
 
@@ -928,7 +972,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                     max_user_id,
                     "🦥 Программа ещё не началась — ждём завтра в 6:00!\n\n"
                     "Загляни сюда утром первого дня 👋",
-                    buttons=_main_menu_buttons(max_user_id),
+                    buttons=_main_menu_buttons(max_user_id, uid),
                 )
                 return
             await show_today(bot, max_user_id, uid)
@@ -940,7 +984,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                 await bot.send_message(
                     max_user_id,
                     "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
-                    buttons=_main_menu_buttons(max_user_id),
+                    buttons=_main_menu_buttons(max_user_id, uid),
                 )
                 return
             text_out = build_stats_text(uid)
@@ -1074,14 +1118,16 @@ async def process_update(data: dict):
             )
 
         elif update_type == "message_callback":
-            cb   = data.get("callback", {})
-            user = cb.get("user", {})
+            cb         = data.get("callback", {})
+            user       = cb.get("user", {})
+            message_id = cb.get("message", {}).get("message_id", "")
             await on_callback(
                 max_user_id=user.get("user_id", 0),
                 callback_id=cb.get("callback_id", ""),
                 payload=cb.get("payload", ""),
                 username=user.get("username", ""),
                 first_name=user.get("name", ""),
+                message_id=message_id,
             )
 
     except Exception:
@@ -1131,10 +1177,10 @@ async def _job_morning():
                 continue
 
             # 1. Мотивационное послание
-            morning_msg = ct.get_morning(day)
+            morning_msg = _md(ct.get_morning(day))
             if 1 <= missed <= 2:
                 last_day = db.get_last_completed_day(uid)
-                morning_msg += f"\n\n{ct.get_miss_message(missed, last_day)}"
+                morning_msg += f"\n\n{_md(ct.get_miss_message(missed, last_day))}"
             await bot.send_message(max_id, morning_msg)
 
             # 2. Задания на день с описанием тренировки
@@ -1172,14 +1218,13 @@ async def _job_afternoon():
             completed = set(db.get_completed_tasks(uid, day))
             all_done  = len(completed) >= 5
 
-            # Умное дневное послание с картинкой настроения
+            # Умное дневное послание с картинкой настроения (без кнопок)
             await send_mood_message(
                 bot, max_id,
-                ct.get_afternoon_smart(day, completed),
+                _md(ct.get_afternoon_smart(day, completed)),
                 len(completed),
-                buttons=None if all_done else _tasks_buttons(day, completed),
             )
-            # Трекер отдельно если не все выполнены
+            # Трекер отдельным сообщением если не все выполнены
             if not all_done:
                 await bot.send_message(
                     max_id,
@@ -1212,22 +1257,19 @@ async def _job_evening():
             completed = set(db.get_completed_tasks(uid, day))
             all_done  = len(completed) >= 5
 
-            if all_done:
-                continue  # уже поздравили при нажатии
-
-            # Умное вечернее послание
+            # Умное вечернее послание — шлём всегда (как в TG)
             await send_mood_message(
                 bot, max_id,
-                ct.get_evening_smart(day, completed),
+                _md(ct.get_evening_smart(day, completed)),
                 len(completed),
-                buttons=_tasks_buttons(day, completed),
             )
-            # Трекер
-            await bot.send_message(
-                max_id,
-                build_today_text(day, completed),
-                buttons=_tasks_buttons(day, completed),
-            )
+            # Трекер отдельным сообщением если не все выполнены
+            if not all_done:
+                await bot.send_message(
+                    max_id,
+                    build_today_text(day, completed),
+                    buttons=_tasks_buttons(day, completed),
+                )
         except Exception:
             logger.exception(f"Evening job error for MAX user {max_id}")
 
