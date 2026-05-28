@@ -252,8 +252,13 @@ def get_user_id_from_request(request: web.Request) -> int | None:
     # Пробуем MAX initData (если TG-валидация не прошла)
     max_user = validate_max_init_data(raw)
     if max_user and "id" in max_user:
-        logger.info(f"Auth via MAX initData: uid={max_user['id']}")
-        return int(max_user["id"])
+        max_user_id = int(max_user["id"])
+        # MAX user_id → внутренний отрицательный UID из таблицы max_users
+        internal_uid = db.get_max_internal_id(max_user_id)
+        if internal_uid is not None:
+            logger.info(f"Auth via MAX initData: max_user_id={max_user_id} → uid={internal_uid}")
+            return internal_uid
+        logger.warning(f"MAX initData: пользователь {max_user_id} не найден в БД")
 
     # Для тест-юзеров — парсим без проверки подписи (только в dev-окружении)
     if _IS_DEV:
