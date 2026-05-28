@@ -21,8 +21,10 @@ max_lead_bot.py — лид-бот для Мессенджера MAX (анало�
   MAX_LEAD_WEBHOOK_PATH  — путь вебхука, по умолчанию /webhook/max-lead
 """
 import asyncio
+import difflib
 import logging
 import os
+import re
 
 from datetime import datetime
 
@@ -74,13 +76,13 @@ async def is_subscribed(max_user_id: int) -> bool:
 
 # ── Тексты ────────────────────────────────────────────────────
 
-SUBSCRIBE_TEXT = (
-    "🦥 Привет!\n\n"
-    "Я подготовил тебе подарок — интерактивный трекер для достижения твоих задач.\n\n"
-    "Чтобы получить его, подпишись на канал — там всё самое важное о программе.\n\n"
-    "👉 max.ru/id781109203385_biz\n\n"
-    "Как подпишешься — нажми кнопку ниже 👇"
-)
+def _subscribe_text(first_name: str) -> str:
+    return (
+        f"🦥 Привет, {first_name}!\n\n"
+        "Я подготовил тебе подарок — универсальный интерактивный трекер для достижения твоих задач.\n\n"
+        "Чтобы получить его, подпишись на канал — там всё самое важное о программе.\n\n"
+        "Как подпишешься — нажми кнопку ниже 👇"
+    )
 
 ALREADY_IN_PROGRAM_TEXT = (
     "✅ Ты уже в программе!\n\n"
@@ -92,8 +94,8 @@ TRACKER_TEXT = (
     "Устанавливай количество дней на пути к цели, прописывай ежедневные задачи. "
     "Отмечай каждый день выполнение и наблюдай свой путь.\n\n"
     "Это твой личный дашборд прогресса 👇\n\n"
-    "*iPhone:* нажми ··· → Открыть в Safari → Поделиться → На экран Домой\n"
-    "*Android:* открой в Chrome → меню ⋮ → Добавить на главный экран"
+    "📱 *iPhone: нажми ··· → Открыть в Safari → Поделиться → На экран Домой*\n"
+    "🤖 *Android: открой в Chrome → меню ⋮ → Добавить на главный экран*"
 )
 
 TRACKER_QUESTION_TEXT = "🦥 Ну как? Всё получилось с трекером? Нравится? 👇"
@@ -143,12 +145,12 @@ NO_PRESSURE_TEXT = (
 FOLLOWUP_TEXTS = {
     2: (
         "🦥 Как ты?\n\n"
-        "Вчера смотрел трекер — решил попробовать?\n\n"
+        "Вчера смотрел(а) программу — решил(а) попробовать?\n\n"
         "77 дней начинаются с одного шага.\n"
         "Цена пока 1990 ₽ 👇"
     ),
     3: (
-        "📊 Три дня, как ты видел трекер.\n\n"
+        "📊 Три дня, как ты видел(а) трекер.\n\n"
         "Знаешь что объединяет тех, кто прошёл 77 дней?\n"
         "Они просто **начали**.\n\n"
         "Не «когда будет время». Не «с понедельника».\n"
@@ -156,7 +158,7 @@ FOLLOWUP_TEXTS = {
     ),
     7: (
         "🏁 Прошла неделя.\n\n"
-        "Ты видел трекер, читал о программе.\n\n"
+        "Ты видел(а) трекер, читал(а) о программе.\n\n"
         "Это последнее напоминание — я не хочу быть навязчивым.\n\n"
         "Если решишь начать — кнопка ниже.\n"
         "Если нет — всё равно желаю тебе результата 🦥"
@@ -166,7 +168,7 @@ FOLLOWUP_TEXTS = {
 FAREWELL_TEXT = (
     "🦥 Окей, не буду больше напоминать.\n\n"
     "Если захочешь вернуться — просто напиши /start.\n\n"
-    "Удачи тебе, что бы ты ни выбрал 🙌"
+    "Удачи тебе, что бы ты ни выбрал(а) 🙌"
 )
 
 PURCHASED_TEXT = (
@@ -177,7 +179,21 @@ PURCHASED_TEXT = (
 # ── Кнопки ────────────────────────────────────────────────────
 
 def _subscribe_buttons() -> list[list[dict]]:
-    return [[_btn_callback("✅ Я подписался", "sub_check")]]
+    return [
+        [_btn_link("📢 Подписаться на канал", "https://max.ru/id781109203385_biz")],
+        [_btn_callback("✅ Я подписался", "sub_check")],
+    ]
+
+
+def _is_discount_request(text: str) -> bool:
+    """Проверяет, есть ли в тексте слово «скидка» или близкое к нему (с учётом опечаток)."""
+    tl = text.lower()
+    if re.search(r"скид", tl):
+        return True
+    for word in re.findall(r"[а-яёa-z]+", tl):
+        if len(word) >= 5 and difflib.SequenceMatcher(None, word, "скидка").ratio() >= 0.70:
+            return True
+    return False
 
 
 def _tracker_buttons() -> list[list[dict]]:
@@ -352,7 +368,7 @@ async def on_bot_started(max_user_id: int, username: str, first_name: str):
         )
         return
 
-    await bot.send_message(max_user_id, SUBSCRIBE_TEXT, buttons=_subscribe_buttons())
+    await bot.send_message(max_user_id, _subscribe_text(first_name), buttons=_subscribe_buttons())
 
 
 async def on_callback(max_user_id: int, callback_id: str, payload: str,
@@ -369,8 +385,8 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             await bot.send_message(
                 max_user_id,
                 "🦥 Я не обнаружил подписки на канал.\n\n"
-                "Подпишись — и нажми кнопку снова 👇\n\n"
-                "👉 max.ru/id781109203385_biz",
+                "Как только подпишешься — я сразу пришлю подарок 🎁\n\n"
+                "Подпишись и нажми кнопку снова 👇",
                 buttons=_subscribe_buttons()
             )
             return
@@ -428,9 +444,20 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await on_bot_started(max_user_id, username, first_name)
         return
 
-    # Только для администратора
+    # Обычные пользователи — реакция на скидку и прочий текст
     if max_user_id != MAX_ADMIN_USER_ID:
+        if _is_discount_request(text):
+            await bot.send_message(
+                max_user_id,
+                "Предложение 1990 вместо 4900 действует в течение трёх дней с текущего момента, "
+                "мы специально уронили цену, чтобы дать возможность большему количеству участников "
+                "начать двигаться к своим целям."
+            )
+        else:
+            await bot.send_message(max_user_id, "⚠️ Некорректный формат ввода данных.")
         return
+
+    # Только для администратора
 
     if text.startswith("/stats") or text.startswith("/leads"):
         f = db.get_max_funnel_stats()
