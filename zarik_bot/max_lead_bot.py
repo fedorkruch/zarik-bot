@@ -218,10 +218,18 @@ async def _send_offer(max_user_id: int):
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str):
-    """Текстовые сообщения — только для команд администратора."""
+    """Текстовые сообщения."""
+    bot = get_client()
+    cmd = text.strip().lower().split()[0] if text.strip() else ""
+
+    # /start — обычный пользователь
+    if cmd in ("/start", "start", "старт"):
+        await on_bot_started(max_user_id, username, first_name)
+        return
+
+    # Остальное — только для администратора
     if max_user_id != MAX_ADMIN_USER_ID:
         return
-    bot = get_client()
 
     if text.startswith("/stats"):
         leads = db.get_max_leads_for_followup(0) or []
