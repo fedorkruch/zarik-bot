@@ -222,3 +222,17 @@ class MaxClient:
 
     async def get_me(self) -> dict:
         return await self._request("GET", "/me")
+
+    async def get_chat_member(self, chat_id: int, user_id: int) -> dict | None:
+        """
+        Проверяет членство пользователя в чате/канале.
+        GET /chats/{chatId}/members?user_ids={userId}
+        Возвращает первый ChatMember или None если пользователь не найден.
+        Бот должен быть участником/администратором канала.
+        """
+        result = await self._request(
+            "GET", f"/chats/{chat_id}/members",
+            params={"user_ids": user_id},
+        )
+        members = result.get("members", [])
+        return members[0] if members else None

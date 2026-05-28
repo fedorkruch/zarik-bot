@@ -40,6 +40,8 @@ MAX_PROGRAM_BOT_URL = os.environ.get("MAX_PROGRAM_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_LEAD_WEBHOOK_PATH", "/webhook/max-lead")
+# ID канала из https://max.ru/id781109203385_biz
+MAX_CHANNEL_ID      = int(os.environ.get("MAX_CHANNEL_ID", "781109203385"))
 
 # ── Глобальный клиент ─────────────────────────────────────────
 _client: MaxClient | None = None
@@ -49,6 +51,26 @@ def get_client() -> MaxClient:
     if _client is None:
         _client = MaxClient(MAX_LEAD_TOKEN)
     return _client
+
+# ── Проверка подписки на канал ────────────────────────────────
+
+async def is_subscribed(max_user_id: int) -> bool:
+    """
+    Проверяет, подписан ли пользователь на канал MAX_CHANNEL_ID.
+    Бот должен быть добавлен в канал как участник/администратор.
+    При любой ошибке API возвращает False (не пропускаем).
+    """
+    if not MAX_CHANNEL_ID:
+        return True  # если канал не задан — не блокируем
+    try:
+        bot = get_client()
+        member = await bot.get_chat_member(MAX_CHANNEL_ID, max_user_id)
+        logger.info(f"MAX sub check: user={max_user_id} member={member}")
+        return member is not None
+    except Exception as e:
+        logger.error(f"MAX sub check error user={max_user_id}: {e}")
+        return False
+
 
 # ── Тексты ────────────────────────────────────────────────────
 
@@ -341,6 +363,18 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     if payload == "sub_check":
         await bot.answer_callback(callback_id)
         db.upsert_max_lead(max_user_id, username, first_name)
+
+        subscribed = await is_subscribed(max_user_id)
+        if not subscribed:
+            await bot.send_message(
+                max_user_id,
+                "🦥 Я не обнаружил подписки на канал.\n\n"
+                "Подпишись — и нажми кнопку снова 👇\n\n"
+                "👉 max.ru/id781109203385_biz",
+                buttons=_subscribe_buttons()
+            )
+            return
+
         db.mark_max_lead_subscribed(max_user_id)
 
         if db.is_max_lead_purchased(max_user_id):
