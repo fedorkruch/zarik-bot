@@ -217,7 +217,10 @@ def _photos_done_buttons() -> list[list[dict]]:
 
 
 def _phone_buttons() -> list[list[dict]]:
-    return [[_btn_callback("➡️ Пропустить", "phone_skip")]]
+    return [
+        [_btn_callback("📱 Поделиться номером телефона", "phone_share")],
+        [_btn_callback("Пропустить →", "phone_skip")],
+    ]
 
 
 def _pay_buttons() -> list[list[dict]]:
@@ -488,8 +491,7 @@ async def _send_phone_request(bot: MaxClient, max_user_id: int, uid: int):
         max_user_id,
         "Последний штрих 👇\n\n"
         "Поделись номером — чтобы я мог связаться с тобой напрямую, "
-        "если понадоблюсь. Это необязательно, можешь пропустить.\n\n"
-        "Просто напиши свой номер телефона в чат (например: +79991234567)",
+        "если понадоблюсь. Это необязательно, можешь пропустить.",
         buttons=_phone_buttons(),
     )
 
@@ -499,7 +501,7 @@ async def start_onboarding(bot: MaxClient, max_user_id: int, uid: int):
     await bot.send_message(
         max_user_id,
         "🦥 Шаг 1 из 4 · Часовой пояс\n\n"
-        "**Выбери свой часовой пояс** — буду присылать задания в 6:00 по твоему времени 👇",
+        "Выбери свой часовой пояс — буду присылать задания в 6:00 по твоему времени 👇",
         buttons=_timezone_buttons(),
     )
 
@@ -574,6 +576,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
             "🩳 Парни — шорты или трусы\n\n"
             "Надевайте что вам комфортнее, но в рамках приличия "
             "(чтобы я, Зарик, не поплыл — я чувствительный 🦥)\n\n"
+            "Вот пример фото, можно сделать так же 👆\n\n"
             "Отправляй фото сюда — я сохраню 👇\n"
             "Когда закончишь — нажми кнопку ниже.\n\n"
             "🔒 Мы не делимся твоими фото, не выкладываем их никуда — это только для тебя."
@@ -593,6 +596,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.set_share_photos(uid, False)
         db.complete_onboarding(uid)
         await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
+        await _send_completion_message(bot, max_user_id, uid)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Шаг 4: Фото отправлены ──────────────────────────────
@@ -611,7 +615,27 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.complete_onboarding(uid)
         noun = "фото" if count in (2, 3, 4) else "фото"
         await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
+        await _send_completion_message(bot, max_user_id, uid)
         await _send_phone_request(bot, max_user_id, uid)
+
+    # ── Телефон — поделиться (инструкция) ───────────────────
+    elif payload == "phone_share":
+        await bot.answer_callback(callback_id)
+        await bot.send_message(
+            max_user_id,
+            "Напиши свой номер телефона в чат (например: +79991234567) 👇",
+            buttons=_phone_buttons(),
+        )
+
+    # ── Телефон — пропустить ─────────────────────────────────
+    elif payload == "phone_skip":
+        await bot.answer_callback(callback_id)
+        db.set_onboarding_step(uid, "done")
+        await bot.send_message(
+            max_user_id,
+            "Окей, без проблем 🦥\n\nЖди завтра утром — пришлю первые задачи!",
+            buttons=_main_menu_buttons(max_user_id, uid),
+        )
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -763,17 +787,9 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     elif payload == "onboard:start":
         await start_onboarding(bot, max_user_id, uid)
 
-    elif payload == "phone_skip":
-        db.set_onboarding_step(uid, "done")
-        await bot.send_message(
-            max_user_id,
-            "Окей, без проблем 🦥\n\nЖди завтра утром — пришлю первые задачи!",
-            buttons=_main_menu_buttons(max_user_id, uid),
-        )
-
     elif (payload.startswith("tz:") or payload.startswith("pushup:") or
           payload.startswith("squat:") or payload.startswith("abs:") or
-          payload in ("photo_yes", "photo_no", "photos_done")):
+          payload in ("photo_yes", "photo_no", "photos_done", "phone_skip", "phone_share")):
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
 
 
@@ -1111,33 +1127,33 @@ async def _send_welcome_to_max_user(bot: MaxClient, max_user_id: int, uid: int):
         elif step == "timezone":
             await bot.send_message(
                 max_user_id,
-                "🦥 Шаг 1 из 3 · Продолжаем\n\n**Выбери свой часовой пояс 👇**",
+                "🦥 Шаг 1 из 4 · Часовой пояс\n\n"
+                "Выбери свой часовой пояс — буду присылать задания в 6:00 по твоему времени 👇",
                 buttons=_timezone_buttons()
             )
         elif step == "pushup":
             await bot.send_message(
                 max_user_id,
-                "🦥 Шаг 2 из 3 · Продолжаем\n\n**Сколько отжиманий?**",
+                "🦥 Шаг 2 из 4 · Тренировка\n\nСколько отжиманий можешь сделать прямо сейчас?",
                 buttons=_digits_buttons("pushup")
             )
         elif step == "squat":
             await bot.send_message(
                 max_user_id,
-                "🦥 Продолжаем\n\n**Сколько приседаний?**",
+                "🦥 Сколько приседаний?",
                 buttons=_digits_buttons("squat")
             )
         elif step == "abs":
             await bot.send_message(
                 max_user_id,
-                "🦥 Продолжаем\n\n**Сколько подъёмов корпуса?**",
+                "🦥 Сколько раз пресс?",
                 buttons=_digits_buttons("abs")
             )
         elif step == "photo":
             await bot.send_message(
                 max_user_id,
                 "🦥 Шаг 4 из 4 · Фото до/после\n\n"
-                "**Хочешь делиться результатами до/после?** "
-                "Это поможет увидеть прогресс за 77 дней.",
+                "Хочешь делиться результатами до/после? Это поможет увидеть прогресс за 77 дней.",
                 buttons=_photo_buttons()
             )
         elif step == "awaiting_photos":
@@ -1152,8 +1168,8 @@ async def _send_welcome_to_max_user(bot: MaxClient, max_user_id: int, uid: int):
             await bot.send_message(
                 max_user_id,
                 "Последний штрих 👇\n\n"
-                "Напиши свой номер телефона (например: +79991234567) "
-                "или нажми «Пропустить».",
+                "Поделись номером — чтобы я мог связаться с тобой напрямую, "
+                "если понадоблюсь. Это необязательно, можешь пропустить.",
                 buttons=_phone_buttons()
             )
         else:
