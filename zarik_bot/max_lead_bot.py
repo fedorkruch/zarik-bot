@@ -42,8 +42,18 @@ MAX_PROGRAM_BOT_URL = os.environ.get("MAX_PROGRAM_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_LEAD_WEBHOOK_PATH", "/webhook/max-lead")
-# ID канала из https://max.ru/id781109203385_biz
-MAX_CHANNEL_ID      = int(os.environ.get("MAX_CHANNEL_ID", "781109203385"))
+# ID канала — принимаем и число, и URL вида https://max.ru/id781109203385_biz
+def _parse_channel_id(raw: str) -> int:
+    """Извлекает числовой ID из строки или URL типа https://max.ru/id123456_biz."""
+    import re as _re
+    raw = raw.strip()
+    m = _re.search(r"id(\d+)", raw)
+    if m:
+        return int(m.group(1))
+    digits = _re.sub(r"\D", "", raw)
+    return int(digits) if digits else 0
+
+MAX_CHANNEL_ID = _parse_channel_id(os.environ.get("MAX_CHANNEL_ID", "781109203385"))
 
 # ── Глобальный клиент ─────────────────────────────────────────
 _client: MaxClient | None = None
