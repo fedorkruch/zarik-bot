@@ -495,13 +495,22 @@ def build_weekly_milestone_text(uid: int) -> str:
 
 # ── Онбординг ─────────────────────────────────────────────────
 
-async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
-    """Финальное сообщение после завершения онбординга."""
+async def _send_program_formed(bot: MaxClient, max_user_id: int):
+    """Сообщение 'программа сформирована' — отправляется после шага с фото,
+    ДО блока с запросом телефона."""
     await bot.send_message(
         max_user_id,
         "Отлично, твоя программа сформирована под тебя 🎯\n\n"
         "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
         "А пока — отдыхай)",
+    )
+
+
+async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
+    """Финальное сообщение после шага с телефоном (номер введён или пропущен)."""
+    await bot.send_message(
+        max_user_id,
+        "Жди завтра утром — пришлю первые задачи 🦥",
         buttons=_main_menu_buttons(max_user_id, uid),
     )
 
@@ -621,6 +630,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.set_share_photos(uid, False)
         db.complete_onboarding(uid)
         await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
+        await _send_program_formed(bot, max_user_id)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Шаг 4: Фото отправлены ──────────────────────────────
@@ -639,6 +649,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.complete_onboarding(uid)
         noun = "фото" if count in (2, 3, 4) else "фото"
         await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
+        await _send_program_formed(bot, max_user_id)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Телефон — ввести номер ────────────────────────────────
@@ -654,7 +665,11 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     elif payload == "phone_skip":
         await bot.answer_callback(callback_id)
         db.set_onboarding_step(uid, "done")
-        await _send_completion_message(bot, max_user_id, uid)
+        await bot.send_message(
+            max_user_id,
+            "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи",
+            buttons=_main_menu_buttons(max_user_id, uid),
+        )
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -815,16 +830,17 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
     db.save_user_phone(uid, phone)
     db.set_onboarding_step(uid, "done")
     await bot.send_message(max_user_id, "✅ Номер сохранён, спасибо! 🙌")
-    await _send_completion_message(bot, max_user_id, uid)
+    await _send_completion_message(bot, max_user_id, uid)   # "Жди завтра утром..."
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
-                     has_photo: bool = False, photo_token: str = "",
+                     photo_tokens: list | None = None,
                      contact_phone: str = ""):
     bot = get_client()
     uid = db.get_or_create_max_user(max_user_id, username, first_name)
     db.log_user_session(uid)
     text = (text or "").strip()
+    photo_tokens = photo_tokens or []
 
     # ── Контакт (кнопка «Поделиться номером телефона») ────────
     if contact_phone:
@@ -833,15 +849,17 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             await _save_phone_and_finish(bot, max_user_id, uid, contact_phone)
         return
 
-    # ── Фото во время онбординга ──────────────────────────────
-    if has_photo:
+    # ── Фото во время онбординга (поддержка 1-2 фото за раз) ──
+    if photo_tokens:
         step = db.get_onboarding_step(uid)
         if step == "awaiting_photos":
-            db.save_user_photo(uid, "before", photo_token or f"max_{max_user_id}")
+            for tok in photo_tokens:
+                db.save_user_photo(uid, "before", tok)
             count = db.count_user_photos(uid, "before")
+            noun = "фото" if count in (2, 3, 4) else "фото"
             await bot.send_message(
                 max_user_id,
-                f"📸 Фото {count} сохранено!\n\nКогда отправишь все — нажми кнопку 👇",
+                f"📸 Сохранил {count} {noun}!\n\nКогда отправишь все — нажми кнопку 👇",
                 buttons=_photos_done_buttons(),
             )
             return
@@ -1292,13 +1310,13 @@ async def process_update(data: dict):
             sender      = msg.get("sender", {})
             text        = msg.get("body", {}).get("text", "") or ""
             attachments = msg.get("body", {}).get("attachments", []) or []
-            has_photo   = any(a.get("type") == "image" for a in attachments)
-            photo_token = ""
-            if has_photo:
-                for att in attachments:
-                    if att.get("type") == "image":
-                        photo_token = att.get("payload", {}).get("token", "")
-                        break
+            # Собираем ВСЕ токены изображений (пользователь может прислать 2 фото сразу)
+            user_id_raw = sender.get("user_id", 0)
+            photo_tokens: list[str] = []
+            for att in attachments:
+                if att.get("type") == "image":
+                    tok = att.get("payload", {}).get("token", "") or f"max_{user_id_raw}"
+                    photo_tokens.append(tok)
             # Контакт: кнопка «Поделиться номером телефона» (request_contact)
             contact_phone = ""
             for att in attachments:
@@ -1307,12 +1325,11 @@ async def process_update(data: dict):
                     contact_phone = _extract_phone_from_vcf(vcf_info)
                     break
             await on_message(
-                max_user_id=sender.get("user_id", 0),
+                max_user_id=user_id_raw,
                 text=text,
                 username=sender.get("username", ""),
                 first_name=sender.get("name", ""),
-                has_photo=has_photo,
-                photo_token=photo_token,
+                photo_tokens=photo_tokens,
                 contact_phone=contact_phone,
             )
 
