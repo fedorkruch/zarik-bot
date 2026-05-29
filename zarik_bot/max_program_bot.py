@@ -682,7 +682,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         # Меню уже показано в сообщении «Программа сформирована» выше.
         # Здесь просто убираем кнопки телефона и показываем текст подтверждения.
         result = await bot.answer_callback(callback_id, new_message={
-            "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи 🦥",
+            "text": "Окей, без проблем 🦥\n\nЖди завтра утром — пришлю первые задачи!",
             "format": "markdown",
             "attachments": [],
         })
@@ -701,11 +701,9 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 async def show_today(bot: MaxClient, max_user_id: int, uid: int):
     day = db.get_current_day(uid)
     if day == 0:
-        user = db.get_user(uid)
-        start = user["start_date"] if user else "завтра"
         await bot.send_message(
             max_user_id,
-            f"🦥 Программа стартует **{start}**.\n\nЗагляни сюда утром первого дня!",
+            "🦥 Всё готово! Завтра в 6:00 пришлю первые задания.\n\nИспользуй кнопки меню 👇",
             buttons=_main_menu_buttons(max_user_id, uid),
         )
         return
@@ -813,7 +811,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         if not db.is_program_started(uid):
             await bot.send_message(
                 max_user_id,
-                "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
+                "Ишь хитрюга)) Вот завтра начнем, тогда и прогресс появится 😄",
                 buttons=_main_menu_buttons(max_user_id, uid),
             )
             return
@@ -870,7 +868,7 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
     # Меню уже показано в сообщении «Программа сформирована» — здесь только текст.
     await bot.send_message(
         max_user_id,
-        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи 🦥",
+        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи! 🦥",
     )
     await bot.send_message(
         max_user_id,
@@ -904,10 +902,9 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             for tok in photo_tokens:
                 db.save_user_photo(uid, "before", tok)
             count = db.count_user_photos(uid, "before")
-            noun = "фото" if count in (2, 3, 4) else "фото"
             await bot.send_message(
                 max_user_id,
-                f"📸 Сохранил {count} {noun}!\n\nКогда отправишь все — нажми кнопку 👇",
+                f"✅ Фото {count} сохранено! Пришли ещё или нажми «Готово».",
                 buttons=_photos_done_buttons(),
             )
             return
@@ -1196,7 +1193,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             if not db.is_program_started(uid):
                 await bot.send_message(
                     max_user_id,
-                    "Ишь хитрюга)) Вот завтра начнём, тогда и прогресс появится 😄",
+                    "Ишь хитрюга)) Вот завтра начнем, тогда и прогресс появится 😄",
                     buttons=_main_menu_buttons(max_user_id, uid),
                 )
                 return
@@ -1603,10 +1600,10 @@ def setup_scheduler():
     if _scheduler is not None:
         return
     _scheduler = AsyncIOScheduler(timezone="UTC")
-    _scheduler.add_job(_job_morning,   "cron", hour="*", minute=0,  id="max_morning")
-    _scheduler.add_job(_job_afternoon, "cron", hour="*", minute=5,  id="max_afternoon")
-    _scheduler.add_job(_job_evening,   "cron", hour="*", minute=10, id="max_evening")
-    _scheduler.add_job(_job_weekly,    "cron", hour="*", minute=15, id="max_weekly")
+    _scheduler.add_job(_job_morning,   "cron", hour="*", minute=0, id="max_morning")
+    _scheduler.add_job(_job_afternoon, "cron", hour="*", minute=0, id="max_afternoon")
+    _scheduler.add_job(_job_evening,   "cron", hour="*", minute=0, id="max_evening")
+    _scheduler.add_job(_job_weekly,    "cron", hour="*", minute=0, id="max_weekly")
     _scheduler.start()
     logger.info("MAX планировщик запущен")
 
