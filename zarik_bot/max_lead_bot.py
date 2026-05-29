@@ -526,8 +526,12 @@ async def _step_send_offer(max_user_id: int):
 
 
 async def _step_no_pressure(max_user_id: int):
-    """Шаг 6: без давления — если не купил за 60 сек."""
+    """Шаг 6: без давления — если не купил за 60 сек.
+    Не отправляется если пользователь в процессе ввода данных для оплаты."""
     if db.is_max_lead_purchased(max_user_id):
+        return
+    state = _user_state.get(max_user_id, {})
+    if any(state.get(k) for k in ("awaiting_stake", "awaiting_name", "awaiting_email", "awaiting_phone")):
         return
     bot = get_client()
     await bot.send_message(max_user_id, NO_PRESSURE_TEXT)
