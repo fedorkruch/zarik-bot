@@ -1134,16 +1134,13 @@ def get_session_stats() -> dict:
 
 
 def set_day_for_testing(user_id: int, target_day: int):
-    """Сдвигает дату старта для тестирования"""
+    """Сдвигает дату старта так, чтобы сегодня был target_day.
+    Прогресс (task_completions) не трогаем — сбрасывается только через /reset_user."""
     new_start = date.today() - timedelta(days=target_day - 1)
     with get_conn() as conn:
         conn.execute(
             "UPDATE users SET start_date = ? WHERE user_id = ?",
             (new_start.isoformat(), user_id)
-        )
-        conn.execute(
-            "DELETE FROM task_completions WHERE user_id = ? AND day_number >= ?",
-            (user_id, target_day)
         )
 
 
