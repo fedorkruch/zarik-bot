@@ -198,8 +198,10 @@ def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
         _btn_callback("🏆 Ачивки",   "menu:achievements"),
     ]
     buttons = [row_today, row_nav]
-    # open_app открывает мини-приложение инлайн внутри MAX (как системная кнопка Open)
-    buttons.append([_btn_open_app("📱 МиниАПП")])
+    # МиниАПП: btn_link если WEBAPP_URL задан (open_app без URL → 4xx → всё сообщение дропается)
+    if WEBAPP_URL:
+        url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
+        buttons.append([_btn_link("📱 МиниАПП", url)])
     return buttons
 
 
