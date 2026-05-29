@@ -430,6 +430,7 @@ const BOT_AUTH = {
   platform: _urlP.get('platform') || '',
 };
 function hasBotAuth() { return !!(BOT_AUTH.uid && BOT_AUTH.ts && BOT_AUTH.sig); }
+const IS_MAX = BOT_AUTH.platform === 'max';
 
 let tg = null;
 let STATE = null, CUR_VIEW = 'main', MSG_TAB = 'morning', SEL_SHARE = 0;
@@ -928,6 +929,33 @@ async function generateAchievementPng(ach) {
   });
 }
 
+// Показывает PNG в оверлее — пользователь зажимает для сохранения (MAX / Android)
+function showPngOverlay(blob) {
+  const url = URL.createObjectURL(blob);
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:100%;max-height:72vh;border-radius:18px;display:block';
+
+  const hint = document.createElement('div');
+  hint.textContent = '👆 Зажми картинку → Сохранить фото';
+  hint.style.cssText = 'color:rgba(255,255,255,0.65);font-size:15px;margin-top:14px;text-align:center';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕  Закрыть';
+  closeBtn.style.cssText = 'margin-top:20px;padding:11px 36px;border-radius:24px;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:16px;cursor:pointer';
+  const destroy = () => { document.body.removeChild(ov); URL.revokeObjectURL(url); };
+  closeBtn.onclick = destroy;
+  ov.onclick = e => { if (e.target === ov) destroy(); };
+
+  ov.appendChild(img);
+  ov.appendChild(hint);
+  ov.appendChild(closeBtn);
+  document.body.appendChild(ov);
+}
+
 async function shareAchievement() {
   if (!CURRENT_POPUP_ACH) return;
   const ach = CURRENT_POPUP_ACH;
@@ -940,11 +968,33 @@ async function shareAchievement() {
                   + (ach.short || '') + '\n\n🦥 t.me/shagov77_bot';
   const _reset = () => { btn.textContent = '📤 Поделиться'; btn.disabled = false; };
 
-  // ── Уровень 1: пытаемся сгенерировать PNG ─────────────────
-  let blob = null;
-  try { blob = await generateAchievementPng(ach); } catch(_) { /* переходим к тексту */ }
+  // Генерируем PNG с таймаутом (7 сек) — защита от зависания в WebView
+  const _pngWithTimeout = () => Promise.race([
+    generateAchievementPng(ach),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 7000))
+  ]);
 
-  // ── Уровень 2: шарим PNG (если удалось создать) ────────────
+  // ── В MAX: показываем PNG в оверлее (зажать для сохранения) ─
+  if (IS_MAX) {
+    let blob = null;
+    try { blob = await _pngWithTimeout(); } catch(_) {}
+    _reset();
+    if (blob) { hapticNotify('success'); showPngOverlay(blob); return; }
+    // Fallback — копируем текст
+    fallbackCopy(shareText, () => {
+      hapticNotify('success');
+      btn.textContent = '✅ Скопировано!';
+      setTimeout(_reset, 2500);
+    });
+    return;
+  }
+
+  // ── Telegram: каскадный шаринг ────────────────────────────
+  // Уровень 1: генерируем PNG
+  let blob = null;
+  try { blob = await _pngWithTimeout(); } catch(_) {}
+
+  // Уровень 2: шарим PNG файлом
   if (blob) {
     try {
       const file = new File([blob], 'zarik-achievement.png', { type: 'image/png' });
@@ -954,19 +1004,18 @@ async function shareAchievement() {
       }
     } catch(e) {
       if (e.name === 'AbortError') { _reset(); return; }
-      // файловый шаринг недоступен — пробуем скачать PNG
     }
-    // ── Уровень 2b: скачать PNG (desktop / старый WebView) ───
+    // Уровень 2b: скачать PNG
     try {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = 'zarik-achievement.png'; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 8000);
       hapticNotify('success'); _reset(); return;
-    } catch(_) { /* не поддерживается — переходим к тексту */ }
+    } catch(_) {}
   }
 
-  // ── Уровень 3: шаринг текстом ──────────────────────────────
+  // Уровень 3: шаринг текстом
   if (navigator.share) {
     try {
       await navigator.share({ title: '🦥 77 шагов с Зариком', text: shareText });
@@ -976,7 +1025,7 @@ async function shareAchievement() {
     }
   }
 
-  // ── Уровень 4: копируем в буфер обмена (последний шанс) ───
+  // Уровень 4: буфер обмена
   const done = () => {
     hapticNotify('success');
     btn.textContent = '✅ Скопировано!';
