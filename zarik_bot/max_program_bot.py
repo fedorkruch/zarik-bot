@@ -198,10 +198,16 @@ def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
         _btn_callback("🏆 Ачивки",   "menu:achievements"),
     ]
     buttons = [row_today, row_nav]
-    # МиниАПП: btn_link если WEBAPP_URL задан (open_app без URL → 4xx → всё сообщение дропается)
+    # open_app открывает мини-апп внутри MAX (как системная кнопка Open).
+    # Работает только если мини-апп зарегистрирован на business.max.ru → Чат-боты →
+    # Чат-бот и мини-приложение → Настроить → вставить WEBAPP_URL → Сохранить.
+    # Без регистрации — 4xx и весь send_message дропается. Используем btn_link как fallback.
     if WEBAPP_URL:
-        url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
-        buttons.append([_btn_link("📱 МиниАПП", url)])
+        if os.environ.get("MAX_MINIAPP_REGISTERED"):   # выставить после регистрации на business.max.ru
+            buttons.append([_btn_open_app("📱 МиниАПП")])
+        else:
+            url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
+            buttons.append([_btn_link("📱 МиниАПП", url)])
     return buttons
 
 
