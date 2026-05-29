@@ -440,6 +440,7 @@ def build_full_state(user_id: int) -> dict:
             "id":        ach_id,
             "icon":      ach["icon"],
             "name":      ach["name"],
+            "short":     ach.get("short", ""),
             "threshold": threshold,
             "unlocked":  is_unlocked,
         })

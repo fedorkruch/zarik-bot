@@ -164,6 +164,56 @@ body{
 .loader-sloth{font-size:48px;animation:sway 2s ease-in-out infinite}
 @keyframes sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
 .loader-text{font-size:14px;color:var(--sub)}
+/* Achievement popup */
+.ach-popup{position:fixed;inset:0;z-index:2000;
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.ach-popup.hidden{display:none!important}
+.ach-popup-bg{position:absolute;inset:0;background:rgba(0,0,0,.85);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.ach-popup-card{position:relative;
+  background:linear-gradient(145deg,#16162a,#1e1e38);
+  border:1.5px solid rgba(229,160,18,.5);border-radius:28px;
+  padding:36px 24px 24px;text-align:center;z-index:1;
+  max-width:320px;width:100%;overflow:hidden;
+  box-shadow:0 0 60px rgba(229,160,18,.15)}
+.conf-container{position:absolute;top:0;left:0;right:0;bottom:0;
+  pointer-events:none;overflow:hidden}
+.conf-piece{position:absolute;top:-12px;border-radius:2px;
+  animation:conf-fall linear forwards}
+@keyframes conf-fall{
+  0%{transform:translateY(0) rotate(0deg) scale(1);opacity:1}
+  80%{opacity:1}
+  100%{transform:translateY(520px) rotate(900deg) scale(.5);opacity:0}
+}
+.ap-icon{font-size:76px;display:block;margin-bottom:10px;
+  animation:ach-pop .55s cubic-bezier(.68,-0.55,.27,1.55) forwards}
+@keyframes ach-pop{
+  0%{transform:scale(0) rotate(-20deg);opacity:0}
+  70%{transform:scale(1.15) rotate(5deg)}
+  100%{transform:scale(1) rotate(0deg);opacity:1}
+}
+.ap-ribbon{font-size:10px;font-weight:700;letter-spacing:.12em;
+  color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+.ap-name{font-size:24px;font-weight:800;color:#fff;margin-bottom:4px}
+.ap-day{font-size:12px;font-weight:600;letter-spacing:.08em;
+  color:var(--dim);text-transform:uppercase;margin-bottom:18px}
+.ap-zarik{font-size:22px;margin-bottom:6px}
+.ap-quote{font-size:14px;font-style:italic;color:rgba(255,255,255,.72);
+  line-height:1.55;margin-bottom:26px;padding:0 4px}
+.ap-share{display:block;width:100%;padding:14px;
+  background:var(--gold);color:#fff;border:none;border-radius:14px;
+  font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;
+  transition:opacity .15s;-webkit-tap-highlight-color:transparent}
+.ap-share:active{opacity:.8}
+.ap-close{display:block;width:100%;padding:12px;
+  background:rgba(255,255,255,.07);color:var(--sub);border:none;
+  border-radius:14px;font-size:14px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.ap-close:active{background:rgba(255,255,255,.12)}
+/* Firework particles */
+.fw-wrap{position:absolute;pointer-events:none}
+.fw-dot{position:absolute;width:5px;height:5px;border-radius:50%;
+  animation:fw-out .8s ease-out forwards}
 </style>
 </head>
 <body>
@@ -309,6 +359,22 @@ body{
   <button class="copy-btn" onclick="copyText()">Копировать текст</button>
 </div>
 
+<!-- ACHIEVEMENT POPUP -->
+<div id="ach-popup" class="ach-popup hidden">
+  <div class="ach-popup-bg" onclick="closeAchPopup()"></div>
+  <div class="ach-popup-card">
+    <div class="conf-container" id="conf-container"></div>
+    <span class="ap-icon" id="ap-icon">🔥</span>
+    <div class="ap-ribbon">🏅 Новая ачивка</div>
+    <div class="ap-name" id="ap-name">Неделя огня</div>
+    <div class="ap-day" id="ap-day">День 7</div>
+    <div class="ap-zarik">🦥</div>
+    <div class="ap-quote" id="ap-quote">«7 дней подряд. Я бы аплодировал — но лапы.»</div>
+    <button class="ap-share" id="ap-share-btn" onclick="shareAchievement()">📤 Поделиться</button>
+    <button class="ap-close" onclick="closeAchPopup()">Закрыть</button>
+  </div>
+</div>
+
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://st.max.ru/js/max-web-app.js"></script>
 <script>
@@ -416,11 +482,10 @@ function calcDailyPlanetPct(completedArr, daysCompleted) {
   return '0.01%';
 }
 
-const ACH_SUBS = {
-  first_step:'День 1 завершён', week_fire:'7 дней подряд',
-  sloth_approves:'14 дней в программе', diamond_will:'30 дней засчитано',
-  top_planet:'50 дней пройдено', legend_77:'Все 77 дней!',
-};
+// Ачивки — порогодни для popup-триггера
+const ACH_THRESHOLD_SET = new Set([1,3,5,7,10,14,21,25,30,35,40,42,49,50,55,60,63,70,75,77]);
+
+let CURRENT_POPUP_ACH = null;
 
 const PLANET_TASKS = [
   { icon:'📚', name:'Чтение',       color:'#e5a012', pct:94, fact:'6% людей читают >10 стр. в день' },
@@ -542,9 +607,15 @@ async function toggleTask(idx) {
   try {
     const res = await api('POST', '/api/task', { task_index: idx });
     if (!res.error) {
+      const wasAllDone = STATE.all_tasks_done;
       STATE.completed_tasks = res.completed_tasks;
       STATE.all_tasks_done  = res.completed_tasks.length === 5;
       renderMain();
+      // Показываем попап ачивки если только что закрыли все 5 задач в день-ачивку
+      if (!wasAllDone && STATE.all_tasks_done && ACH_THRESHOLD_SET.has(STATE.day)) {
+        const ach = (STATE.achievements || []).find(a => a.threshold === STATE.day);
+        if (ach) setTimeout(() => showAchievementPopup(ach), 500);
+      }
     }
   } catch(e) {}
 }
@@ -582,11 +653,11 @@ function renderAch() {
   const achs = STATE.achievements || [];
   const daysD = STATE.days_done || 0;
   const unlocked = achs.filter(a => a.unlocked).length;
-  document.getElementById('ach-count').textContent = unlocked + '/6 разблокировано';
+  document.getElementById('ach-count').textContent = unlocked + '/' + achs.length + ' разблокировано';
   const grid = document.getElementById('ach-grid');
   grid.innerHTML = '';
   achs.forEach(a => {
-    const sub  = ACH_SUBS[a.id] || '';
+    const sub  = a.short || ('День ' + a.threshold);
     const left = Math.max(0, a.threshold - daysD);
     const card = document.createElement('div');
     card.className = 'ach-card ' + (a.unlocked ? 'unlocked' : 'locked');
@@ -595,7 +666,7 @@ function renderAch() {
       '<div class="ach-name">' + a.name + '</div>' +
       '<div class="ach-desc">' + sub + '</div>' +
       '<div class="ach-badge ' + (a.unlocked ? 'got' : 'soon') + '">' +
-        (a.unlocked ? 'Получено' : 'Ещё ' + left + ' дн.') +
+        (a.unlocked ? 'Получено ✓' : 'День ' + a.threshold) +
       '</div>';
     grid.appendChild(card);
   });
@@ -650,6 +721,113 @@ function fallbackCopy(txt, cb) {
   try { document.execCommand('copy'); } catch(e) {}
   document.body.removeChild(ta); cb();
 }
+
+// ── Achievement popup ─────────────────────────────────
+function showAchievementPopup(ach) {
+  CURRENT_POPUP_ACH = ach;
+  document.getElementById('ap-icon').textContent  = ach.icon;
+  document.getElementById('ap-name').textContent  = ach.name;
+  document.getElementById('ap-day').textContent   = 'День ' + ach.threshold + ' из 77';
+  document.getElementById('ap-quote').textContent = '«' + (ach.short || '') + '»';
+  document.getElementById('ap-share-btn').textContent = '📤 Поделиться';
+  document.getElementById('ach-popup').classList.remove('hidden');
+  hapticNotify('success');
+  startConfetti();
+  setTimeout(startFireworks, 200);
+  setTimeout(startFireworks, 900);
+}
+
+function closeAchPopup() {
+  document.getElementById('ach-popup').classList.add('hidden');
+  document.getElementById('conf-container').innerHTML = '';
+  CURRENT_POPUP_ACH = null;
+}
+
+function startConfetti() {
+  const c = document.getElementById('conf-container');
+  c.innerHTML = '';
+  const colors = ['#e5a012','#ffd700','#4cd964','#4fc3f7','#b388ff','#ff5c5c','#ff9800','#e91e63','#00e5ff'];
+  const shapes = ['50%', '2px', '50%', '2px', '50%'];
+  for (let i = 0; i < 70; i++) {
+    const p = document.createElement('div');
+    p.className = 'conf-piece';
+    const size = 5 + Math.random() * 9;
+    p.style.cssText = [
+      'left:'    + (Math.random() * 105) + '%',
+      'width:'   + size + 'px',
+      'height:'  + size + 'px',
+      'background:' + colors[Math.floor(Math.random() * colors.length)],
+      'border-radius:' + shapes[Math.floor(Math.random() * shapes.length)],
+      'animation-delay:' + (Math.random() * 1.8) + 's',
+      'animation-duration:' + (2.2 + Math.random() * 2) + 's',
+    ].join(';');
+    c.appendChild(p);
+  }
+}
+
+function startFireworks() {
+  const card = document.querySelector('.ach-popup-card');
+  if (!card) return;
+  const spots = [{l:'12%',t:'18%'},{l:'82%',t:'12%'},{l:'88%',t:'65%'},{l:'8%',t:'60%'},{l:'50%',t:'5%'}];
+  const colors = ['#e5a012','#ffd700','#4cd964','#4fc3f7','#ff5c5c','#b388ff','#ff9800'];
+  const spot = spots[Math.floor(Math.random() * spots.length)];
+  const wrap = document.createElement('div');
+  wrap.className = 'fw-wrap';
+  wrap.style.cssText = 'left:' + spot.l + ';top:' + spot.t;
+  for (let i = 0; i < 14; i++) {
+    const angle = (i / 14) * Math.PI * 2;
+    const dist  = 22 + Math.random() * 24;
+    const dot   = document.createElement('div');
+    dot.className = 'fw-dot';
+    const tx = Math.round(Math.cos(angle) * dist);
+    const ty = Math.round(Math.sin(angle) * dist);
+    dot.style.cssText = [
+      'background:' + colors[Math.floor(Math.random() * colors.length)],
+      'animation:fw-out .75s ease-out forwards',
+      '--tx:' + tx + 'px',
+      '--ty:' + ty + 'px',
+    ].join(';');
+    dot.style.setProperty('--tx', tx + 'px');
+    dot.style.setProperty('--ty', ty + 'px');
+    wrap.appendChild(dot);
+  }
+  card.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 1000);
+}
+
+async function shareAchievement() {
+  if (!CURRENT_POPUP_ACH) return;
+  const ach  = CURRENT_POPUP_ACH;
+  const text = ach.icon + ' Получил ачивку «' + ach.name + '» в #77SoftChallenge!\n'
+             + (ach.short || '') + '\n\n🦥 Зарик гордится — t.me/shagov77_bot';
+  hapticImpact('medium');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: '🦥 Зарик · 77 дней', text });
+      hapticNotify('success');
+      return;
+    } catch(e) { if (e.name === 'AbortError') return; }
+  }
+  // Fallback: clipboard
+  const done = () => {
+    hapticNotify('success');
+    const btn = document.getElementById('ap-share-btn');
+    btn.textContent = '✅ Скопировано!';
+    setTimeout(() => { btn.textContent = '📤 Поделиться'; }, 2500);
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else { fallbackCopy(text, done); }
+}
+
+// ── CSS keyframe for fireworks (injected once) ────────────────
+(function() {
+  if (document.getElementById('fw-style')) return;
+  const s = document.createElement('style');
+  s.id = 'fw-style';
+  s.textContent = '@keyframes fw-out{0%{transform:translate(0,0) scale(1.2);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}';
+  document.head.appendChild(s);
+})();
 
 (async () => {
   ensureTg();
