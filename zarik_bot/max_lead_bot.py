@@ -731,9 +731,10 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
 
     # /reset_user — доступен тест-юзерам для самосброса (до общего блока)
     if cmd == "/reset_user" and max_user_id in TEST_USER_IDS:
-        db.reset_max_lead_keep_purchased(max_user_id)
+        # Полный сброс max_leads (удаляем строку) — при следующем /start воронка начнётся заново
+        db.reset_max_lead(max_user_id)
         _user_state.pop(max_user_id, None)
-        # Сбрасываем прогресс и в программном боте (users таблица)
+        # Сбрасываем прогресс в программном боте, оплату выдаём автоматически
         internal_uid = db.get_max_internal_id(max_user_id)
         if internal_uid is not None:
             db.reset_user_keep_payment(internal_uid)
@@ -863,10 +864,9 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             return  # молча игнорируем
 
         if target_id in TEST_USER_IDS:
-            # Мягкий сброс: воронка обнуляется, purchased_at сохраняется
-            db.reset_max_lead_keep_purchased(target_id)
+            # Полный сброс max_leads + прогресса программного бота, оплата выдаётся автоматически
+            db.reset_max_lead(target_id)
             _user_state.pop(target_id, None)
-            # Также сбрасываем прогресс в программном боте
             target_internal_uid = db.get_max_internal_id(target_id)
             if target_internal_uid is not None:
                 db.reset_user_keep_payment(target_internal_uid)
@@ -880,7 +880,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             if target_id != max_user_id:
                 await bot.send_message(
                     max_user_id,
-                    f"🛠 MAX-лид {target_id} сброшен (лид + программный бот, purchased сохранён)."
+                    f"🛠 MAX-лид {target_id} сброшен полностью (лид + программный бот)."
                 )
         else:
             # Полный сброс
