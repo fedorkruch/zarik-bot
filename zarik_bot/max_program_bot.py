@@ -220,7 +220,7 @@ def _photos_done_buttons() -> list[list[dict]]:
 
 def _phone_buttons() -> list[list[dict]]:
     return [
-        [_btn_contact("📱 Поделиться номером телефона")],
+        [_btn_callback("📱 Ввести номер телефона", "phone_enter")],
         [_btn_callback("Пропустить →", "phone_skip")],
     ]
 
@@ -603,7 +603,6 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.set_share_photos(uid, False)
         db.complete_onboarding(uid)
         await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
-        await _send_completion_message(bot, max_user_id, uid)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Шаг 4: Фото отправлены ──────────────────────────────
@@ -622,18 +621,22 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.complete_onboarding(uid)
         noun = "фото" if count in (2, 3, 4) else "фото"
         await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
-        await _send_completion_message(bot, max_user_id, uid)
         await _send_phone_request(bot, max_user_id, uid)
+
+    # ── Телефон — ввести номер ────────────────────────────────
+    elif payload == "phone_enter":
+        await bot.answer_callback(callback_id)
+        # Шаг уже "awaiting_phone" — просто просим ввести текстом
+        await bot.send_message(
+            max_user_id,
+            "📱 Введи номер телефона:\n(например: +79001234567 или 89001234567)",
+        )
 
     # ── Телефон — пропустить ─────────────────────────────────
     elif payload == "phone_skip":
         await bot.answer_callback(callback_id)
         db.set_onboarding_step(uid, "done")
-        await bot.send_message(
-            max_user_id,
-            "Окей, без проблем 🦥\n\nЖди завтра утром — пришлю первые задачи!",
-            buttons=_main_menu_buttons(max_user_id, uid),
-        )
+        await _send_completion_message(bot, max_user_id, uid)
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -676,8 +679,11 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     step = db.get_onboarding_step(uid)
 
     # Онбординг
+    # Шаг "awaiting_phone" наступает ПОСЛЕ complete_onboarding(), поэтому
+    # проверяем его отдельно, иначе phone_skip/phone_enter не попадут в обработчик
     _u = db.get_user(uid)
-    if step not in ("done", "welcome") and not (_u and _u["onboarding_complete"]):
+    if (step not in ("done", "welcome") and not (_u and _u["onboarding_complete"])) \
+            or step == "awaiting_phone":
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
         return
 
@@ -780,14 +786,11 @@ def _extract_phone_from_vcf(vcf_info: str) -> str:
 
 
 async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, phone: str):
-    """Сохраняет телефон, переводит онбординг в done, благодарит пользователя."""
+    """Сохраняет телефон, переводит онбординг в done, показывает финальное сообщение."""
     db.save_user_phone(uid, phone)
     db.set_onboarding_step(uid, "done")
-    await bot.send_message(
-        max_user_id,
-        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи! 🦥",
-        buttons=_main_menu_buttons(max_user_id, uid),
-    )
+    await bot.send_message(max_user_id, "✅ Номер сохранён, спасибо! 🙌")
+    await _send_completion_message(bot, max_user_id, uid)
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
@@ -818,17 +821,27 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             )
             return
 
-    # ── Ввод телефона вручную (awaiting_phone, если не нажали кнопку) ─
+    # ── Ввод номера телефона (шаг awaiting_phone) ────────────────
     step = db.get_onboarding_step(uid)
     if step == "awaiting_phone":
-        digits = re.sub(r"[^\d+]", "", text)
-        if len(digits) >= 7:
-            await _save_phone_and_finish(bot, max_user_id, uid, digits)
+        phone_raw = text.strip()
+        # Нормализация: убираем пробелы/тире/скобки, 8→+7
+        def _norm(s: str) -> str:
+            d = re.sub(r"[\s\-\(\)]", "", s)
+            if d.startswith("8"):
+                d = "+7" + d[1:]
+            if not d.startswith("+"):
+                d = "+" + d
+            return d
+        phone_clean = _norm(phone_raw)
+        if re.match(r"^\+7\d{10}$", phone_clean):
+            await _save_phone_and_finish(bot, max_user_id, uid, phone_clean)
         else:
             await bot.send_message(
                 max_user_id,
-                "Не похоже на номер телефона 🤔\n\nВведи в формате +79991234567 "
-                "или нажми «Пропустить» 👇",
+                "⚠️ Некорректный номер. Введи российский номер:\n"
+                "например +79001234567 или 89001234567\n\n"
+                "Или нажми «Пропустить →» 👇",
                 buttons=_phone_buttons(),
             )
         return
