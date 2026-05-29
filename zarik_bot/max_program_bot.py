@@ -499,22 +499,14 @@ def build_weekly_milestone_text(uid: int) -> str:
 
 # ── Онбординг ─────────────────────────────────────────────────
 
-async def _send_program_formed(bot: MaxClient, max_user_id: int):
-    """Сообщение 'программа сформирована' — отправляется после шага с фото,
-    ДО блока с запросом телефона."""
+async def _send_program_formed(bot: MaxClient, max_user_id: int, uid: int):
+    """'Программа сформирована' — отправляется ДО запроса телефона.
+    Меню крепится здесь же — как в TG боте (MAIN_MENU появляет ещё до phone-шага)."""
     await bot.send_message(
         max_user_id,
         "Отлично, твоя программа сформирована под тебя 🎯\n\n"
         "Я пока пошёл дальше висеть на ветке, а с тобой свяжусь завтра утром 🦥\n"
         "А пока — отдыхай)",
-    )
-
-
-async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
-    """Финальное сообщение + меню одним вызовом (прямой await, без create_task)."""
-    await bot.send_message(
-        max_user_id,
-        "Жди завтра утром — пришлю первые задачи 🦥",
         buttons=_main_menu_buttons(max_user_id, uid),
     )
 
@@ -646,7 +638,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.complete_onboarding(uid)
         await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
         await asyncio.sleep(0.3)
-        await _send_program_formed(bot, max_user_id)
+        await _send_program_formed(bot, max_user_id, uid)   # ← меню уже здесь
         await asyncio.sleep(0.3)
         await _send_phone_request(bot, max_user_id, uid)
 
@@ -667,7 +659,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         noun = "фото" if count in (2, 3, 4) else "фото"
         await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
         await asyncio.sleep(0.3)
-        await _send_program_formed(bot, max_user_id)
+        await _send_program_formed(bot, max_user_id, uid)   # ← меню уже здесь
         await asyncio.sleep(0.3)
         await _send_phone_request(bot, max_user_id, uid)
 
@@ -687,16 +679,14 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     elif payload == "phone_skip":
         db.set_onboarding_step(uid, "done")
         _phone_msg_ids.pop(max_user_id, None)
-        # Шаг 1: убираем кнопки с «Последний штрих» прямо на месте.
-        # open_app НЕ поддерживается в /answers — меню шлём отдельным send_message.
+        # Меню уже показано в сообщении «Программа сформирована» выше.
+        # Здесь просто убираем кнопки телефона и показываем текст подтверждения.
         result = await bot.answer_callback(callback_id, new_message={
             "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи 🦥",
             "format": "markdown",
             "attachments": [],
         })
         logger.info(f"phone_skip answer_callback → {result}")
-        # Шаг 2: меню — прямой await, не create_task (create_task без ссылки GC убивает).
-        await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -870,13 +860,11 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
             )
         except Exception:
             logger.exception(f"_save_phone_and_finish: не удалось снять кнопки msg={mid}")
-    # Финальное сообщение + меню — один вызов, прямой await (не create_task).
-    resp = await bot.send_message(
+    # Меню уже показано в сообщении «Программа сформирована» — здесь только текст.
+    await bot.send_message(
         max_user_id,
         "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи 🦥",
-        buttons=_main_menu_buttons(max_user_id, uid),
     )
-    logger.info(f"_save_phone_and_finish menu send → {resp}")
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
