@@ -760,6 +760,35 @@ async def handle_yookassa_webhook(request: web.Request) -> web.Response:
             f"payment_id={payment_id}"
         )
 
+        # Регистрируем оплату в таблице users, чтобы программный бот мог
+        # проверить её через is_payment_confirmed(internal_uid)
+        lead = db.get_max_lead(max_user_id)
+        username   = (lead["username"]   or "") if lead else ""
+        first_name = (lead["first_name"] or "") if lead else ""
+        full_name  = (lead["full_name"]  or "") if lead else ""
+        email      = (lead["email"]      or "") if lead else ""
+        phone      = (lead["phone"]      or "") if lead else ""
+        stake_kopecks  = int(metadata.get("stake_kopecks",  "0") or "0")
+        course_kopecks = int(metadata.get("course_kopecks", "0") or "0")
+
+        internal_uid = db.get_or_create_max_user(max_user_id, username, first_name)
+        db.save_payment(
+            user_id           = internal_uid,
+            charge_id         = payment_id,
+            participation_fee = course_kopecks,
+            stake_amount      = stake_kopecks,
+            full_name         = full_name,
+            email             = email,
+            phone             = phone,
+        )
+        # save_payment ставит onboarding_step='timezone'; откатываем на 'welcome'
+        # чтобы программный бот показал приветственный экран
+        db.set_onboarding_step(internal_uid, "welcome")
+        logger.info(
+            f"YooKassa: payment saved to users table: "
+            f"max_user_id={max_user_id} internal_uid={internal_uid}"
+        )
+
         # Отправляем подтверждение и ссылку на основной бот
         import max_lead_bot
         bot = max_lead_bot.get_client()

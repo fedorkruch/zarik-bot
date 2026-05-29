@@ -1091,6 +1091,33 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         return
 
 
+def _sync_lead_payment(max_user_id: int, internal_uid: int):
+    """
+    Переносит данные об оплате из max_leads → users.
+    Вызывается как fallback когда вебхук ЮКасса ещё не успел прийти,
+    но в max_leads уже стоит purchased_at (оплата прошла через ЮКасса
+    и вебхук придёт позже, или оплата была записана вручную).
+    """
+    lead = db.get_max_lead(max_user_id)
+    charge_id = f"max_lead_{max_user_id}"  # synthetic charge_id
+    full_name = (lead["full_name"] or "") if lead else ""
+    email     = (lead["email"]     or "") if lead else ""
+    phone     = (lead["phone"]     or "") if lead else ""
+    db.save_payment(
+        user_id           = internal_uid,
+        charge_id         = charge_id,
+        participation_fee = 0,
+        stake_amount      = 0,
+        full_name         = full_name,
+        email             = email,
+        phone             = phone,
+    )
+    # save_payment ставит onboarding_step='timezone'; нам нужен 'welcome'
+    if db.get_onboarding_step(internal_uid) in ("payment", "timezone", ""):
+        db.set_onboarding_step(internal_uid, "welcome")
+    logger.info(f"sync_lead_payment: max_user_id={max_user_id} internal_uid={internal_uid}")
+
+
 async def _handle_start(bot: MaxClient, max_user_id: int, uid: int,
                          username: str, first_name: str):
     # Тест-пользователи: авто-грант
@@ -1102,8 +1129,17 @@ async def _handle_start(bot: MaxClient, max_user_id: int, uid: int,
         db.set_onboarding_step(uid, "welcome")
 
     if not db.is_payment_confirmed(uid):
-        await bot.send_message(max_user_id, NOT_PAID_TEXT, buttons=_pay_buttons())
-        return
+        # Fallback: проверяем max_leads — на случай если вебхук ЮКасса ещё не пришёл,
+        # но оплата уже прошла (пользователь перешёл по ссылке сразу после оплаты)
+        if db.is_max_lead_purchased(max_user_id):
+            _sync_lead_payment(max_user_id, uid)
+            logger.info(
+                f"MAX start: оплата найдена в max_leads, синхронизирована: "
+                f"max_user_id={max_user_id}"
+            )
+        else:
+            await bot.send_message(max_user_id, NOT_PAID_TEXT, buttons=_pay_buttons())
+            return
 
     await _send_welcome_to_max_user(bot, max_user_id, uid)
 
