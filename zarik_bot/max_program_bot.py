@@ -257,6 +257,21 @@ def build_today_text(day: int, completed: set) -> str:
     return f"**День {day} из {TOTAL_DAYS} · 📋 Отметь что выполнил сегодня 👇**"
 
 
+def _save_max_tracker_msg(uid: int, day: int, resp: dict) -> None:
+    """Сохраняет message_id трекера из ответа MAX API (для последующего редактирования)."""
+    if not resp:
+        return
+    msg = resp.get("message", {}) or {}
+    raw_id = (msg.get("message_id") or msg.get("mid") or msg.get("id")
+              or resp.get("message_id") or 0)
+    try:
+        mid = int(str(raw_id))
+        if mid:
+            db.save_tracker_message(uid, day, mid)
+    except (TypeError, ValueError):
+        pass
+
+
 def build_tasks_list_max(uid: int, day: int) -> str:
     """Задания на день с описанием тренировки."""
     user_row = db.get_user(uid)
@@ -663,8 +678,9 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
     # Описание тренировки + задания на день
     await bot.send_message(max_user_id, build_tasks_list_max(uid, day))
     # Трекер — только задачи (без навигации)
-    await bot.send_message(max_user_id, build_today_text(day, completed),
-                           buttons=_tracker_buttons(day, completed))
+    resp = await bot.send_message(max_user_id, build_today_text(day, completed),
+                                  buttons=_tracker_buttons(day, completed))
+    _save_max_tracker_msg(uid, day, resp)
     # Навигация — отдельным сообщением ниже (имитация Reply Keyboard)
     await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
@@ -1363,11 +1379,12 @@ async def _job_morning():
             await bot.send_message(max_id, build_tasks_list_max(uid, day))
 
             # 3. Трекер (только задачи) + меню отдельным сообщением ниже
-            await bot.send_message(
+            resp = await bot.send_message(
                 max_id,
                 build_today_text(day, completed),
                 buttons=_tracker_buttons(day, completed),
             )
+            _save_max_tracker_msg(uid, day, resp)
             await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Morning job error for MAX user {max_id}")
@@ -1403,11 +1420,12 @@ async def _job_afternoon():
             )
             # Трекер если не все выполнены
             if not all_done:
-                await bot.send_message(
+                resp = await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
                     buttons=_tracker_buttons(day, completed),
                 )
+                _save_max_tracker_msg(uid, day, resp)
             # Меню всегда
             await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
@@ -1444,11 +1462,12 @@ async def _job_evening():
             )
             # Трекер если не все выполнены
             if not all_done:
-                await bot.send_message(
+                resp = await bot.send_message(
                     max_id,
                     build_today_text(day, completed),
                     buttons=_tracker_buttons(day, completed),
                 )
+                _save_max_tracker_msg(uid, day, resp)
             # Меню всегда
             await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
         except Exception:

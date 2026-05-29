@@ -162,6 +162,50 @@ async def _edit_tracker_keyboard(uid: int, day: int, completed: set) -> None:
         logger.warning(f"edit_tracker_keyboard uid={uid}: {exc}")
 
 
+_MAX_INTERNAL_ID_START = -1_000_001
+
+_MAX_TASK_LABELS = [
+    "💪 Тренировка",
+    "💧 Вода — 8 стаканов",
+    "📚 Чтение — 10 страниц",
+    "🥗 Без фастфуда",
+    "🚫 Без алкоголя",
+]
+
+
+async def _edit_max_tracker_keyboard(uid: int, day: int, completed: set) -> None:
+    """
+    Редактирует трекер-сообщение в MAX чате отражая текущее состояние задач.
+    Вызывается когда пользователь отмечает задачи в мини-апп.
+    Если message_id не сохранён или токен недоступен — молча пропускает.
+    """
+    if not MAX_PROGRAM_TOKEN:
+        return
+    msg_id = db.get_tracker_message_id(uid, day)
+    if not msg_id:
+        return
+    max_user_id = db.get_max_user_id_by_internal(uid)
+    if not max_user_id:
+        return
+
+    if len(completed) >= 5:
+        buttons = [[{"type": "callback", "text": "🎉 День завершён!", "payload": "noop"}]]
+    else:
+        buttons = []
+        for i, label in enumerate(_MAX_TASK_LABELS):
+            mark = "✅" if i in completed else "☐"
+            buttons.append([{"type": "callback", "text": f"{mark} {label}", "payload": f"task:{day}:{i}"}])
+
+    text = f"**День {day} из 77 · 📋 Отметь что выполнил сегодня 👇**"
+    try:
+        from max_client import MaxClient
+        client = MaxClient(MAX_PROGRAM_TOKEN)
+        await client.edit_message(str(msg_id), text, buttons=buttons)
+        await client.close()
+    except Exception as exc:
+        logger.warning(f"edit_max_tracker uid={uid} day={day}: {exc}")
+
+
 # ── Авторизация через Telegram initData ──────────────────────
 
 def _parse_init_data_params(raw: str) -> dict:
@@ -571,8 +615,11 @@ async def handle_task(request: web.Request) -> web.Response:
         day = db.get_current_day(uid)
         db.toggle_task(uid, day, task_index)   # поддерживает и установку, и снятие галочки
         completed_set = db.get_completed_tasks(uid, day)
-        # Синхронизируем трекер-сообщение в Telegram
-        await _edit_tracker_keyboard(uid, day, completed_set)
+        # Синхронизируем трекер-сообщение: Telegram или MAX
+        if uid <= _MAX_INTERNAL_ID_START:
+            await _edit_max_tracker_keyboard(uid, day, set(completed_set))
+        else:
+            await _edit_tracker_keyboard(uid, day, completed_set)
         return web.json_response({"completed_tasks": sorted(completed_set), "day": day})
     except Exception as e:
         logger.exception(f"task error for {uid}")
