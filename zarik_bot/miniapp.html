@@ -430,7 +430,10 @@ const BOT_AUTH = {
   platform: _urlP.get('platform') || '',
 };
 function hasBotAuth() { return !!(BOT_AUTH.uid && BOT_AUTH.ts && BOT_AUTH.sig); }
-const IS_MAX = BOT_AUTH.platform === 'max';
+// Telegram WebApp всегда инжектит window.Telegram.WebApp.initData
+// В MAX (и любом другом WebView) его нет → показываем overlay вместо share API
+const IS_TELEGRAM_WEBAPP = !!(window.Telegram?.WebApp?.initData);
+const IS_MAX = !IS_TELEGRAM_WEBAPP;
 
 let tg = null;
 let STATE = null, CUR_VIEW = 'main', MSG_TAB = 'morning', SEL_SHARE = 0;
@@ -968,19 +971,21 @@ async function shareAchievement() {
                   + (ach.short || '') + '\n\n🦥 t.me/shagov77_bot';
   const _reset = () => { btn.textContent = '📤 Поделиться'; btn.disabled = false; };
 
-  // Генерируем PNG с таймаутом (7 сек) — защита от зависания в WebView
-  const _pngWithTimeout = () => Promise.race([
+  // Генерируем PNG с таймаутом — защита от зависания canvas.toBlob в WebView
+  // MAX: 4 сек (чтобы не убить user-gesture для clipboard fallback)
+  // TG: 7 сек (share API всё равно требует жеста)
+  const _pngWithTimeout = (ms) => Promise.race([
     generateAchievementPng(ach),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 7000))
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
   ]);
 
-  // ── В MAX: показываем PNG в оверлее (зажать для сохранения) ─
+  // ── В MAX/браузере: показываем PNG в оверлее (зажать для сохранения) ─
   if (IS_MAX) {
     let blob = null;
-    try { blob = await _pngWithTimeout(); } catch(_) {}
+    try { blob = await _pngWithTimeout(4000); } catch(_) {}
     _reset();
     if (blob) { hapticNotify('success'); showPngOverlay(blob); return; }
-    // Fallback — копируем текст
+    // Fallback — копируем текст (user gesture ещё свежий — не прошло много времени)
     fallbackCopy(shareText, () => {
       hapticNotify('success');
       btn.textContent = '✅ Скопировано!';
@@ -992,7 +997,7 @@ async function shareAchievement() {
   // ── Telegram: каскадный шаринг ────────────────────────────
   // Уровень 1: генерируем PNG
   let blob = null;
-  try { blob = await _pngWithTimeout(); } catch(_) {}
+  try { blob = await _pngWithTimeout(7000); } catch(_) {}
 
   // Уровень 2: шарим PNG файлом
   if (blob) {
