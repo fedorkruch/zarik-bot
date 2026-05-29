@@ -1342,6 +1342,38 @@ def mark_max_lead_final(max_user_id: int):
         )
 
 
+def reset_max_lead(max_user_id: int):
+    """Полный сброс MAX-лида — удаляет запись из max_leads.
+    Позволяет пользователю пройти воронку заново."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM max_leads WHERE max_user_id = ?", (max_user_id,))
+
+
+def reset_max_lead_keep_purchased(max_user_id: int):
+    """Мягкий сброс MAX-лида — сбрасывает воронку, но сохраняет статус purchased.
+    Для тест-пользователей: они уже заплатили, повторная оплата не нужна."""
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE max_leads SET
+                subscribed_at        = NULL,
+                tracker_sent_at      = NULL,
+                tracker_question_at  = NULL,
+                tracker_reply_yes    = NULL,
+                intro_sent_at        = NULL,
+                pitch_sent_at        = NULL,
+                start_clicked_at     = NULL,
+                stake_asked_at       = NULL,
+                stake_choice         = NULL,
+                invoice_sent_at      = NULL,
+                follow_2_sent_at     = NULL,
+                follow_3_sent_at     = NULL,
+                follow_7_sent_at     = NULL,
+                final_sent_at        = NULL,
+                lead_status          = 'new'
+            WHERE max_user_id = ?
+        """, (max_user_id,))
+
+
 def is_max_lead_purchased(max_user_id: int) -> bool:
     with get_conn() as conn:
         row = conn.execute(

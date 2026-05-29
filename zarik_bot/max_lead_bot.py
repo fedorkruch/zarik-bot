@@ -673,6 +673,17 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await on_bot_started(max_user_id, username, first_name)
         return
 
+    # /reset_user — доступен тест-юзерам для самосброса (до общего блока)
+    if cmd == "/reset_user" and max_user_id in TEST_USER_IDS:
+        db.reset_max_lead_keep_purchased(max_user_id)
+        _user_state.pop(max_user_id, None)
+        await bot.send_message(
+            max_user_id,
+            "✅ Твой аккаунт сброшен. Отправь /start — начнём с начала."
+        )
+        logger.info(f"DEV сброс (TEST_USER): max_user_id={max_user_id}")
+        return
+
     # Обычные пользователи
     if max_user_id != MAX_ADMIN_USER_ID:
         # 1. Ожидаем ввод суммы ставки
@@ -715,6 +726,40 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         return
 
     # Только для администратора
+
+    if text.startswith("/reset_user"):
+        parts = text.split()
+        # Администратор может сбросить любого; тест-юзеры — только себя
+        if max_user_id == MAX_ADMIN_USER_ID:
+            target_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else max_user_id
+        elif max_user_id in TEST_USER_IDS:
+            target_id = max_user_id   # тест-юзер сбрасывает только себя
+        else:
+            return  # молча игнорируем
+
+        if target_id in TEST_USER_IDS:
+            # Мягкий сброс: воронка обнуляется, purchased_at сохраняется
+            db.reset_max_lead_keep_purchased(target_id)
+            _user_state.pop(target_id, None)
+            await bot.send_message(
+                target_id,
+                "✅ Твой аккаунт сброшен. Отправь /start — начнём с начала."
+            )
+            if target_id != max_user_id:
+                await bot.send_message(
+                    max_user_id,
+                    f"🛠 MAX-лид {target_id} сброшен (статус purchased сохранён)."
+                )
+        else:
+            # Полный сброс
+            db.reset_max_lead(target_id)
+            _user_state.pop(target_id, None)
+            await bot.send_message(
+                max_user_id,
+                f"🛠 MAX-лид {target_id} полностью сброшен."
+            )
+        logger.info(f"reset_user: admin={max_user_id} target={target_id}")
+        return
 
     if text.startswith("/stats") or text.startswith("/leads"):
         f = db.get_max_funnel_stats()
