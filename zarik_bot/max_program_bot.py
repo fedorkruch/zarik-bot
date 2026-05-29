@@ -1025,55 +1025,66 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
 
             db.set_day_for_testing(target_uid, target_day)
             completed = set(db.get_completed_tasks(target_uid, target_day))
-            partial   = {0}   # только тренировка — для примера частичного выполнения
+            partial   = {0}
 
             await bot.send_message(max_user_id,
                 f"🛠 **DEV · День {target_day} из {TOTAL_DAYS}**")
 
-            # ☀️ 6:00 — мотивация + задания + трекер
-            await bot.send_message(target_max_id,
-                _md(ct.get_morning(target_day)))
-            await bot.send_message(target_max_id,
-                build_tasks_list_max(target_uid, target_day))
-            await bot.send_message(target_max_id,
-                build_today_text(target_day, completed),
-                buttons=_tasks_buttons(target_day, completed))
-
-            # 🌤 14:00 — 0 галочек
-            await bot.send_message(target_max_id,
-                f"_— 14:00 · ноль галочек —_\n\n"
-                + _md(ct.get_afternoon_smart(target_day, set())))
-            # 🌤 14:00 — частично
-            await bot.send_message(target_max_id,
-                f"_— 14:00 · частично (только тренировка) —_\n\n"
-                + _md(ct.get_afternoon_smart(target_day, partial)))
-            # 🌤 14:00 — все выполнено
-            await bot.send_message(target_max_id,
-                f"_— 14:00 · все галочки —_\n\n"
-                + _md(ct.get_afternoon_smart(target_day, {0, 1, 2, 3, 4})))
-
-            # 🌙 21:00 — 0 галочек
-            await bot.send_message(target_max_id,
-                f"_— 21:00 · ноль галочек —_\n\n"
-                + _md(ct.get_evening_smart(target_day, set())))
-            # 🌙 21:00 — частично
-            await bot.send_message(target_max_id,
-                f"_— 21:00 · частично (только тренировка) —_\n\n"
-                + _md(ct.get_evening_smart(target_day, partial)))
-            # 🌙 21:00 — все выполнено
-            await bot.send_message(target_max_id,
-                f"_— 21:00 · все галочки —_\n\n"
-                + _md(ct.get_evening_smart(target_day, {0, 1, 2, 3, 4})))
-
-            if target_day in WEEKLY_MILESTONE_DAYS:
+            # Все preview-сообщения — в try/except, чтобы их ошибки не убили меню
+            try:
+                # ☀️ 6:00 — мотивация + задания + трекер
                 await bot.send_message(target_max_id,
-                    build_weekly_milestone_text(target_uid))
+                    _md(ct.get_morning(target_day)))
+                await asyncio.sleep(0.2)
+                await bot.send_message(target_max_id,
+                    build_tasks_list_max(target_uid, target_day))
+                await asyncio.sleep(0.2)
+                resp = await bot.send_message(target_max_id,
+                    build_today_text(target_day, completed),
+                    buttons=_tasks_buttons(target_day, completed))
+                _save_max_tracker_msg(target_uid, target_day, resp)
+                await asyncio.sleep(0.2)
 
-            # Подтверждение — сначала, если пишем другому пользователю
+                # 🌤 14:00 — три варианта
+                await bot.send_message(target_max_id,
+                    f"_— 14:00 · ноль галочек —_\n\n"
+                    + _md(ct.get_afternoon_smart(target_day, set())))
+                await asyncio.sleep(0.2)
+                await bot.send_message(target_max_id,
+                    f"_— 14:00 · частично —_\n\n"
+                    + _md(ct.get_afternoon_smart(target_day, partial)))
+                await asyncio.sleep(0.2)
+                await bot.send_message(target_max_id,
+                    f"_— 14:00 · все галочки —_\n\n"
+                    + _md(ct.get_afternoon_smart(target_day, {0, 1, 2, 3, 4})))
+                await asyncio.sleep(0.2)
+
+                # 🌙 21:00 — три варианта
+                await bot.send_message(target_max_id,
+                    f"_— 21:00 · ноль галочек —_\n\n"
+                    + _md(ct.get_evening_smart(target_day, set())))
+                await asyncio.sleep(0.2)
+                await bot.send_message(target_max_id,
+                    f"_— 21:00 · частично —_\n\n"
+                    + _md(ct.get_evening_smart(target_day, partial)))
+                await asyncio.sleep(0.2)
+                await bot.send_message(target_max_id,
+                    f"_— 21:00 · все галочки —_\n\n"
+                    + _md(ct.get_evening_smart(target_day, {0, 1, 2, 3, 4})))
+                await asyncio.sleep(0.2)
+
+                if target_day in WEEKLY_MILESTONE_DAYS:
+                    await bot.send_message(target_max_id,
+                        build_weekly_milestone_text(target_uid))
+                    await asyncio.sleep(0.2)
+
+            except Exception:
+                logger.exception(f"/setday preview error day={target_day} target={target_max_id}")
+
+            # Меню — в отдельном блоке, отправляется ВСЕГДА
             if target_max_id != max_user_id:
                 await bot.send_message(max_user_id,
                     f"✅ День {target_day} установлен для MAX {target_max_id}")
-            # Меню — последнее сообщение, чтобы плашка оставалась внизу экрана
             await bot.send_message(target_max_id, "·",
                 buttons=_main_menu_buttons(target_max_id, target_uid))
             return
