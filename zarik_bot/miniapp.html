@@ -233,7 +233,7 @@ body{
 <div id="s-main" class="screen hidden">
   <div class="main-hdr">
     <div class="hdr-left">
-      <div class="challenge-lbl">77 SOFT CHALLENGE</div>
+      <div class="challenge-lbl">77 ШАГОВ С ЗАРИКОМ</div>
       <div class="day-title">
         <span class="d-num" id="m-day">—</span><span class="d-sep">/77</span>
       </div>
@@ -346,7 +346,7 @@ body{
 
   <div class="share-preview">
     <div class="preview-watermark">🦥</div>
-    <div class="preview-badge">77 SOFT CHALLENGE</div>
+    <div class="preview-badge">77 ШАГОВ С ЗАРИКОМ</div>
     <div class="preview-day" id="sh-day">—</div>
     <div class="preview-dayof" id="sh-dayof">из 77 · 0% пути</div>
     <div class="preview-bar"><div class="preview-bar-fill" id="sh-bar" style="width:0%"></div></div>
@@ -889,7 +889,7 @@ async function generateAchievementPng(ach) {
   ctx.textAlign = 'center';
   ctx.font = '600 38px -apple-system,BlinkMacSystemFont,Roboto,sans-serif';
   ctx.fillStyle = '#e5a012';
-  ctx.fillText('🏅 НОВАЯ АЧИВКА · 77 SOFT CHALLENGE', S/2, 116);
+  ctx.fillText('🏅 НОВАЯ АЧИВКА · 77 ШАГОВ С ЗАРИКОМ', S/2, 116);
 
   // 5. Big icon emoji
   ctx.font = '210px serif';
@@ -936,7 +936,7 @@ async function shareAchievement() {
   btn.disabled = true;
   hapticImpact('medium');
 
-  const shareText = ach.icon + ' Получил ачивку «' + ach.name + '» в #77SoftChallenge!\n'
+  const shareText = ach.icon + ' Получил ачивку «' + ach.name + '» в «77 шагов с Зариком»!\n'
                   + (ach.short || '') + '\n\n🦥 t.me/shagov77_bot';
   const _reset = () => { btn.textContent = '📤 Поделиться'; btn.disabled = false; };
 
@@ -949,7 +949,7 @@ async function shareAchievement() {
     try {
       const file = new File([blob], 'zarik-achievement.png', { type: 'image/png' });
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: '🦥 ' + ach.name + ' · 77 Soft Challenge', files: [file] });
+        await navigator.share({ title: '🦥 ' + ach.name + ' · 77 шагов с Зариком', files: [file] });
         hapticNotify('success'); _reset(); return;
       }
     } catch(e) {
@@ -969,7 +969,7 @@ async function shareAchievement() {
   // ── Уровень 3: шаринг текстом ──────────────────────────────
   if (navigator.share) {
     try {
-      await navigator.share({ title: '🦥 77 Soft Challenge', text: shareText });
+      await navigator.share({ title: '🦥 77 шагов с Зариком', text: shareText });
       hapticNotify('success'); _reset(); return;
     } catch(e) {
       if (e.name === 'AbortError') { _reset(); return; }

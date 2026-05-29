@@ -1,5 +1,5 @@
 """
-max_program_bot.py — основной бот 77 Soft Challenge для Мессенджера MAX
+max_program_bot.py — основной бот «77 шагов с Зариком» для Мессенджера MAX
                      (полный аналог @Zarik_Lazy_Bot).
 
 Переменные окружения:
