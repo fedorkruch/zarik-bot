@@ -317,7 +317,11 @@ def _build_receipt_items(course_kopecks: int, stake_kopecks: int = 0) -> list:
 
 
 def _valid_email(s: str) -> bool:
-    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", s.strip()))
+    """Email только из ASCII-символов, формат x@x.x (длина частей любая)."""
+    email = s.strip()
+    if not email.isascii():
+        return False
+    return bool(re.match(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$", email))
 
 
 def _valid_phone(s: str) -> bool:
@@ -768,9 +772,10 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         return
 
     if state.get("awaiting_name"):
-        name = text.strip()
+        # Принимаем любой формат ФИО: с пробелами, без, любые символы; минимум 2 символа
+        name = re.sub(r"\s+", " ", text.strip())
         if len(name) < 2:
-            await bot.send_message(max_user_id, "⚠️ Введи корректное имя:")
+            await bot.send_message(max_user_id, "⚠️ Введи имя (минимум 2 символа):")
             return
         _user_state[max_user_id] = {
             "awaiting_email": True,
@@ -785,7 +790,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         if not _valid_email(email):
             await bot.send_message(
                 max_user_id,
-                "⚠️ Некорректный email. Введи правильный адрес (например: ivan@mail.ru):"
+                "⚠️ Некорректный email. Только латинские буквы, например: ivan@mail.ru или user123@example.com:"
             )
             return
         _user_state[max_user_id] = {
