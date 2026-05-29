@@ -56,6 +56,10 @@ WEEKLY_MILESTONE_DAYS = {7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77}
 _client: MaxClient | None = None
 _scheduler: AsyncIOScheduler | None = None
 
+# Хранит message_id сообщения с запросом телефона (в памяти, до ввода номера)
+# Ключ: max_user_id, значение: строковый message_id
+_phone_msg_ids: dict[int, str] = {}
+
 
 def get_client() -> MaxClient:
     global _client
@@ -507,24 +511,33 @@ async def _send_program_formed(bot: MaxClient, max_user_id: int):
 
 
 async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
-    """Финальное сообщение после шага с телефоном (номер введён или пропущен)."""
-    await bot.send_message(
-        max_user_id,
-        "Жди завтра утром — пришлю первые задачи 🦥",
-        buttons=_main_menu_buttons(max_user_id, uid),
-    )
+    """Финальное сообщение после шага с телефоном (номер введён или пропущен).
+    Разбиваем на 2 сообщения: текст + отдельно меню — надёжнее чем всё в одном."""
+    await bot.send_message(max_user_id, "Жди завтра утром — пришлю первые задачи 🦥")
+    await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
 
 async def _send_phone_request(bot: MaxClient, max_user_id: int, uid: int):
-    """Запрос номера телефона — последний штрих онбординга (аналог TG)."""
+    """Запрос номера телефона — последний штрих онбординга (аналог TG).
+    Сохраняет message_id сообщения, чтобы убрать кнопки после ввода номера."""
     db.set_onboarding_step(uid, "awaiting_phone")
-    await bot.send_message(
+    resp = await bot.send_message(
         max_user_id,
         "Последний штрих 👇\n\n"
         "Поделись номером — чтобы я мог связаться с тобой напрямую, "
         "если понадоблюсь. Это необязательно, можешь пропустить.",
         buttons=_phone_buttons(),
     )
+    # Сохраняем message_id, чтобы позже снять кнопки
+    msg = resp.get("message", {}) or {}
+    raw_id = (msg.get("message_id") or msg.get("mid") or msg.get("id")
+              or resp.get("message_id") or 0)
+    try:
+        mid = int(str(raw_id))
+        if mid:
+            _phone_msg_ids[max_user_id] = str(mid)
+    except (TypeError, ValueError):
+        pass
 
 
 async def start_onboarding(bot: MaxClient, max_user_id: int, uid: int):
@@ -664,11 +677,13 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     # ── Телефон — пропустить ─────────────────────────────────
     elif payload == "phone_skip":
         db.set_onboarding_step(uid, "done")
+        _phone_msg_ids.pop(max_user_id, None)  # уже не нужен — убираем
         # Используем new_message — заменяем кнопки телефона ответом на месте
-        # (тот же надёжный паттерн что у кнопок задач)
+        # attachments: [] явно убирает кнопки из исходного сообщения
         await bot.answer_callback(callback_id, new_message={
             "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи",
             "format": "markdown",
+            "attachments": [],
         })
         await bot.send_message(
             max_user_id, "·",
@@ -833,8 +848,20 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
     """Сохраняет телефон, переводит онбординг в done, показывает финальное сообщение."""
     db.save_user_phone(uid, phone)
     db.set_onboarding_step(uid, "done")
+    # Убираем кнопки с сообщения «Последний штрих» — редактируем его без attachments
+    mid = _phone_msg_ids.pop(max_user_id, None)
+    if mid:
+        try:
+            await bot.edit_message(
+                mid,
+                "Последний штрих 👇\n\n"
+                "Поделись номером — чтобы я мог связаться с тобой напрямую, "
+                "если понадоблюсь. ✅ _Номер получен!_",
+            )
+        except Exception:
+            logger.exception(f"_save_phone_and_finish: не удалось снять кнопки msg={mid}")
     await bot.send_message(max_user_id, "✅ Номер сохранён, спасибо! 🙌")
-    await _send_completion_message(bot, max_user_id, uid)   # "Жди завтра утром..."
+    await _send_completion_message(bot, max_user_id, uid)   # "Жди завтра утром..." + меню
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,

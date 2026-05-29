@@ -122,8 +122,10 @@ class MaxClient:
         buttons: list[list[dict]] | None = None,
         fmt: str = "markdown",
     ) -> dict:
-        """Редактирует ранее отправленное сообщение."""
-        body: dict[str, Any] = {"text": text, "format": fmt}
+        """Редактирует ранее отправленное сообщение.
+        Если buttons не переданы — явно передаём пустой список вложений,
+        чтобы MAX API убрал кнопки из сообщения."""
+        body: dict[str, Any] = {"text": text, "format": fmt, "attachments": []}
         if buttons:
             body["attachments"] = [{
                 "type": "inline_keyboard",
