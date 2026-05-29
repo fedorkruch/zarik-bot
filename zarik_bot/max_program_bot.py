@@ -511,12 +511,13 @@ async def _send_program_formed(bot: MaxClient, max_user_id: int):
 
 
 async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
-    """Финальное сообщение после шага с телефоном (номер введён или пропущен).
-    Два отдельных вызова с паузой — MAX API дропает open_app кнопку
-    если она склеена с текстом в одном сообщении."""
-    await bot.send_message(max_user_id, "Жди завтра утром — пришлю первые задачи 🦥")
-    await asyncio.sleep(0.4)
-    await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
+    """Финальное сообщение с меню — один вызов, текст + меню сразу."""
+    resp = await bot.send_message(
+        max_user_id,
+        "Жди завтра утром — пришлю первые задачи 🦥",
+        buttons=_main_menu_buttons(max_user_id, uid),
+    )
+    logger.info(f"_send_completion_message → {resp}")
 
 
 async def _send_phone_request(bot: MaxClient, max_user_id: int, uid: int):
@@ -684,18 +685,18 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     elif payload == "phone_skip":
         db.set_onboarding_step(uid, "done")
         _phone_msg_ids.pop(max_user_id, None)  # уже не нужен — убираем
-        # Используем new_message — заменяем кнопки телефона ответом на месте
-        # attachments: [] явно убирает кнопки из исходного сообщения
-        await bot.answer_callback(callback_id, new_message={
-            "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи",
+        # ОДНИМ вызовом: заменяем сообщение «Последний штрих» → «Окей...» + меню.
+        # Тот же паттерн что работает у task-кнопок: меню идёт прямо в new_message,
+        # никакого отдельного send_message не нужно — это надёжнее.
+        result = await bot.answer_callback(callback_id, new_message={
+            "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи 🦥",
             "format": "markdown",
-            "attachments": [],
+            "attachments": [{
+                "type": "inline_keyboard",
+                "payload": {"buttons": _main_menu_buttons(max_user_id, uid)},
+            }],
         })
-        await asyncio.sleep(0.4)
-        await bot.send_message(
-            max_user_id, "·",
-            buttons=_main_menu_buttons(max_user_id, uid),
-        )
+        logger.info(f"phone_skip answer_callback → {result}")
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -852,7 +853,9 @@ def _extract_phone_from_vcf(vcf_info: str) -> str:
 
 
 async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, phone: str):
-    """Сохраняет телефон, переводит онбординг в done, показывает финальное сообщение."""
+    """Сохраняет телефон, переводит онбординг в done, показывает финальное сообщение.
+    Объединяем «Номер сохранён» + «Жди завтра» + меню в ОДИН send_message —
+    иначе при накопленной нагрузке онбординга второй/третий send может быть дропнут."""
     db.save_user_phone(uid, phone)
     db.set_onboarding_step(uid, "done")
     # Убираем кнопки с сообщения «Последний штрих» — редактируем его без attachments
@@ -867,10 +870,14 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
             )
         except Exception:
             logger.exception(f"_save_phone_and_finish: не удалось снять кнопки msg={mid}")
-    await asyncio.sleep(0.3)
-    await bot.send_message(max_user_id, "✅ Номер сохранён, спасибо! 🙌")
-    await asyncio.sleep(0.3)
-    await _send_completion_message(bot, max_user_id, uid)   # "Жди завтра утром..." + меню
+    await asyncio.sleep(0.5)
+    # Один вызов = надёжно: текст + меню сразу
+    resp = await bot.send_message(
+        max_user_id,
+        "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи 🦥",
+        buttons=_main_menu_buttons(max_user_id, uid),
+    )
+    logger.info(f"_save_phone_and_finish menu send → {resp}")
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
