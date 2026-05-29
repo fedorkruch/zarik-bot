@@ -52,7 +52,7 @@ YOOKASSA_SHOP_ID    = os.environ.get("YOOKASSA_SHOP_ID", "")
 YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
 
 # ── Тест-пользователи (получают тестовые цены) ───────────────
-_test_ids_raw = os.environ.get("TEST_USER_IDS", "")
+_test_ids_raw = os.environ.get("MAX_TEST_USER_IDS", "")
 TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
 
 # ── Цены ─────────────────────────────────────────────────────
