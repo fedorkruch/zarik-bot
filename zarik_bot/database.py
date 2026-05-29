@@ -184,10 +184,13 @@ def init_db():
             "ALTER TABLE leads ADD COLUMN invoice_sent_at TEXT",
             "ALTER TABLE leads ADD COLUMN purchased_at TEXT",
             "ALTER TABLE users ADD COLUMN is_virtual INTEGER DEFAULT 0",
-            # max_leads — stake-флоу
+            # max_leads — stake-флоу и данные покупателя
             "ALTER TABLE max_leads ADD COLUMN start_clicked_at TEXT",
             "ALTER TABLE max_leads ADD COLUMN stake_asked_at TEXT",
             "ALTER TABLE max_leads ADD COLUMN stake_choice TEXT",
+            "ALTER TABLE max_leads ADD COLUMN full_name TEXT",
+            "ALTER TABLE max_leads ADD COLUMN email TEXT",
+            "ALTER TABLE max_leads ADD COLUMN phone TEXT",
         ]
         for migration in migrations:
             try:
@@ -1282,6 +1285,15 @@ def mark_max_lead_stake_choice(max_user_id: int, choice: str):
         conn.execute(
             "UPDATE max_leads SET stake_choice=? WHERE max_user_id=?",
             (choice, max_user_id)
+        )
+
+
+def save_max_lead_buyer_info(max_user_id: int, full_name: str, email: str, phone: str):
+    """Сохраняет ФИО, email и телефон покупателя — для чека ЮКасса (54-ФЗ)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET full_name=?, email=?, phone=? WHERE max_user_id=?",
+            (full_name, email, phone, max_user_id)
         )
 
 

@@ -316,10 +316,35 @@ def _build_receipt_items(course_kopecks: int, stake_kopecks: int = 0) -> list:
     return items
 
 
+def _valid_email(s: str) -> bool:
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", s.strip()))
+
+
+def _valid_phone(s: str) -> bool:
+    digits = re.sub(r"[\s\-\(\)]", "", s.strip())
+    if digits.startswith("8"):
+        digits = "+7" + digits[1:]
+    if not digits.startswith("+"):
+        digits = "+" + digits
+    return bool(re.match(r"^\+7\d{10}$", digits))
+
+
+def _normalize_phone(s: str) -> str:
+    digits = re.sub(r"[\s\-\(\)]", "", s.strip())
+    if digits.startswith("8"):
+        digits = "+7" + digits[1:]
+    if not digits.startswith("+"):
+        digits = "+" + digits
+    return digits
+
+
 async def create_yookassa_payment(
     max_user_id: int,
     course_kopecks: int,
     stake_kopecks: int = 0,
+    full_name: str = "",
+    email: str = "",
+    phone: str = "",
 ) -> dict:
     """
     Создаёт платёж в ЮКасса через REST API v3.
@@ -337,6 +362,19 @@ async def create_yookassa_payment(
         else "Программа «Зарик 77 дней» — полный доступ на 77 дней"
     )
 
+    # Данные покупателя для чека (54-ФЗ): обязателен email или телефон
+    customer: dict = {}
+    if full_name:
+        customer["full_name"] = full_name
+    if email:
+        customer["email"] = email
+    if phone:
+        customer["phone"] = phone
+
+    receipt_body: dict = {"items": _build_receipt_items(course_kopecks, stake_kopecks)}
+    if customer:
+        receipt_body["customer"] = customer
+
     body = {
         "amount": {"value": total_rub, "currency": "RUB"},
         "confirmation": {
@@ -350,7 +388,7 @@ async def create_yookassa_payment(
             "stake_kopecks": str(stake_kopecks),
             "course_kopecks": str(course_kopecks),
         },
-        "receipt": {"items": _build_receipt_items(course_kopecks, stake_kopecks)},
+        "receipt": receipt_body,
     }
 
     credentials = base64.b64encode(
@@ -379,12 +417,24 @@ async def create_yookassa_payment(
         return {}
 
 
-async def send_course_payment_link(max_user_id: int, stake_kopecks: int = 0):
+async def send_course_payment_link(
+    max_user_id: int,
+    stake_kopecks: int = 0,
+    full_name: str = "",
+    email: str = "",
+    phone: str = "",
+):
     """Создаёт платёж в ЮКасса и отправляет пользователю ссылку для оплаты."""
     course_kopecks = _price_for(max_user_id)
     bot = get_client()
 
-    payment = await create_yookassa_payment(max_user_id, course_kopecks, stake_kopecks)
+    # Сохраняем данные покупателя в БД
+    db.save_max_lead_buyer_info(max_user_id, full_name, email, phone)
+
+    payment = await create_yookassa_payment(
+        max_user_id, course_kopecks, stake_kopecks,
+        full_name=full_name, email=email, phone=phone,
+    )
     if not payment:
         await bot.send_message(
             max_user_id,
@@ -654,13 +704,14 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             f"💬 Введи сумму ставки в рублях (минимум {min_r} ₽):"
         )
 
-    # ── Нет, без ставки → сразу создаём платёж ───────────────
+    # ── Нет, без ставки → собираем данные для чека ───────────
     elif payload == "stake_no":
         await bot.answer_callback(callback_id)
         if db.is_max_lead_purchased(max_user_id):
             return
         db.mark_max_lead_stake_choice(max_user_id, "no")
-        await send_course_payment_link(max_user_id, stake_kopecks=0)
+        _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": 0}
+        await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str):
@@ -686,8 +737,10 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
 
     # Обычные пользователи
     if max_user_id != MAX_ADMIN_USER_ID:
+        state = _user_state.get(max_user_id, {})
+
         # 1. Ожидаем ввод суммы ставки
-        if _user_state.get(max_user_id, {}).get("awaiting_stake"):
+        if state.get("awaiting_stake"):
             min_stake = _min_stake_for(max_user_id)
             clean = text.strip().replace(",", ".").replace(" ", "")
             try:
@@ -707,13 +760,75 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                     f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
                 )
                 return
+            if db.is_max_lead_purchased(max_user_id):
+                _user_state.pop(max_user_id, None)
+                return
+            # Переходим к сбору данных для чека
+            _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": amount_kopecks}
+            await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
+            return
+
+        # 2. Ожидаем ФИО
+        if state.get("awaiting_name"):
+            name = text.strip()
+            if len(name) < 2:
+                await bot.send_message(max_user_id, "⚠️ Введи корректное имя:")
+                return
+            _user_state[max_user_id] = {
+                "awaiting_email": True,
+                "stake_kopecks": state.get("stake_kopecks", 0),
+                "full_name": name,
+            }
+            await bot.send_message(max_user_id, "📧 Введи email для чека:")
+            return
+
+        # 3. Ожидаем email
+        if state.get("awaiting_email"):
+            email = text.strip().lower()
+            if not _valid_email(email):
+                await bot.send_message(
+                    max_user_id,
+                    "⚠️ Некорректный email. Введи правильный адрес (например: ivan@mail.ru):"
+                )
+                return
+            _user_state[max_user_id] = {
+                "awaiting_phone": True,
+                "stake_kopecks": state.get("stake_kopecks", 0),
+                "full_name": state.get("full_name", ""),
+                "email": email,
+            }
+            await bot.send_message(
+                max_user_id,
+                "📱 Введи номер телефона для чека (например: +79001234567 или 89001234567):"
+            )
+            return
+
+        # 4. Ожидаем телефон → создаём платёж
+        if state.get("awaiting_phone"):
+            phone_raw = text.strip()
+            if not _valid_phone(phone_raw):
+                await bot.send_message(
+                    max_user_id,
+                    "⚠️ Некорректный номер. Введи российский номер (например: +79001234567 или 89001234567):"
+                )
+                return
+            phone = _normalize_phone(phone_raw)
+            full_name    = state.get("full_name", "")
+            email        = state.get("email", "")
+            stake_kopecks = state.get("stake_kopecks", 0)
             _user_state.pop(max_user_id, None)
             if db.is_max_lead_purchased(max_user_id):
                 return
-            await send_course_payment_link(max_user_id, stake_kopecks=amount_kopecks)
+            await send_course_payment_link(
+                max_user_id,
+                stake_kopecks=stake_kopecks,
+                full_name=full_name,
+                email=email,
+                phone=phone,
+            )
             return
 
-        # 2. Запрос скидки — специальный ответ
+        # Запрос скидки — специальный ответ
         if _is_discount_request(text):
             await bot.send_message(
                 max_user_id,
