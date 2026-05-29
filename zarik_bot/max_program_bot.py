@@ -510,14 +510,28 @@ async def _send_program_formed(bot: MaxClient, max_user_id: int):
     )
 
 
+async def _send_menu_delayed(bot: MaxClient, max_user_id: int, uid: int,
+                             delay: float = 1.5):
+    """Отправляет плашку меню через задержку в фоновой задаче.
+    Запускается через asyncio.create_task — полностью изолировано от
+    текущего webhook-запроса, поэтому MAX rate-limit не мешает."""
+    await asyncio.sleep(delay)
+    try:
+        resp = await bot.send_message(
+            max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid)
+        )
+        logger.info(f"_send_menu_delayed → {resp}")
+    except Exception:
+        logger.exception(f"_send_menu_delayed failed uid={uid} max={max_user_id}")
+
+
 async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
-    """Финальное сообщение с меню — один вызов, текст + меню сразу."""
-    resp = await bot.send_message(
+    """Финальный текст + меню через фоновую задачу."""
+    await bot.send_message(
         max_user_id,
         "Жди завтра утром — пришлю первые задачи 🦥",
-        buttons=_main_menu_buttons(max_user_id, uid),
     )
-    logger.info(f"_send_completion_message → {resp}")
+    asyncio.create_task(_send_menu_delayed(bot, max_user_id, uid, delay=1.5))
 
 
 async def _send_phone_request(bot: MaxClient, max_user_id: int, uid: int):
@@ -674,29 +688,30 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Телефон — ввести номер ────────────────────────────────
     elif payload == "phone_enter":
-        db.set_onboarding_step(uid, "awaiting_phone")   # гарантируем правильный шаг
-        await bot.answer_callback(callback_id)
-        await bot.send_message(
-            max_user_id,
-            "📱 Введи номер телефона:\n(например: +79001234567 или 89001234567)",
-        )
+        db.set_onboarding_step(uid, "awaiting_phone")
+        # Обновляем «Последний штрих» прямо на месте — пользователь сразу видит реакцию.
+        # attachments:[] явно убирает кнопки с исходного сообщения.
+        result = await bot.answer_callback(callback_id, new_message={
+            "text": "📱 Введи номер телефона:\n(например: +79001234567 или 89001234567)",
+            "format": "markdown",
+            "attachments": [],
+        })
+        logger.info(f"phone_enter answer_callback → {result}")
 
     # ── Телефон — пропустить ─────────────────────────────────
     elif payload == "phone_skip":
         db.set_onboarding_step(uid, "done")
-        _phone_msg_ids.pop(max_user_id, None)  # уже не нужен — убираем
-        # ОДНИМ вызовом: заменяем сообщение «Последний штрих» → «Окей...» + меню.
-        # Тот же паттерн что работает у task-кнопок: меню идёт прямо в new_message,
-        # никакого отдельного send_message не нужно — это надёжнее.
+        _phone_msg_ids.pop(max_user_id, None)
+        # Шаг 1: обновляем сообщение «Последний штрих» → «Окей...» без кнопок.
+        # open_app НЕ поддерживается в /answers → не кладём меню сюда.
         result = await bot.answer_callback(callback_id, new_message={
             "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи 🦥",
             "format": "markdown",
-            "attachments": [{
-                "type": "inline_keyboard",
-                "payload": {"buttons": _main_menu_buttons(max_user_id, uid)},
-            }],
+            "attachments": [],
         })
         logger.info(f"phone_skip answer_callback → {result}")
+        # Шаг 2: меню — отдельным сообщением через 1.5 с (вне текущего webhook)
+        asyncio.create_task(_send_menu_delayed(bot, max_user_id, uid, delay=1.5))
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -870,14 +885,14 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
             )
         except Exception:
             logger.exception(f"_save_phone_and_finish: не удалось снять кнопки msg={mid}")
-    await asyncio.sleep(0.5)
-    # Один вызов = надёжно: текст + меню сразу
-    resp = await bot.send_message(
+    # Финальное сообщение (без меню — меню шлём фоновой задачей)
+    await bot.send_message(
         max_user_id,
         "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи 🦥",
-        buttons=_main_menu_buttons(max_user_id, uid),
     )
-    logger.info(f"_save_phone_and_finish menu send → {resp}")
+    # Меню — через 1.5 с вне текущего webhook-запроса (иначе MAX дропает)
+    asyncio.create_task(_send_menu_delayed(bot, max_user_id, uid, delay=1.5))
+    logger.info(f"_save_phone_and_finish: menu scheduled via create_task")
 
 
 async def on_message(max_user_id: int, text: str, username: str, first_name: str,
