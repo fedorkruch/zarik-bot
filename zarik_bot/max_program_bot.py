@@ -536,9 +536,12 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     if step == "timezone" and payload.startswith("tz:"):
         tz = payload[3:]
         db.set_user_timezone(uid, tz)
-        await bot.answer_callback(callback_id)
         tz_label = next((l for l, t in TIMEZONES if t == tz), tz)
-        await bot.send_message(max_user_id, f"✅ Часовой пояс: {tz_label}")
+        # Схлопываем большой список кнопок → чат прокручивается к следующему вопросу
+        await bot.answer_callback(callback_id, new_message={
+            "text": f"✅ Часовой пояс: {tz_label}",
+            "format": "markdown",
+        })
         await bot.send_message(
             max_user_id,
             "🦥 Теперь давай подберём тренировку под тебя.\n\n"
@@ -640,8 +643,8 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Телефон — ввести номер ────────────────────────────────
     elif payload == "phone_enter":
+        db.set_onboarding_step(uid, "awaiting_phone")   # гарантируем правильный шаг
         await bot.answer_callback(callback_id)
-        # Шаг уже "awaiting_phone" — просто просим ввести текстом
         await bot.send_message(
             max_user_id,
             "📱 Введи номер телефона:\n(например: +79001234567 или 89001234567)",
@@ -695,11 +698,13 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     step = db.get_onboarding_step(uid)
 
     # Онбординг
-    # Шаг "awaiting_phone" наступает ПОСЛЕ complete_onboarding(), поэтому
-    # проверяем его отдельно, иначе phone_skip/phone_enter не попадут в обработчик
+    # phone_enter / phone_skip нужно ловить отдельно: шаг "awaiting_phone"
+    # выставляется ПОСЛЕ complete_onboarding (onboarding_complete=1),
+    # поэтому обычная проверка `not onboarding_complete` не срабатывает.
     _u = db.get_user(uid)
     if (step not in ("done", "welcome") and not (_u and _u["onboarding_complete"])) \
-            or step == "awaiting_phone":
+            or step == "awaiting_phone" \
+            or payload in ("phone_enter", "phone_skip"):
         await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
         return
 
@@ -784,6 +789,10 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     elif payload == "onboard:start":
         await bot.answer_callback(callback_id)
         await start_onboarding(bot, max_user_id, uid)
+
+    elif payload == "noop":
+        # Информационная кнопка (например «День завершён!») — просто ack
+        await bot.answer_callback(callback_id)
 
     elif (payload.startswith("tz:") or payload.startswith("pushup:") or
           payload.startswith("squat:") or payload.startswith("abs:") or
