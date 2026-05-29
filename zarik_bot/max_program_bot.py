@@ -1090,6 +1090,17 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                                    buttons=_main_menu_buttons(max_user_id, uid))
         return
 
+    # /reset_user — тест-пользователи сбрасывают свой прогресс без прав администратора
+    if cmd == "/reset_user" and max_user_id in MAX_TEST_USER_IDS:
+        db.reset_user_keep_payment(uid)
+        db.save_payment(user_id=uid, charge_id=f"max_test_{max_user_id}",
+                        participation_fee=0, stake_amount=0)
+        db.set_onboarding_step(uid, "welcome")
+        await bot.send_message(max_user_id, "✅ Прогресс сброшен. Начнём заново 👇")
+        await _send_welcome_to_max_user(bot, max_user_id, uid)
+        logger.info(f"reset_user (TEST_USER): max_user_id={max_user_id}")
+        return
+
 
 def _sync_lead_payment(max_user_id: int, internal_uid: int):
     """
@@ -1120,10 +1131,10 @@ def _sync_lead_payment(max_user_id: int, internal_uid: int):
 
 async def _handle_start(bot: MaxClient, max_user_id: int, uid: int,
                          username: str, first_name: str):
-    # Тест-пользователи: авто-грант
-    if max_user_id in MAX_TEST_USER_IDS:
+    # Тест-пользователи: авто-грант — ТОЛЬКО если оплата ещё не подтверждена
+    # (не сбрасывает прогресс при повторных /start)
+    if max_user_id in MAX_TEST_USER_IDS and not db.is_payment_confirmed(uid):
         db.register_user(uid, username, first_name)
-        db.reset_user_keep_payment(uid)
         db.save_payment(user_id=uid, charge_id=f"max_test_{max_user_id}",
                         participation_fee=0, stake_amount=0)
         db.set_onboarding_step(uid, "welcome")

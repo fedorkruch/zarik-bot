@@ -733,9 +733,16 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
     if cmd == "/reset_user" and max_user_id in TEST_USER_IDS:
         db.reset_max_lead_keep_purchased(max_user_id)
         _user_state.pop(max_user_id, None)
+        # Сбрасываем прогресс и в программном боте (users таблица)
+        internal_uid = db.get_max_internal_id(max_user_id)
+        if internal_uid is not None:
+            db.reset_user_keep_payment(internal_uid)
+            db.save_payment(user_id=internal_uid, charge_id=f"max_test_{max_user_id}",
+                            participation_fee=0, stake_amount=0)
+            db.set_onboarding_step(internal_uid, "welcome")
         await bot.send_message(
             max_user_id,
-            "✅ Твой аккаунт сброшен. Отправь /start — начнём с начала."
+            "✅ Аккаунт сброшен полностью (лид-бот + программный бот).\n\nОтправь /start — начнём с начала."
         )
         logger.info(f"DEV сброс (TEST_USER): max_user_id={max_user_id}")
         return
@@ -859,6 +866,13 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             # Мягкий сброс: воронка обнуляется, purchased_at сохраняется
             db.reset_max_lead_keep_purchased(target_id)
             _user_state.pop(target_id, None)
+            # Также сбрасываем прогресс в программном боте
+            target_internal_uid = db.get_max_internal_id(target_id)
+            if target_internal_uid is not None:
+                db.reset_user_keep_payment(target_internal_uid)
+                db.save_payment(user_id=target_internal_uid, charge_id=f"max_test_{target_id}",
+                                participation_fee=0, stake_amount=0)
+                db.set_onboarding_step(target_internal_uid, "welcome")
             await bot.send_message(
                 target_id,
                 "✅ Твой аккаунт сброшен. Отправь /start — начнём с начала."
@@ -866,7 +880,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             if target_id != max_user_id:
                 await bot.send_message(
                     max_user_id,
-                    f"🛠 MAX-лид {target_id} сброшен (статус purchased сохранён)."
+                    f"🛠 MAX-лид {target_id} сброшен (лид + программный бот, purchased сохранён)."
                 )
         else:
             # Полный сброс
