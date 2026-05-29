@@ -932,28 +932,70 @@ async function generateAchievementPng(ach) {
   });
 }
 
-// Показывает PNG в оверлее — пользователь зажимает для сохранения (MAX / Android)
+// Показывает PNG в оверлее с кнопками шаринга/сохранения (MAX / Android)
 function showPngOverlay(blob) {
   const url = URL.createObjectURL(blob);
   const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  ov.style.cssText = [
+    'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999',
+    'display:flex;flex-direction:column;align-items:center;justify-content:center',
+    'padding:20px;box-sizing:border-box;gap:12px',
+  ].join(';');
 
   const img = document.createElement('img');
   img.src = url;
-  img.style.cssText = 'max-width:100%;max-height:72vh;border-radius:18px;display:block';
+  img.style.cssText = 'max-width:100%;max-height:58vh;border-radius:18px;display:block';
+
+  const destroy = () => {
+    if (document.body.contains(ov)) document.body.removeChild(ov);
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Кнопка «Поделиться» — свежий user gesture → share API работает ──
+  const shareBtn = document.createElement('button');
+  shareBtn.textContent = '📤 Поделиться';
+  shareBtn.style.cssText = [
+    'width:100%;max-width:280px;padding:14px',
+    'border-radius:24px;border:none',
+    'background:#e5a012;color:#fff;font-size:17px;font-weight:600;cursor:pointer',
+  ].join(';');
+  shareBtn.onclick = async () => {
+    // Пробуем file-share (работает на Android Chrome 86+ и iOS 15+)
+    try {
+      const file = new File([blob], 'zarik-achievement.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: '🦥 77 шагов с Зариком' });
+        destroy(); return;
+      }
+    } catch(e) { if (e.name === 'AbortError') return; }
+    // Fallback: скачать файл
+    try {
+      const a = document.createElement('a');
+      a.href = url; a.download = 'zarik-achievement.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      return;
+    } catch(_) {}
+    // Последний шанс: подсказка скриншота
+    hint.textContent = '📸 Сделай скриншот экрана';
+    hint.style.color = 'rgba(255,255,255,0.8)';
+  };
 
   const hint = document.createElement('div');
-  hint.textContent = '👆 Зажми картинку → Сохранить фото';
-  hint.style.cssText = 'color:rgba(255,255,255,0.65);font-size:15px;margin-top:14px;text-align:center';
+  hint.textContent = '👆 Или зажми картинку → Сохранить';
+  hint.style.cssText = 'color:rgba(255,255,255,0.35);font-size:13px;text-align:center';
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '✕  Закрыть';
-  closeBtn.style.cssText = 'margin-top:20px;padding:11px 36px;border-radius:24px;border:none;background:rgba(255,255,255,0.14);color:#fff;font-size:16px;cursor:pointer';
-  const destroy = () => { document.body.removeChild(ov); URL.revokeObjectURL(url); };
+  closeBtn.style.cssText = [
+    'width:100%;max-width:280px;padding:11px',
+    'border-radius:24px;border:none',
+    'background:rgba(255,255,255,0.12);color:#fff;font-size:16px;cursor:pointer',
+  ].join(';');
   closeBtn.onclick = destroy;
   ov.onclick = e => { if (e.target === ov) destroy(); };
 
   ov.appendChild(img);
+  ov.appendChild(shareBtn);
   ov.appendChild(hint);
   ov.appendChild(closeBtn);
   document.body.appendChild(ov);
