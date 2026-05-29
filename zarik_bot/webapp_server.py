@@ -37,7 +37,10 @@ HAPPY_IMG           = Path(__file__).parent / "Happy.png"
 NORM_IMG            = Path(__file__).parent / "Norm.png"
 SAD_IMG             = Path(__file__).parent / "Sad.png"
 
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
+MAX_WEBHOOK_SECRET  = os.environ.get("MAX_WEBHOOK_SECRET", "")
+YOOKASSA_SHOP_ID    = os.environ.get("YOOKASSA_SHOP_ID", "")
+YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY", "")
 
 # ── Rate limiting (sliding window, in-memory) ─────────────────
 
@@ -739,8 +742,37 @@ async def handle_set_mode(request: web.Request) -> web.Response:
 
 # ── MAX Мессенджер — вебхук-обработчики ──────────────────────
 
+async def _verify_yookassa_payment(payment_id: str) -> bool:
+    """Верифицирует платёж обратным запросом к ЮКасса API.
+    Защищает от поддельных webhook-уведомлений."""
+    import base64 as _b64
+    if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
+        logger.warning("YooKassa credentials не настроены — верификация пропущена")
+        return True   # graceful degradation при неполной конфигурации
+    creds = _b64.b64encode(
+        f"{YOOKASSA_SHOP_ID}:{YOOKASSA_SECRET_KEY}".encode()
+    ).decode()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.yookassa.ru/v3/payments/{payment_id}",
+                headers={"Authorization": f"Basic {creds}"},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                data = await resp.json(content_type=None)
+                return data.get("status") == "succeeded"
+    except Exception:
+        logger.exception(f"YooKassa payment verification error: payment_id={payment_id}")
+        return False
+
+
 async def handle_max_lead_webhook(request: web.Request) -> web.Response:
     """Принимает обновления от MAX для лид-бота."""
+    if MAX_WEBHOOK_SECRET:
+        token = request.rel_url.query.get("secret", "")
+        if not hmac.compare_digest(token, MAX_WEBHOOK_SECRET):
+            logger.warning(f"MAX lead webhook: неверный secret, отклонено (ip={request.remote})")
+            return web.Response(status=403)
     try:
         data = await request.json()
     except Exception:
@@ -755,6 +787,11 @@ async def handle_max_lead_webhook(request: web.Request) -> web.Response:
 
 async def handle_max_program_webhook(request: web.Request) -> web.Response:
     """Принимает обновления от MAX для основного бота."""
+    if MAX_WEBHOOK_SECRET:
+        token = request.rel_url.query.get("secret", "")
+        if not hmac.compare_digest(token, MAX_WEBHOOK_SECRET):
+            logger.warning(f"MAX program webhook: неверный secret, отклонено (ip={request.remote})")
+            return web.Response(status=403)
     try:
         data = await request.json()
     except Exception:
@@ -794,6 +831,11 @@ async def handle_yookassa_webhook(request: web.Request) -> web.Response:
 
         if not max_user_id_str or not max_user_id_str.isdigit():
             logger.warning(f"YooKassa webhook: max_user_id не найден в metadata: {metadata}")
+            return web.Response(status=200)
+
+        # Верифицируем платёж через ЮКасса API — защита от поддельных уведомлений
+        if not await _verify_yookassa_payment(payment_id):
+            logger.warning(f"YooKassa webhook: payment {payment_id!r} не прошёл верификацию — отклонено")
             return web.Response(status=200)
 
         max_user_id = int(max_user_id_str)

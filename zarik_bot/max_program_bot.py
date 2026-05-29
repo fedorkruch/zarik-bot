@@ -38,6 +38,7 @@ MAX_LEAD_BOT_URL    = os.environ.get("MAX_LEAD_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_PROGRAM_WEBHOOK_PATH", "/webhook/max-program")
+MAX_WEBHOOK_SECRET  = os.environ.get("MAX_WEBHOOK_SECRET", "")
 
 HAPPY_IMG      = Path(__file__).parent / "Happy.png"
 NORM_IMG       = Path(__file__).parent / "Norm.png"
@@ -510,6 +511,8 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
     # ── Шаг 1: Часовой пояс ──────────────────────────────────
     if step == "timezone" and payload.startswith("tz:"):
         tz = payload[3:]
+        if tz not in {t for _, t in TIMEZONES}:
+            return
         db.set_user_timezone(uid, tz)
         tz_label = next((l for l, t in TIMEZONES if t == tz), tz)
         # Схлопываем большой список кнопок → чат прокручивается к следующему вопросу
@@ -526,7 +529,12 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Шаг 2: Отжимания ─────────────────────────────────────
     elif step == "pushup" and payload.startswith("pushup:"):
-        val = int(payload.split(":")[1])
+        try:
+            val = int(payload.split(":")[1])
+        except (ValueError, IndexError):
+            return
+        if not (1 <= val <= 999):
+            return
         db.save_pushup_start(uid, val)
         await bot.answer_callback(callback_id)
         await bot.send_message(
@@ -537,7 +545,12 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Шаг 2: Приседания ────────────────────────────────────
     elif step == "squat" and payload.startswith("squat:"):
-        val = int(payload.split(":")[1])
+        try:
+            val = int(payload.split(":")[1])
+        except (ValueError, IndexError):
+            return
+        if not (1 <= val <= 999):
+            return
         db.save_squat_start(uid, val)
         await bot.answer_callback(callback_id)
         await bot.send_message(
@@ -548,7 +561,12 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Шаг 3: Пресс → переход к фото ───────────────────────
     elif step in ("abs", "photo") and payload.startswith("abs:"):
-        val = int(payload.split(":")[1])
+        try:
+            val = int(payload.split(":")[1])
+        except (ValueError, IndexError):
+            return
+        if not (1 <= val <= 999):
+            return
         db.save_abs_start(uid, val)
         await bot.answer_callback(callback_id)
         await bot.send_message(
@@ -707,9 +725,16 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     # Задача — отвечаем через answer_callback с new_message, чтобы
     # MAX обновил трекер прямо в чате (inline-edit без message_id).
     if payload.startswith("task:"):
-        _, day_s, idx_s = payload.split(":")
-        day = int(day_s)
-        idx = int(idx_s)
+        parts_p = payload.split(":")
+        if len(parts_p) != 3:
+            return
+        try:
+            day = int(parts_p[1])
+            idx = int(parts_p[2])
+        except ValueError:
+            return
+        if not (1 <= day <= TOTAL_DAYS and 0 <= idx < TASKS_PER_DAY):
+            return
         db.toggle_task(uid, day, idx)
         if db.has_dropout_warning(uid):
             db.clear_dropout_warning(uid)
@@ -1572,6 +1597,8 @@ async def setup(webapp_base_url: str):
     me  = await bot.get_me()
     logger.info(f"MAX программный бот: {me.get('name', '?')} (@{me.get('username', '?')})")
     webhook_url = f"{webapp_base_url.rstrip('/')}{WEBHOOK_PATH}"
+    if MAX_WEBHOOK_SECRET:
+        webhook_url += f"?secret={MAX_WEBHOOK_SECRET}"
     await bot.setup_webhook(webhook_url)
-    logger.info(f"MAX программный бот вебхук: {webhook_url}")
+    logger.info(f"MAX программный бот вебхук: {WEBHOOK_PATH}")
     setup_scheduler()

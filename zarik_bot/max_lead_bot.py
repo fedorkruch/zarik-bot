@@ -45,6 +45,7 @@ MAX_PROGRAM_BOT_URL = os.environ.get("MAX_PROGRAM_BOT_URL", "")
 WEBAPP_URL          = os.environ.get("WEBAPP_URL", "")
 PAYMENT_URL         = os.environ.get("PAYMENT_URL", "")
 WEBHOOK_PATH        = os.environ.get("MAX_LEAD_WEBHOOK_PATH", "/webhook/max-lead")
+MAX_WEBHOOK_SECRET  = os.environ.get("MAX_WEBHOOK_SECRET", "")
 
 # ── ЮКасса ────────────────────────────────────────────────────
 YOOKASSA_SHOP_ID    = os.environ.get("YOOKASSA_SHOP_ID", "")
@@ -59,6 +60,7 @@ COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
 COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
 MIN_STAKE_PROD    = 10_000    # 100 ₽
 MIN_STAKE_TEST    = 1_000     # 10 ₽
+MAX_STAKE_KOPECKS = 5_000_000 # 50 000 ₽ — верхний предел ставки
 
 def _price_for(max_user_id: int) -> int:
     return COURSE_PRICE_TEST if max_user_id in TEST_USER_IDS else COURSE_PRICE_PROD
@@ -663,7 +665,11 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     elif payload.startswith("tracker_fail_"):
         await bot.answer_callback(callback_id)
         db.mark_max_lead_tracker_reply(max_user_id, yes=False)
-        attempt = int(payload.split("_")[-1])
+        try:
+            attempt = int(payload.split("_")[-1])
+        except ValueError:
+            attempt = 1
+        attempt = max(1, min(attempt, 2))
 
         # Инструкция
         await bot.send_message(
@@ -774,6 +780,12 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                 f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
             )
             return
+        if amount_kopecks > MAX_STAKE_KOPECKS:
+            await bot.send_message(
+                max_user_id,
+                f"⚠️ Максимальная ставка — {MAX_STAKE_KOPECKS // 100:,} ₽. Введи другую сумму:".replace(",", " ")
+            )
+            return
         if db.is_max_lead_purchased(max_user_id):
             _user_state.pop(max_user_id, None)
             return
@@ -786,6 +798,9 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         name = re.sub(r"\s+", " ", text.strip())
         if len(name) < 2:
             await bot.send_message(max_user_id, "⚠️ Введи имя (минимум 2 символа):")
+            return
+        if len(name) > 200:
+            await bot.send_message(max_user_id, "⚠️ Слишком длинное имя. Введи не более 200 символов:")
             return
         _user_state[max_user_id] = {
             "awaiting_email": True,
@@ -1051,8 +1066,10 @@ async def setup(webapp_base_url: str):
     me = await bot.get_me()
     logger.info(f"MAX лид-бот: {me.get('name', '?')} (@{me.get('username', '?')})")
     webhook_url = f"{webapp_base_url.rstrip('/')}{WEBHOOK_PATH}"
+    if MAX_WEBHOOK_SECRET:
+        webhook_url += f"?secret={MAX_WEBHOOK_SECRET}"
     await bot.setup_webhook(webhook_url)
-    logger.info(f"MAX лид-бот вебхук: {webhook_url}")
+    logger.info(f"MAX лид-бот вебхук: {WEBHOOK_PATH}")
 
     # APScheduler: follow-up каждый час
     scheduler = AsyncIOScheduler()
