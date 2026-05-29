@@ -1047,11 +1047,13 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                 await bot.send_message(target_max_id,
                     build_weekly_milestone_text(target_uid))
 
-            # Меню всегда в конце — чтобы плашка оставалась внизу экрана
+            # Подтверждение — сначала, если пишем другому пользователю
+            if target_max_id != max_user_id:
+                await bot.send_message(max_user_id,
+                    f"✅ День {target_day} установлен для MAX {target_max_id}")
+            # Меню — последнее сообщение, чтобы плашка оставалась внизу экрана
             await bot.send_message(target_max_id, "·",
                 buttons=_main_menu_buttons(target_max_id, target_uid))
-            await bot.send_message(max_user_id,
-                f"✅ День {target_day} установлен для MAX {target_max_id}")
             return
 
         if text.startswith("/debug"):
