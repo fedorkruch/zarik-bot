@@ -198,16 +198,7 @@ def _main_menu_buttons(max_user_id: int, uid: int = 0) -> list[list[dict]]:
         _btn_callback("🏆 Ачивки",   "menu:achievements"),
     ]
     buttons = [row_today, row_nav]
-    # open_app открывает мини-апп внутри MAX (как системная кнопка Open).
-    # Работает только если мини-апп зарегистрирован на business.max.ru → Чат-боты →
-    # Чат-бот и мини-приложение → Настроить → вставить WEBAPP_URL → Сохранить.
-    # Без регистрации — 4xx и весь send_message дропается. Используем btn_link как fallback.
-    if WEBAPP_URL:
-        if os.environ.get("MAX_MINIAPP_REGISTERED"):   # выставить после регистрации на business.max.ru
-            buttons.append([_btn_open_app("📱 МиниАПП")])
-        else:
-            url = _make_miniapp_url(uid) if uid else f"{WEBAPP_URL}?uid={max_user_id}"
-            buttons.append([_btn_link("📱 МиниАПП", url)])
+    # МиниАПП убран из меню — в MAX есть системная кнопка Open внизу чата.
     return buttons
 
 
@@ -695,6 +686,10 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
             "attachments": [],
         })
         logger.info(f"phone_skip answer_callback → {result}")
+        await bot.send_message(
+            max_user_id,
+            "💡 Кстати: трекер задач открывается кнопкой **Open** внизу этого чата 👇",
+        )
 
 
 # ── Дневной экран ─────────────────────────────────────────────
@@ -872,6 +867,10 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
     await bot.send_message(
         max_user_id,
         "✅ Номер сохранён, спасибо! 🙌\n\nЖди завтра утром — пришлю первые задачи 🦥",
+    )
+    await bot.send_message(
+        max_user_id,
+        "💡 Кстати: трекер задач открывается кнопкой **Open** внизу этого чата 👇",
     )
 
 
