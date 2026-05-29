@@ -472,7 +472,7 @@ def build_full_state(user_id: int) -> dict:
     share_texts = []
     if day > 0:
         share_texts = [
-            f"День {day}/77 🦥 Иду к {percentile} планеты. Сегодня — {n_done}/5 задач. Кто ещё в игре? t.me/shagov77_bot",
+            f"День {day}/77 🦥 Стремлюсь к 1% людей на планете! Сегодня — {n_done}/5 задач. Кто ещё в игре? t.me/shagov77_bot",
             f"{pct_label} пути пройдено. Без алкоголя, без фастфуда, со спортом и книгами. Ленивец гордится. 🦥 t.me/shagov77_bot",
             f"Факт: только 6% людей читают 10 страниц в день. Я — один из них уже {day} дней подряд. t.me/shagov77_bot",
         ]

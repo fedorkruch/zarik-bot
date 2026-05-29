@@ -356,7 +356,7 @@ body{
 
   <div class="slabel">ТЕКСТ ДЛЯ СОЦ. СЕТЕЙ</div>
   <div id="sh-options"></div>
-  <button class="copy-btn" onclick="copyText()">Копировать текст</button>
+  <button class="copy-btn" id="share-main-btn" onclick="shareText()">📤 Поделиться</button>
 </div>
 
 <!-- ACHIEVEMENT POPUP -->
@@ -699,15 +699,24 @@ function renderShare() {
   });
 }
 
-function copyText() {
+async function shareText() {
   const texts = STATE?.share_texts || [];
   const txt = texts[SEL_SHARE] || '';
   if (!txt) return;
+  hapticImpact('medium');
+  const btn = document.getElementById('share-main-btn');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: '🦥 Зарик · 77 дней', text: txt });
+      hapticNotify('success');
+      return;
+    } catch(e) { if (e.name === 'AbortError') return; }
+  }
+  // Fallback: clipboard
   const done = () => {
     hapticNotify('success');
-    const btn = document.querySelector('.copy-btn');
     btn.textContent = '✅ Скопировано!';
-    setTimeout(() => { btn.textContent = 'Копировать текст'; }, 2000);
+    setTimeout(() => { btn.textContent = '📤 Поделиться'; }, 2000);
   };
   if (navigator.clipboard) {
     navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
