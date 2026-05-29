@@ -512,8 +512,10 @@ async def _send_program_formed(bot: MaxClient, max_user_id: int):
 
 async def _send_completion_message(bot: MaxClient, max_user_id: int, uid: int):
     """Финальное сообщение после шага с телефоном (номер введён или пропущен).
-    Разбиваем на 2 сообщения: текст + отдельно меню — надёжнее чем всё в одном."""
+    Два отдельных вызова с паузой — MAX API дропает open_app кнопку
+    если она склеена с текстом в одном сообщении."""
     await bot.send_message(max_user_id, "Жди завтра утром — пришлю первые задачи 🦥")
+    await asyncio.sleep(0.4)
     await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
 
@@ -643,7 +645,9 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.set_share_photos(uid, False)
         db.complete_onboarding(uid)
         await bot.send_message(max_user_id, "👌 Понял, без фото — тоже отлично!")
+        await asyncio.sleep(0.3)
         await _send_program_formed(bot, max_user_id)
+        await asyncio.sleep(0.3)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Шаг 4: Фото отправлены ──────────────────────────────
@@ -662,7 +666,9 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
         db.complete_onboarding(uid)
         noun = "фото" if count in (2, 3, 4) else "фото"
         await bot.send_message(max_user_id, f"✅ Сохранил {count} {noun} 📸")
+        await asyncio.sleep(0.3)
         await _send_program_formed(bot, max_user_id)
+        await asyncio.sleep(0.3)
         await _send_phone_request(bot, max_user_id, uid)
 
     # ── Телефон — ввести номер ────────────────────────────────
@@ -685,6 +691,7 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
             "format": "markdown",
             "attachments": [],
         })
+        await asyncio.sleep(0.4)
         await bot.send_message(
             max_user_id, "·",
             buttons=_main_menu_buttons(max_user_id, uid),
@@ -860,7 +867,9 @@ async def _save_phone_and_finish(bot: MaxClient, max_user_id: int, uid: int, pho
             )
         except Exception:
             logger.exception(f"_save_phone_and_finish: не удалось снять кнопки msg={mid}")
+    await asyncio.sleep(0.3)
     await bot.send_message(max_user_id, "✅ Номер сохранён, спасибо! 🙌")
+    await asyncio.sleep(0.3)
     await _send_completion_message(bot, max_user_id, uid)   # "Жди завтра утром..." + меню
 
 
