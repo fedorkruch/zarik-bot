@@ -18,9 +18,8 @@ import logging
 import os
 import re
 import time as _time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
@@ -359,46 +358,6 @@ def build_stats_text(uid: int) -> str:
     ]
     return "\n".join(lines)
 
-
-def build_week_screen_max(uid: int) -> str:
-    """Экран «Неделя» — итоги текущей недели и группы (аналог TG build_week_screen)."""
-    stats      = db.get_stats(uid)
-    day        = stats["current_day"]
-    done       = stats["days_completed"]
-    week_num   = (day - 1) // 7 + 1
-    week_start = (week_num - 1) * 7 + 1
-    all_compl  = db.get_completed_days_set(uid)
-    week_done  = len({d for d in all_compl if week_start <= d <= day})
-    percentile, ctx = ct.get_planet_percentile(done)
-    week_bar   = make_mini_bar(week_done, 7)
-    header     = _md(ct.get_weekly_header(week_num))
-    group      = db.get_group_stats()
-
-    lines = [
-        f"**📅  Неделя {week_num} · {week_done} из 7 дней**",
-        "",
-        header,
-        "",
-        f"Эта неделя:  {week_bar}  {week_done} / 7",
-        f"Всего засчитано:  **{done}** из {day} дней",
-        f"🌍  **{percentile}** планеты",
-    ]
-
-    next_m = ct.get_next_percentile_milestone(done)
-    if next_m:
-        d, pct = next_m
-        lines.append(f"      _ещё {d} {day_word(d)} → {pct}_")
-
-    if group and group.get("total", 0) > 0:
-        total_g  = group["total"]
-        active_g = group["active"]
-        lines += [
-            "",
-            f"👥  Группа:           {total_g} участников",
-            f"🏃  Продолжают:   **{active_g}**",
-        ]
-
-    return "\n".join(lines)
 
 
 def build_achievements_text(uid: int) -> str:
@@ -830,11 +789,6 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
     elif payload == "noop":
         # Информационная кнопка (например «День завершён!») — просто ack
         await bot.answer_callback(callback_id)
-
-    elif (payload.startswith("tz:") or payload.startswith("pushup:") or
-          payload.startswith("squat:") or payload.startswith("abs:") or
-          payload in ("photo_yes", "photo_no", "photos_done", "phone_skip")):
-        await handle_onboarding_callback(bot, max_user_id, uid, callback_id, payload)
 
 
 # ── Обработчик текстовых сообщений ───────────────────────────

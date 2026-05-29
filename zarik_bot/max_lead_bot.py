@@ -23,7 +23,6 @@ max_lead_bot.py — лид-бот для Мессенджера MAX (анало�
 import asyncio
 import base64
 import difflib
-import json as _json
 import logging
 import os
 import re
@@ -73,12 +72,11 @@ MAX_SKIP_SUB_CHECK  = os.environ.get("MAX_SKIP_SUB_CHECK", "0").strip() in ("1",
 # ID канала — принимаем и число, и URL вида https://max.ru/id781109203385_biz
 def _parse_channel_id(raw: str) -> int:
     """Извлекает числовой ID из строки или URL типа https://max.ru/id123456_biz."""
-    import re as _re
     raw = raw.strip()
-    m = _re.search(r"id(\d+)", raw)
+    m = re.search(r"id(\d+)", raw)
     if m:
         return int(m.group(1))
-    digits = _re.sub(r"\D", "", raw)
+    digits = re.sub(r"\D", "", raw)
     return int(digits) if digits else 0
 
 MAX_CHANNEL_ID = _parse_channel_id(os.environ.get("MAX_CHANNEL_ID", "781109203385"))
@@ -873,8 +871,6 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         # Администратор может сбросить любого; тест-юзеры — только себя
         if max_user_id == MAX_ADMIN_USER_ID:
             target_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else max_user_id
-        elif max_user_id in TEST_USER_IDS:
-            target_id = max_user_id   # тест-юзер сбрасывает только себя
         else:
             return  # молча игнорируем
 
