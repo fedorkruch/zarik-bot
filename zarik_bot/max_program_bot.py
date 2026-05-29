@@ -663,11 +663,15 @@ async def handle_onboarding_callback(bot: MaxClient, max_user_id: int, uid: int,
 
     # ── Телефон — пропустить ─────────────────────────────────
     elif payload == "phone_skip":
-        await bot.answer_callback(callback_id)
         db.set_onboarding_step(uid, "done")
+        # Используем new_message — заменяем кнопки телефона ответом на месте
+        # (тот же надёжный паттерн что у кнопок задач)
+        await bot.answer_callback(callback_id, new_message={
+            "text": "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи",
+            "format": "markdown",
+        })
         await bot.send_message(
-            max_user_id,
-            "Окей, без проблем 🦥\nЖди завтра утром — пришлю первые задачи",
+            max_user_id, "·",
             buttons=_main_menu_buttons(max_user_id, uid),
         )
 
