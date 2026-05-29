@@ -735,99 +735,96 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         logger.info(f"DEV сброс (TEST_USER): max_user_id={max_user_id}")
         return
 
-    # Обычные пользователи
-    if max_user_id != MAX_ADMIN_USER_ID:
-        state = _user_state.get(max_user_id, {})
+    # ── Машина состояний: сбор данных для оплаты ─────────────
+    # Проверяем ДО разделения на admin/user — состояние может быть у любого
+    state = _user_state.get(max_user_id, {})
 
-        # 1. Ожидаем ввод суммы ставки
-        if state.get("awaiting_stake"):
-            min_stake = _min_stake_for(max_user_id)
-            clean = text.strip().replace(",", ".").replace(" ", "")
-            try:
-                amount_rub = float(clean)
-            except ValueError:
-                await bot.send_message(
-                    max_user_id,
-                    f"⚠️ Некорректный формат ввода данных.\n\n"
-                    f"Введи число, например: 100\n"
-                    f"Минимальная сумма — {min_stake // 100} ₽."
-                )
-                return
-            amount_kopecks = int(amount_rub * 100)
-            if amount_kopecks < min_stake:
-                await bot.send_message(
-                    max_user_id,
-                    f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
-                )
-                return
-            if db.is_max_lead_purchased(max_user_id):
-                _user_state.pop(max_user_id, None)
-                return
-            # Переходим к сбору данных для чека
-            _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": amount_kopecks}
-            await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
-            return
-
-        # 2. Ожидаем ФИО
-        if state.get("awaiting_name"):
-            name = text.strip()
-            if len(name) < 2:
-                await bot.send_message(max_user_id, "⚠️ Введи корректное имя:")
-                return
-            _user_state[max_user_id] = {
-                "awaiting_email": True,
-                "stake_kopecks": state.get("stake_kopecks", 0),
-                "full_name": name,
-            }
-            await bot.send_message(max_user_id, "📧 Введи email для чека:")
-            return
-
-        # 3. Ожидаем email
-        if state.get("awaiting_email"):
-            email = text.strip().lower()
-            if not _valid_email(email):
-                await bot.send_message(
-                    max_user_id,
-                    "⚠️ Некорректный email. Введи правильный адрес (например: ivan@mail.ru):"
-                )
-                return
-            _user_state[max_user_id] = {
-                "awaiting_phone": True,
-                "stake_kopecks": state.get("stake_kopecks", 0),
-                "full_name": state.get("full_name", ""),
-                "email": email,
-            }
+    if state.get("awaiting_stake"):
+        min_stake = _min_stake_for(max_user_id)
+        clean = text.strip().replace(",", ".").replace(" ", "")
+        try:
+            amount_rub = float(clean)
+        except ValueError:
             await bot.send_message(
                 max_user_id,
-                "📱 Введи номер телефона для чека (например: +79001234567 или 89001234567):"
+                f"⚠️ Некорректный формат ввода данных.\n\n"
+                f"Введи число, например: 100\n"
+                f"Минимальная сумма — {min_stake // 100} ₽."
             )
             return
-
-        # 4. Ожидаем телефон → создаём платёж
-        if state.get("awaiting_phone"):
-            phone_raw = text.strip()
-            if not _valid_phone(phone_raw):
-                await bot.send_message(
-                    max_user_id,
-                    "⚠️ Некорректный номер. Введи российский номер (например: +79001234567 или 89001234567):"
-                )
-                return
-            phone = _normalize_phone(phone_raw)
-            full_name    = state.get("full_name", "")
-            email        = state.get("email", "")
-            stake_kopecks = state.get("stake_kopecks", 0)
-            _user_state.pop(max_user_id, None)
-            if db.is_max_lead_purchased(max_user_id):
-                return
-            await send_course_payment_link(
+        amount_kopecks = int(amount_rub * 100)
+        if amount_kopecks < min_stake:
+            await bot.send_message(
                 max_user_id,
-                stake_kopecks=stake_kopecks,
-                full_name=full_name,
-                email=email,
-                phone=phone,
+                f"⚠️ Минимальная ставка — {min_stake // 100} ₽. Введи другую сумму:"
             )
             return
+        if db.is_max_lead_purchased(max_user_id):
+            _user_state.pop(max_user_id, None)
+            return
+        _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": amount_kopecks}
+        await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
+        return
 
+    if state.get("awaiting_name"):
+        name = text.strip()
+        if len(name) < 2:
+            await bot.send_message(max_user_id, "⚠️ Введи корректное имя:")
+            return
+        _user_state[max_user_id] = {
+            "awaiting_email": True,
+            "stake_kopecks": state.get("stake_kopecks", 0),
+            "full_name": name,
+        }
+        await bot.send_message(max_user_id, "📧 Введи email для чека:")
+        return
+
+    if state.get("awaiting_email"):
+        email = text.strip().lower()
+        if not _valid_email(email):
+            await bot.send_message(
+                max_user_id,
+                "⚠️ Некорректный email. Введи правильный адрес (например: ivan@mail.ru):"
+            )
+            return
+        _user_state[max_user_id] = {
+            "awaiting_phone": True,
+            "stake_kopecks": state.get("stake_kopecks", 0),
+            "full_name": state.get("full_name", ""),
+            "email": email,
+        }
+        await bot.send_message(
+            max_user_id,
+            "📱 Введи номер телефона для чека (например: +79001234567 или 89001234567):"
+        )
+        return
+
+    if state.get("awaiting_phone"):
+        phone_raw = text.strip()
+        if not _valid_phone(phone_raw):
+            await bot.send_message(
+                max_user_id,
+                "⚠️ Некорректный номер. Введи российский номер (например: +79001234567 или 89001234567):"
+            )
+            return
+        phone = _normalize_phone(phone_raw)
+        full_name     = state.get("full_name", "")
+        email         = state.get("email", "")
+        stake_kopecks = state.get("stake_kopecks", 0)
+        _user_state.pop(max_user_id, None)
+        if db.is_max_lead_purchased(max_user_id):
+            return
+        await send_course_payment_link(
+            max_user_id,
+            stake_kopecks=stake_kopecks,
+            full_name=full_name,
+            email=email,
+            phone=phone,
+        )
+        return
+
+    # ── Обычные пользователи (не в состоянии ввода) ──────────
+    if max_user_id != MAX_ADMIN_USER_ID:
         # Запрос скидки — специальный ответ
         if _is_discount_request(text):
             await bot.send_message(
