@@ -97,6 +97,7 @@ DIGIT_ROWS = [
     ["1", "2", "3", "4", "5"],
     ["6", "7", "8", "9", "10"],
     ["12", "15", "20", "25", "30"],
+    ["35", "40", "50", "60", "75"],
 ]
 
 # ── Тексты ────────────────────────────────────────────────────
@@ -1219,6 +1220,18 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         await _send_welcome_to_max_user(bot, max_user_id, uid)
         logger.info(f"reset_user (TEST_USER): max_user_id={max_user_id}")
         return
+
+    # ── Защита от дурака: нераспознанный ввод ────────────────
+    if max_user_id == MAX_ADMIN_USER_ID:
+        return  # Молча игнорируем неизвестные команды администратора
+    await bot.send_message(max_user_id, "⚠️ Неподдерживаемый формат сообщения")
+    _u_catch = db.get_user(uid)
+    if not db.is_payment_confirmed(uid):
+        await bot.send_message(max_user_id, NOT_PAID_TEXT, buttons=_pay_buttons())
+    elif not (_u_catch and _u_catch["onboarding_complete"]):
+        await _send_welcome_to_max_user(bot, max_user_id, uid)
+    else:
+        await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
 
 
 def _sync_lead_payment(max_user_id: int, internal_uid: int):

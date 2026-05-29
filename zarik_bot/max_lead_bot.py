@@ -851,8 +851,19 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
                 "мы специально уронили цену, чтобы дать возможность большему количеству участников "
                 "начать двигаться к своим целям."
             )
+            return
+        # Неподдерживаемый формат — показываем ошибку + последнее состояние воронки
+        await bot.send_message(max_user_id, "⚠️ Неподдерживаемый формат сообщения")
+        lead = db.get_max_lead(max_user_id)
+        if lead and db.is_max_lead_purchased(max_user_id):
+            await bot.send_message(max_user_id, ALREADY_IN_PROGRAM_TEXT, buttons=_program_bot_buttons())
+        elif lead and lead.get("pitch_sent_at"):
+            await bot.send_message(max_user_id, OFFER_TEXT, buttons=_offer_buttons())
+        elif lead and lead.get("tracker_sent_at"):
+            await bot.send_message(max_user_id, TRACKER_QUESTION_TEXT, buttons=_tracker_question_buttons())
         else:
-            await bot.send_message(max_user_id, "⚠️ Некорректный формат ввода данных.")
+            db.upsert_max_lead(max_user_id, username, first_name)
+            await bot.send_message(max_user_id, _subscribe_text(first_name), buttons=_subscribe_buttons())
         return
 
     # Только для администратора
