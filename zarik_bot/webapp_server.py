@@ -742,6 +742,34 @@ async def handle_set_mode(request: web.Request) -> web.Response:
 
 # ── MAX Мессенджер — вебхук-обработчики ──────────────────────
 
+async def _notify_max_admin_new_user(
+    max_user_id: int,
+    first_name: str,
+    username: str | None,
+    fee_kopecks: int,
+    stake_kopecks: int,
+) -> None:
+    """Отправляет администратору MAX уведомление о новом участнике."""
+    try:
+        import max_lead_bot
+        admin_id = max_lead_bot.MAX_ADMIN_USER_ID
+        if not admin_id:
+            return
+        bot   = max_lead_bot.get_client()
+        uname = f"@{username}" if username else f"id{max_user_id}"
+        text  = (
+            f"🆕 Новый участник программы!\n\n"
+            f"👤 {first_name} ({uname})\n"
+            f"📱 MAX\n"
+            f"💰 Взнос: {fee_kopecks // 100} ₽"
+        )
+        if stake_kopecks > 0:
+            text += f"\n🎯 Ставка: {stake_kopecks // 100} ₽"
+        await bot.send_message(admin_id, text)
+    except Exception:
+        logger.exception("Не удалось отправить уведомление администратору (MAX)")
+
+
 async def _verify_yookassa_payment(payment_id: str) -> bool:
     """Верифицирует платёж обратным запросом к ЮКасса API.
     Защищает от поддельных webhook-уведомлений."""
@@ -891,6 +919,15 @@ async def handle_yookassa_webhook(request: web.Request) -> web.Response:
             buttons=buttons,
         )
 
+        # Уведомляем администратора
+        await _notify_max_admin_new_user(
+            max_user_id,
+            first_name or "",
+            username or None,
+            course_kopecks,
+            stake_kopecks,
+        )
+
     except Exception:
         logger.exception("YooKassa webhook processing error")
 
@@ -940,5 +977,28 @@ async def run_server():
             await max_program_bot.setup(WEBAPP_URL)
         except Exception:
             logger.exception("Ошибка инициализации MAX ботов")
+
+    # ── Дайджест MAX-участников за сегодня (при перезапуске сервера) ──
+    try:
+        import max_lead_bot as _mlb
+        _admin_id = _mlb.MAX_ADMIN_USER_ID
+        if _admin_id:
+            today_max = db.get_max_leads_purchased_today()
+            if today_max:
+                _bot = _mlb.get_client()
+                lines = [f"📋 Участники сегодня (MAX) — {len(today_max)} чел.:\n"]
+                for p in today_max:
+                    uname = f"@{p['username']}" if p.get('username') else f"id{p['max_user_id']}"
+                    fee   = (p['participation_fee'] or 0) // 100
+                    stake = (p['stake_amount'] or 0) // 100
+                    t     = (p['purchased_at'] or '')[:16]
+                    line  = f"👤 {p['first_name'] or '?'} ({uname}) — {fee} ₽"
+                    if stake:
+                        line += f" + ставка {stake} ₽"
+                    line += f"  [{t}]"
+                    lines.append(line)
+                await _bot.send_message(_admin_id, "\n".join(lines))
+    except Exception:
+        logger.exception("Не удалось отправить дайджест участников MAX")
 
     await asyncio.Event().wait()

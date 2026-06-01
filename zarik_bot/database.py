@@ -836,6 +836,37 @@ def mark_lead_purchased(user_id: int):
             (user_id,)
         )
 
+def get_tg_leads_purchased_today() -> list:
+    """Telegram-лиды, оплатившие сегодня (по UTC-дате)."""
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT l.user_id, l.first_name, l.username, l.purchased_at,
+                   COALESCE(u.participation_fee, 0) AS participation_fee,
+                   COALESCE(u.stake_amount,      0) AS stake_amount
+            FROM leads l
+            LEFT JOIN users u ON u.user_id = l.user_id
+            WHERE date(l.purchased_at) = date('now')
+              AND l.lead_status = 'purchased'
+            ORDER BY l.purchased_at
+        """).fetchall()
+
+
+def get_max_leads_purchased_today() -> list:
+    """MAX-лиды, оплатившие сегодня (по UTC-дате)."""
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT ml.max_user_id, ml.first_name, ml.username, ml.purchased_at,
+                   COALESCE(u.participation_fee, 0) AS participation_fee,
+                   COALESCE(u.stake_amount,      0) AS stake_amount
+            FROM max_leads ml
+            LEFT JOIN max_users mu ON mu.max_user_id = ml.max_user_id
+            LEFT JOIN users u ON u.user_id = mu.internal_id
+            WHERE date(ml.purchased_at) = date('now')
+              AND ml.lead_status = 'purchased'
+            ORDER BY ml.purchased_at
+        """).fetchall()
+
+
 def mark_lead_tracker_question_sent(user_id: int):
     """Зафиксировать момент отправки вопроса «Ну как, получилось с трекером?»."""
     with get_conn() as conn:

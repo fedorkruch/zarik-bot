@@ -770,6 +770,30 @@ async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer(ok=True)
 
 
+async def _notify_admin_tg_new_user(
+    bot,
+    user_id: int,
+    first_name: str,
+    username: str | None,
+    fee_kopecks: int,
+    stake_kopecks: int,
+) -> None:
+    """Отправляет администратору уведомление о новом участнике (Telegram)."""
+    try:
+        uname = f"@{username}" if username else f"id{user_id}"
+        text  = (
+            f"🆕 Новый участник программы!\n\n"
+            f"👤 {first_name} ({uname})\n"
+            f"📱 Telegram\n"
+            f"💰 Взнос: {fee_kopecks // 100} ₽"
+        )
+        if stake_kopecks > 0:
+            text += f"\n🎯 Ставка: {stake_kopecks // 100} ₽"
+        await bot.send_message(chat_id=ADMIN_ID, text=text)
+    except Exception:
+        logger.exception("Не удалось отправить уведомление администратору (TG)")
+
+
 async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     payment = update.message.successful_payment
@@ -781,15 +805,25 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     except Exception:
         stake_kopecks = 0
 
+    fee_kopecks = _price_for(user.id)
     db.register_user(user.id, user.username or "", user.first_name or "")
     db.save_payment(
         user_id=user.id,
         charge_id=payment.telegram_payment_charge_id,
-        participation_fee=_price_for(user.id),
+        participation_fee=fee_kopecks,
         stake_amount=stake_kopecks,
     )
     db.mark_lead_purchased(user.id)
     logger.info(f"Новый участник: {user.id} | {user.first_name} | ставка={stake_kopecks // 100}₽")
+
+    await _notify_admin_tg_new_user(
+        context.bot,
+        user.id,
+        user.first_name or "",
+        user.username,
+        fee_kopecks,
+        stake_kopecks,
+    )
 
     await update.message.reply_text(
         f"🎉 *Оплата подтверждена! Добро пожаловать в программу.*\n\n"
@@ -910,6 +944,24 @@ async def _post_init(application: Application) -> None:
     await application.bot.set_my_commands([
         BotCommand("start", "🦥 Начать"),
     ])
+    # ── Дайджест участников за сегодня (при перезапуске бота) ──
+    try:
+        today = db.get_tg_leads_purchased_today()
+        if today:
+            lines = [f"📋 Участники сегодня (Telegram) — {len(today)} чел.:\n"]
+            for p in today:
+                uname = f"@{p['username']}" if p.get('username') else f"id{p['user_id']}"
+                fee   = (p['participation_fee'] or 0) // 100
+                stake = (p['stake_amount'] or 0) // 100
+                t     = (p['purchased_at'] or '')[:16]
+                line  = f"👤 {p['first_name'] or '?'} ({uname}) — {fee} ₽"
+                if stake:
+                    line += f" + ставка {stake} ₽"
+                line += f"  [{t}]"
+                lines.append(line)
+            await application.bot.send_message(chat_id=ADMIN_ID, text="\n".join(lines))
+    except Exception:
+        logger.exception("Не удалось отправить дайджест участников (TG)")
 
 
 def build_app() -> Application:
