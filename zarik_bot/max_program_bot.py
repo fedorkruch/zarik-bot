@@ -162,9 +162,9 @@ def day_word(n: int) -> str:
 
 def make_mini_bar(value: int, total: int, width: int = 15) -> str:
     if total == 0:
-        return "·" * width
+        return "🦥 Панель управления" * width
     filled = round(value / total * width)
-    return "●" * filled + "·" * (width - filled)
+    return "●" * filled + "🦥 Панель управления" * (width - filled)
 
 
 # ── Клавиатуры MAX ────────────────────────────────────────────
@@ -311,7 +311,7 @@ def build_stats_text(uid: int) -> str:
     bar_width = 17
     filled    = round(done / TOTAL_DAYS * bar_width)
     pct       = round(done / TOTAL_DAYS * 100)
-    bar       = "●" * filled + "·" * (bar_width - filled)
+    bar       = "●" * filled + "🦥 Панель управления" * (bar_width - filled)
 
     week_now = (day - 1) // 7 + 1
     weeks = ""
@@ -699,7 +699,7 @@ async def show_today(bot: MaxClient, max_user_id: int, uid: int):
                                   buttons=_tracker_buttons(day, completed))
     _save_max_tracker_msg(uid, day, resp)
     # Навигация — отдельным сообщением ниже (имитация Reply Keyboard)
-    await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
+    await bot.send_message(max_user_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_user_id, uid))
 
 
 # ── Обработчики callback ──────────────────────────────────────
@@ -775,7 +775,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
                 await bot.send_message(max_user_id, _md(ct.FINAL_MESSAGE))
 
             # Меню всегда доступно
-            await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
+            await bot.send_message(max_user_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_user_id, uid))
 
     # Меню (ack здесь, task делает ack сам через answer_callback+new_message)
     elif payload == "menu:today":
@@ -1105,7 +1105,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             if target_max_id != max_user_id:
                 await bot.send_message(max_user_id,
                     f"✅ День {target_day} установлен для MAX {target_max_id}")
-            await bot.send_message(target_max_id, "·",
+            await bot.send_message(target_max_id, "🦥 Панель управления",
                 buttons=_main_menu_buttons(target_max_id, target_uid))
             return
 
@@ -1207,7 +1207,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
     elif not (_u_catch and _u_catch["onboarding_complete"]):
         await _send_welcome_to_max_user(bot, max_user_id, uid)
     else:
-        await bot.send_message(max_user_id, "·", buttons=_main_menu_buttons(max_user_id, uid))
+        await bot.send_message(max_user_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_user_id, uid))
 
 
 def _sync_lead_payment(max_user_id: int, internal_uid: int):
@@ -1439,7 +1439,7 @@ async def _job_morning():
             if missed >= 3 and not db.has_dropout_warning(uid):
                 last_day = db.get_last_completed_day(uid)
                 await bot.send_message(max_id, ct.get_miss_message(3, last_day))
-                await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+                await bot.send_message(max_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_id, uid))
                 db.set_dropout_warning_sent(uid)
                 continue
 
@@ -1460,7 +1460,7 @@ async def _job_morning():
                 buttons=_tracker_buttons(day, completed),
             )
             _save_max_tracker_msg(uid, day, resp)
-            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            await bot.send_message(max_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Morning job error for MAX user {max_id}")
 
@@ -1502,7 +1502,7 @@ async def _job_afternoon():
                 )
                 _save_max_tracker_msg(uid, day, resp)
             # Меню всегда
-            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            await bot.send_message(max_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Afternoon job error for MAX user {max_id}")
 
@@ -1544,7 +1544,7 @@ async def _job_evening():
                 )
                 _save_max_tracker_msg(uid, day, resp)
             # Меню всегда
-            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            await bot.send_message(max_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Evening job error for MAX user {max_id}")
 
@@ -1569,7 +1569,7 @@ async def _job_weekly():
             if day not in WEEKLY_MILESTONE_DAYS:
                 continue
             await bot.send_message(max_id, build_weekly_milestone_text(uid))
-            await bot.send_message(max_id, "·", buttons=_main_menu_buttons(max_id, uid))
+            await bot.send_message(max_id, "🦥 Панель управления", buttons=_main_menu_buttons(max_id, uid))
         except Exception:
             logger.exception(f"Weekly job error for MAX user {max_id}")
 

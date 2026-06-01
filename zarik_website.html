@@ -670,6 +670,20 @@ footer{
 }
 .float-btn.visible{opacity:1;transform:translateY(0);pointer-events:auto}
 
+/* MAX button */
+.btn-max{background:#7B5BF5;color:#FFFFFF !important}
+.btn-max:hover{background:#6344D4;box-shadow:0 12px 32px rgba(123,91,245,0.3)}
+
+/* Floating CTA pair */
+.float-pair{
+  position:fixed;bottom:28px;right:28px;z-index:90;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
+  opacity:0;transform:translateY(16px);pointer-events:none;
+  transition:opacity 0.4s ease,transform 0.4s ease;
+}
+.float-pair.visible{opacity:1;transform:translateY(0);pointer-events:auto}
+.float-pair .btn{padding:12px 22px;font-size:14px;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
+
 /* ── MOBILE ── */
 @media(max-width:900px){
   .hero-grid{grid-template-columns:1fr;gap:48px}
@@ -689,6 +703,7 @@ footer{
   .footer-inner{flex-direction:column;text-align:center}
   .footer-links{flex-wrap:wrap;justify-content:center}
   .float-btn{bottom:20px;right:16px}
+  .float-pair{bottom:20px;right:16px}
   .final-inner{grid-template-columns:1fr;gap:40px}
   .final-img img{height:380px}
   .final-img{order:-1}
@@ -711,9 +726,10 @@ footer{
       <span class="nav-logo-icon">🦥</span>
       Зарик
     </a>
-    <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn nav-cta">
-      Начать →
-    </a>
+    <div style="display:flex;gap:8px">
+      <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn nav-cta">Telegram →</a>
+      <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="btn btn-max nav-cta">MAX →</a>
+    </div>
   </div>
 </nav>
 
@@ -735,9 +751,12 @@ footer{
         </p>
         <div class="hero-cta-row reveal reveal-delay-3">
           <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn">
-            Начать за 1990 ₽ →
+            Telegram →
           </a>
-          <span class="hero-note">Оплата прямо в Telegram</span>
+          <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="btn btn-max">
+            MAX →
+          </a>
+          <span class="hero-note">1990 ₽ · оплата прямо в боте</span>
         </div>
         <div class="hero-stats reveal reveal-delay-4">
           <div>
@@ -831,8 +850,11 @@ footer{
         <div class="how-num">1</div>
         <div class="how-icon">📲</div>
         <div class="how-title">Подпишись на бота</div>
-        <div class="how-desc">Нажми кнопку и перейди в @Shagov77_bot — там оформим участие и ответим на вопросы.</div>
-        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="how-link">Открыть бота →</a>
+        <div class="how-desc">Нажми кнопку ниже и выбери удобный мессенджер — Telegram или MAX. Там оформим участие и ответим на вопросы.</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">
+          <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="how-link">Telegram →</a>
+          <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="how-link" style="color:#7B5BF5">MAX →</a>
+        </div>
       </div>
       <div class="how-step reveal reveal-delay-1">
         <div class="how-num">2</div>
@@ -910,28 +932,73 @@ footer{
     <div class="game-header">
       <div class="section-label reveal">Геймификация</div>
       <h2 class="section-title reveal reveal-delay-1">Зарабатывай ачивки.</h2>
-      <p class="section-sub reveal reveal-delay-2">За каждую серию дней — новое достижение. 6 ачивок от первого шага до легенды.</p>
+      <p class="section-sub reveal reveal-delay-2">За каждую серию дней — новое достижение. 20 ачивок от первого шага до легенды.</p>
     </div>
     <div class="achievements">
       <div class="ach-card reveal">
-        <div class="ach-icon">🐾</div>
+        <div class="ach-icon">🌱</div>
         <div class="ach-name">Первый шаг</div>
         <div class="ach-days">День 1</div>
       </div>
       <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🐢</div>
+        <div class="ach-name">Три в ряд</div>
+        <div class="ach-days">3 дня</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">✋</div>
+        <div class="ach-name">Привет, привычка</div>
+        <div class="ach-days">5 дней</div>
+      </div>
+      <div class="ach-card reveal">
         <div class="ach-icon">🔥</div>
         <div class="ach-name">Неделя огня</div>
         <div class="ach-days">7 дней</div>
       </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">⚡</div>
+        <div class="ach-name">Первый десяток</div>
+        <div class="ach-days">10 дней</div>
+      </div>
       <div class="ach-card reveal reveal-delay-2">
         <div class="ach-icon">🦥</div>
-        <div class="ach-name">Ленивец одобряет</div>
+        <div class="ach-name">Зарик одобряет</div>
         <div class="ach-days">14 дней</div>
       </div>
-      <div class="ach-card reveal reveal-delay-3">
+      <div class="ach-card reveal">
+        <div class="ach-icon">🌊</div>
+        <div class="ach-name">В потоке</div>
+        <div class="ach-days">21 день</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🎯</div>
+        <div class="ach-name">Четверть пути</div>
+        <div class="ach-days">25 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
         <div class="ach-icon">💎</div>
         <div class="ach-name">Алмазная воля</div>
         <div class="ach-days">30 дней</div>
+      </div>
+      <div class="ach-card reveal">
+        <div class="ach-icon">🦅</div>
+        <div class="ach-name">Пять недель</div>
+        <div class="ach-days">35 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🏃</div>
+        <div class="ach-name">Марафонец</div>
+        <div class="ach-days">40 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">🔮</div>
+        <div class="ach-name">Полтора месяца</div>
+        <div class="ach-days">42 дня</div>
+      </div>
+      <div class="ach-card reveal">
+        <div class="ach-icon">🚀</div>
+        <div class="ach-name">В орбите</div>
+        <div class="ach-days">49 дней</div>
       </div>
       <div class="ach-card reveal reveal-delay-1">
         <div class="ach-icon">🌍</div>
@@ -939,13 +1006,38 @@ footer{
         <div class="ach-days">50 дней</div>
       </div>
       <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">🎖️</div>
+        <div class="ach-name">Ветеран</div>
+        <div class="ach-days">55 дней</div>
+      </div>
+      <div class="ach-card reveal">
+        <div class="ach-icon">🌙</div>
+        <div class="ach-name">Два месяца</div>
+        <div class="ach-days">60 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">💫</div>
+        <div class="ach-name">Девять недель</div>
+        <div class="ach-days">63 дня</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-2">
+        <div class="ach-icon">🏁</div>
+        <div class="ach-name">Финишная прямая</div>
+        <div class="ach-days">70 дней</div>
+      </div>
+      <div class="ach-card reveal">
         <div class="ach-icon">👑</div>
-        <div class="ach-name">Легенда 77</div>
+        <div class="ach-name">Финальный спринт</div>
+        <div class="ach-days">75 дней</div>
+      </div>
+      <div class="ach-card reveal reveal-delay-1">
+        <div class="ach-icon">🏆</div>
+        <div class="ach-name">77 LEGEND</div>
         <div class="ach-days">77 дней</div>
       </div>
     </div>
     <div class="planet-bar reveal">
-      <div class="progress-pct" id="pct-counter">0%</div>
+      <div class="progress-pct" id="pct-counter">5%</div>
       <div class="planet-title">Ты в топе планеты</div>
       <div class="planet-sub">Каждый выполненный день поднимает тебя выше 97% людей на Земле, которые ничего не делают</div>
       <div class="progress-track">
@@ -1028,7 +1120,7 @@ footer{
           <li><span class="feat-check">✓</span> 5 задач в день — подобранных под тебя</li>
           <li><span class="feat-check">✓</span> Тренировка с персональной программой роста</li>
           <li><span class="feat-check">✓</span> Прогресс-трекер и еженедельная статистика</li>
-          <li><span class="feat-check">✓</span> 6 ачивок и место в топе планеты</li>
+          <li><span class="feat-check">✓</span> 20 ачивок и место в топе планеты</li>
           <li><span class="feat-check">✓</span> Mini App с дашбордом прогресса</li>
         </ul>
         <div class="stake-box">
@@ -1038,10 +1130,15 @@ footer{
             Пройдёшь все 77 дней? Получишь её полностью обратно. Это не штраф — это мотивация.
           </div>
         </div>
-        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn pricing-cta">
-          Начать за 1990 ₽ →
-        </a>
-        <div class="pricing-footnote">Оплата через Telegram · ЮКасса · Безопасно</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn pricing-cta" style="flex:1;min-width:200px">
+            Начать в Telegram →
+          </a>
+          <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="btn btn-max pricing-cta" style="flex:1;min-width:200px">
+            Начать в MAX →
+          </a>
+        </div>
+        <div class="pricing-footnote">Telegram или MAX · ЮКасса · Безопасно</div>
         <div class="pricing-footnote" style="margin-top:8px">
           Нажимая кнопку, вы принимаете условия
           <a href="http://myeasystart.ru/zarik_oferta" style="color:var(--text2) !important;text-decoration:underline !important">Публичной оферты</a>
@@ -1112,7 +1209,7 @@ footer{
           <span class="faq-icon">+</span>
         </div>
         <div class="faq-a">
-          Нажми любую кнопку «Начать» на этой странице — она откроет @Shagov77_bot в Telegram. Там сначала получишь подарок (интерактивный трекер), затем бот проведёт тебя через оформление. Оплата прямо внутри Telegram — быстро и безопасно.
+          Нажми кнопку «Telegram» или «MAX» на этой странице и выбери удобный мессенджер. Там сначала получишь подарок (интерактивный трекер), затем бот проведёт тебя через оформление. Оплата прямо внутри мессенджера — быстро и безопасно.
         </div>
       </div>
     </div>
@@ -1134,10 +1231,15 @@ footer{
           Зато через 77 дней ты будешь смотреть на себя в зеркало и видеть человека, который сделал это.
           Без надрыва. Маленькими шагами.
         </p>
-        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn final-cta reveal reveal-delay-3">
-          Начать прямо сейчас →
-        </a>
-        <div class="final-note reveal reveal-delay-4">Оплата в Telegram · 1990 ₽ · Следующий день — первые задачи</div>
+        <div class="hero-cta-row reveal reveal-delay-3">
+          <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn final-cta">
+            Telegram →
+          </a>
+          <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="btn btn-max final-cta">
+            MAX →
+          </a>
+        </div>
+        <div class="final-note reveal reveal-delay-4">1990 ₽ · Оплата прямо в боте · Следующий день — первые задачи</div>
       </div>
       <div class="final-img reveal reveal-delay-2">
         <img src="https://static.tildacdn.com/tild6264-3965-4163-a631-666437363135/zarik_3.jpeg" alt="Зарик">
@@ -1158,7 +1260,8 @@ footer{
         <a href="#tasks" class="footer-link">Задачи</a>
         <a href="#pricing" class="footer-link">Цена</a>
         <a href="#faq" class="footer-link">FAQ</a>
-        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="footer-link" style="color:var(--green)">@Shagov77_bot</a>
+        <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="footer-link" style="color:var(--green)">Telegram</a>
+        <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="footer-link" style="color:#7B5BF5">MAX</a>
       </div>
       <div class="footer-copy">© 2025 · 77 дней к другой жизни</div>
     </div>
@@ -1177,9 +1280,10 @@ footer{
 </footer>
 
 <!-- FLOATING CTA -->
-<a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn float-btn" id="floatBtn">
-  Начать →
-</a>
+<div id="floatBtn" class="float-pair">
+  <a href="https://t.me/Shagov77_bot" target="_blank" rel="noopener" class="btn">Telegram →</a>
+  <a href="https://max.ru/id244202994716_bot" target="_blank" rel="noopener" class="btn btn-max">MAX →</a>
+</div>
 
 <script>
 // Scroll reveal
