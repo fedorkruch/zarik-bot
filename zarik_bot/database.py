@@ -191,6 +191,9 @@ def init_db():
             "ALTER TABLE max_leads ADD COLUMN full_name TEXT",
             "ALTER TABLE max_leads ADD COLUMN email TEXT",
             "ALTER TABLE max_leads ADD COLUMN phone TEXT",
+            # Реферальные коды блогеров
+            "ALTER TABLE leads ADD COLUMN referral_code TEXT DEFAULT NULL",
+            "ALTER TABLE max_leads ADD COLUMN referral_code TEXT DEFAULT NULL",
         ]
         for migration in migrations:
             try:
@@ -825,6 +828,56 @@ def get_tracker_message_id(user_id: int, day_number: int) -> int | None:
             (user_id, day_number)
         ).fetchone()
     return row["message_id"] if row else None
+
+def set_lead_referral(user_id: int, referral_code: str):
+    """Сохраняет реферальный код блогера для Telegram-лида (только если ещё не задан)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET referral_code = ? WHERE user_id = ? AND referral_code IS NULL",
+            (referral_code, user_id)
+        )
+
+
+def set_max_lead_referral(max_user_id: int, referral_code: str):
+    """Сохраняет реферальный код блогера для MAX-лида (только если ещё не задан)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET referral_code = ? WHERE max_user_id = ? AND referral_code IS NULL",
+            (referral_code, max_user_id)
+        )
+
+
+def get_blogger_stats_tg() -> list:
+    """Статистика лидов по реферальным кодам (Telegram): переходы → купили."""
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT
+                referral_code,
+                COUNT(*)                          AS total,
+                SUM(subscribed_at IS NOT NULL)    AS subscribed,
+                SUM(lead_status = 'purchased')    AS purchased
+            FROM leads
+            WHERE referral_code IS NOT NULL
+            GROUP BY referral_code
+            ORDER BY purchased DESC, total DESC
+        """).fetchall()
+
+
+def get_blogger_stats_max() -> list:
+    """Статистика лидов по реферальным кодам (MAX): переходы → купили."""
+    with get_conn() as conn:
+        return conn.execute("""
+            SELECT
+                referral_code,
+                COUNT(*)                          AS total,
+                SUM(subscribed_at IS NOT NULL)    AS subscribed,
+                SUM(lead_status = 'purchased')    AS purchased
+            FROM max_leads
+            WHERE referral_code IS NOT NULL
+            GROUP BY referral_code
+            ORDER BY purchased DESC, total DESC
+        """).fetchall()
+
 
 def mark_lead_purchased(user_id: int):
     with get_conn() as conn:

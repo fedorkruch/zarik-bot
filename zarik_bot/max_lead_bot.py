@@ -606,10 +606,13 @@ async def _send_followup(bot: MaxClient, max_user_id: int, day: int):
 
 # ── Обработчики событий ───────────────────────────────────────
 
-async def on_bot_started(max_user_id: int, username: str, first_name: str):
-    logger.info(f"MAX lead on_bot_started: user_id={max_user_id}")
+async def on_bot_started(max_user_id: int, username: str, first_name: str, ref_code: str = ""):
+    logger.info(f"MAX lead on_bot_started: user_id={max_user_id} ref={ref_code!r}")
     bot = get_client()
     db.upsert_max_lead(max_user_id, username, first_name)
+    if ref_code:
+        db.set_max_lead_referral(max_user_id, ref_code)
+        logger.info(f"[REF] MAX user={max_user_id} ref={ref_code}")
 
     # Уже купил — редирект в основной бот
     if db.is_max_lead_purchased(max_user_id):
@@ -919,6 +922,26 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         logger.info(f"reset_user: admin={max_user_id} target={target_id}")
         return
 
+    if text.startswith("/bloggers"):
+        rows = db.get_blogger_stats_max()
+        if not rows:
+            await bot.send_message(max_user_id, "📊 Пока нет лидов с реферальными ссылками.")
+            return
+        total_all  = sum(r["total"]     for r in rows)
+        bought_all = sum(r["purchased"] for r in rows)
+        lines = [f"📊 **Блогеры — MAX лид-бот** (всего: {total_all} → купили: {bought_all})\n"]
+        for r in rows:
+            code  = r["referral_code"]
+            conv  = f"{r['purchased'] / r['total'] * 100:.0f}%" if r["total"] else "—"
+            sub_r = f"{r['subscribed'] / r['total'] * 100:.0f}%" if r["total"] else "—"
+            lines.append(
+                f"🔗 {code}\n"
+                f"   Переходов: {r['total']}  Подписались: {r['subscribed']} ({sub_r})"
+                f"  Купили: **{r['purchased']}** ({conv})"
+            )
+        await bot.send_message(max_user_id, "\n".join(lines))
+        return
+
     if text.startswith("/stats") or text.startswith("/leads"):
         f = db.get_max_funnel_stats()
         if not f or not f.get("total"):
@@ -1016,11 +1039,14 @@ async def process_update(data: dict):
         if update_type == "bot_started":
             user = data.get("user", {})
             max_user_id = user.get("user_id", 0)
-            logger.info(f"MAX lead bot_started: user_id={max_user_id} user={user}")
+            # payload содержит параметр ?start=... из реферальной ссылки блогера
+            ref_code = (data.get("payload") or "").strip()
+            logger.info(f"MAX lead bot_started: user_id={max_user_id} user={user} ref={ref_code!r}")
             await on_bot_started(
                 max_user_id=max_user_id,
                 username=user.get("username", ""),
                 first_name=user.get("name", ""),
+                ref_code=ref_code,
             )
 
         elif update_type == "message_created":

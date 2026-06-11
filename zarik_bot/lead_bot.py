@@ -448,6 +448,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     db.upsert_lead(user.id, user.username or "", user.first_name or "")
 
+    # Реферальный код блогера: /start ref_ivan
+    if context.args:
+        ref_code = context.args[0].strip()
+        if ref_code:
+            db.set_lead_referral(user.id, ref_code)
+            logger.info(f"[REF] user={user.id} ref={ref_code}")
+
     if db.is_payment_confirmed(user.id):
         await update.message.reply_text(
             f"✅ Ты уже в программе!\n\n"
@@ -938,6 +945,32 @@ async def cmd_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_bloggers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сводка по блогерам: переходы и покупки по реф-кодам (только для администратора)."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    rows = db.get_blogger_stats_tg()
+    if not rows:
+        await update.message.reply_text("📊 Пока нет лидов с реферальными ссылками.")
+        return
+
+    total_all = sum(r["total"] for r in rows)
+    bought_all = sum(r["purchased"] for r in rows)
+    lines = [f"📊 *Блогеры — @Shagov77\\_bot* (всего: {total_all} → купили: {bought_all})\n"]
+    for r in rows:
+        code  = r["referral_code"]
+        conv  = f"{r['purchased'] / r['total'] * 100:.0f}%" if r["total"] else "—"
+        sub_r = f"{r['subscribed'] / r['total'] * 100:.0f}%" if r["total"] else "—"
+        lines.append(
+            f"🔗 `{code}`\n"
+            f"   Переходов: {r['total']}  Подписались: {r['subscribed']} ({sub_r})"
+            f"  Купили: *{r['purchased']}* ({conv})"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
 # ── Сборка приложения ────────────────────────────────────────
 
 async def _post_init(application: Application) -> None:
@@ -980,6 +1013,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("reset_user", cmd_reset_user))
     app.add_handler(CommandHandler("leads", cmd_leads))
     app.add_handler(CommandHandler("funnel", cmd_funnel))
+    app.add_handler(CommandHandler("bloggers", cmd_bloggers))
     app.add_handler(CommandHandler("getxls", _cmd_getxls))
     app.add_handler(CommandHandler("getdb",  _cmd_getdb))
     app.add_handler(CallbackQueryHandler(handle_callback))
