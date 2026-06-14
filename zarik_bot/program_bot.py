@@ -540,6 +540,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.set_onboarding_step(user.id, "welcome")
         return
 
+    # ── Со-администраторы: обход оплаты без сброса ───────────
+    if user.id in CO_ADMIN_IDS and not db.is_payment_confirmed(user.id):
+        db.register_user(user.id, user.username or "", user.first_name or "")
+        db.save_payment(
+            user_id=user.id,
+            charge_id=f"coadmin_{user.id}",
+            participation_fee=0,
+            stake_amount=0,
+        )
+        logger.info(f"[CO_ADMIN] program_bot авто-пропуск user={user.id}")
+
     if not db.is_payment_confirmed(user.id):
         await update.message.reply_text(not_paid_message(), reply_markup=START_MENU)
         return
