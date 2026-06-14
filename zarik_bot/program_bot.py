@@ -61,6 +61,9 @@ SAD_IMG           = Path(__file__).parent / "Sad.png"
 # Загружаем из env — никаких ID в репозитории
 _test_ids_raw     = os.environ.get("TEST_USER_IDS", "")
 TEST_USER_IDS     = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
+# Со-администраторы: полный доступ к командам, оплата сохраняется при сбросе
+_co_admin_raw     = os.environ.get("CO_ADMIN_IDS", "")
+CO_ADMIN_IDS      = {int(x) for x in _co_admin_raw.split(",") if x.strip().isdigit()}
 VERSION           = "v2.1-miniapp"  # меняй чтобы проверить версию деплоя
 
 logging.basicConfig(
@@ -1206,7 +1209,7 @@ async def job_weekly(context: ContextTypes.DEFAULT_TYPE):
 # ── Админ-команды ─────────────────────────────────────────────
 
 def is_admin(user_id: int) -> bool:
-    return user_id == ADMIN_ID
+    return user_id == ADMIN_ID or user_id in CO_ADMIN_IDS
 
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1374,20 +1377,16 @@ async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args      = context.args
     target_id = int(args[0]) if args and args[0].isdigit() else update.effective_user.id
 
-    if target_id in TEST_USER_IDS:
-        # Сначала гарантируем наличие строки в users (INSERT OR IGNORE)
-        # — иначе UPDATE в reset/save_payment ничего не сделает
-        db.register_user(target_id, "", "Тест")
+    if target_id in TEST_USER_IDS or target_id in CO_ADMIN_IDS:
         # Мягкий сброс: история удаляется, оплата сохраняется
+        db.register_user(target_id, "", "Admin" if target_id in CO_ADMIN_IDS else "Тест")
         db.reset_user_keep_payment(target_id)
-        # Гарантируем что оплата проставлена
         db.save_payment(
             user_id=target_id,
-            charge_id=f"test_{target_id}",
+            charge_id=f"coadmin_{target_id}" if target_id in CO_ADMIN_IDS else f"test_{target_id}",
             participation_fee=0,
             stake_amount=0,
         )
-        # Автоматически запускаем онбординг для этого пользователя
         try:
             await context.bot.send_message(
                 chat_id=target_id,
@@ -1397,8 +1396,9 @@ async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.set_onboarding_step(target_id, "welcome")
         except Exception as e:
             logger.warning(f"reset_user: не смог отправить /start для {target_id}: {e}")
+        label = "Со-администратор" if target_id in CO_ADMIN_IDS else "Тест-пользователь"
         await update.message.reply_text(
-            f"🛠 Тест-пользователь {target_id} сброшен (оплата сохранена).\n"
+            f"🛠 {label} {target_id} сброшен (оплата сохранена).\n"
             f"✅ Стартовое сообщение отправлено."
         )
     else:
@@ -1478,7 +1478,7 @@ async def _post_init(application: Application) -> None:
 
 
 from admin_utils import make_admin_commands as _make_admin_commands
-cmd_getxls, cmd_getdb = _make_admin_commands(ADMIN_ID)
+cmd_getxls, cmd_getdb = _make_admin_commands(ADMIN_ID, extra_ids=CO_ADMIN_IDS)
 
 
 async def cmd_fixphotos(update: Update, context: ContextTypes.DEFAULT_TYPE):

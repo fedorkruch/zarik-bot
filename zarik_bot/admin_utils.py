@@ -145,17 +145,20 @@ def export_db_to_excel(output_path: str):
 
 # ── Telegram-хендлеры ─────────────────────────────────────────
 
-def make_admin_commands(admin_id: int):
+def make_admin_commands(admin_id: int, extra_ids: set | None = None):
     """
-    Возвращает готовые async-хендлеры cmd_getxls и cmd_getdb,
-    привязанные к конкретному admin_id.
+    Возвращает готовые async-хендлеры cmd_getxls и cmd_getdb.
+    extra_ids — дополнительные администраторы (CO_ADMIN_IDS).
     """
     from telegram.ext import ContextTypes
     from telegram import Update
 
+    def _ok(user_id: int) -> bool:
+        return user_id == admin_id or (bool(extra_ids) and user_id in extra_ids)
+
     async def cmd_getxls(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Выгружает БД в Excel и отправляет файл (только для admin)."""
-        if update.effective_user.id != admin_id:
+        if not _ok(update.effective_user.id):
             return
         msg = await update.message.reply_text("⏳ Формирую Excel...")
         tmp_path = None
@@ -180,7 +183,7 @@ def make_admin_commands(admin_id: int):
 
     async def cmd_getdb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Отправляет сырой .db файл (только для admin)."""
-        if update.effective_user.id != admin_id:
+        if not _ok(update.effective_user.id):
             return
         db_path = db.DB_PATH
         if not Path(db_path).exists():

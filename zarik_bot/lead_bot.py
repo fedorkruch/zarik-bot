@@ -54,6 +54,15 @@ CHANNEL_URL          = "https://t.me/kabanovofficial"
 _test_ids_raw = os.environ.get("TEST_USER_IDS", "")
 TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
 
+# ── Со-администраторы (полный доступ к командам, обход оплаты) ─
+_co_admin_raw = os.environ.get("CO_ADMIN_IDS", "")
+CO_ADMIN_IDS  = {int(x) for x in _co_admin_raw.split(",") if x.strip().isdigit()}
+
+
+def _is_admin(user_id: int) -> bool:
+    """True для главного администратора и со-администраторов."""
+    return user_id == ADMIN_ID or user_id in CO_ADMIN_IDS
+
 # ── Цены ─────────────────────────────────────────────────────
 COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
 COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
@@ -447,6 +456,18 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _last_start[user.id] = now
 
     db.upsert_lead(user.id, user.username or "", user.first_name or "")
+
+    # Со-администратор: автоматически подтверждаем оплату при первом входе
+    if user.id in CO_ADMIN_IDS and not db.is_payment_confirmed(user.id):
+        db.register_user(user.id, user.username or "", user.first_name or "")
+        db.save_payment(
+            user_id=user.id,
+            charge_id=f"coadmin_{user.id}",
+            participation_fee=0,
+            stake_amount=0,
+        )
+        db.mark_lead_purchased(user.id)
+        logger.info(f"[CO_ADMIN] авто-пропуск user={user.id}")
 
     # Реферальный код блогера: /start ref_ivan
     if context.args:
@@ -845,7 +866,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сбрасывает лида — удаляет из таблицы leads (только для администратора)."""
-    if update.effective_user.id != ADMIN_ID:
+    if not _is_admin(update.effective_user.id):
         return
     args = context.args
     if not args or not args[0].isdigit():
@@ -865,23 +886,33 @@ DEV_USER_IDS = {283760217, 262479340}
 
 
 async def cmd_reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сбрасывает себя — для тестирования воронки заново. Доступно dev-пользователям."""
+    """Сброс воронки. DEV — полный; CO_ADMIN — только история, оплата сохраняется."""
     user_id = update.effective_user.id
-    if user_id not in DEV_USER_IDS:
-        return
-    with db.get_conn() as conn:
-        conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
-        conn.execute("UPDATE users SET payment_charge_id = NULL WHERE user_id = ?", (user_id,))
-    # Сбрасываем in-memory состояние
-    _user_last.pop(user_id, None)
-    context.user_data.clear()
-    await update.message.reply_text("✅ Твой аккаунт сброшен. Отправь /start — начнём с начала.")
-    logger.info(f"DEV сброс: user={user_id}")
+    if user_id in DEV_USER_IDS:
+        # Полный сброс: удаляем лида и обнуляем оплату (для dev-тестирования)
+        with db.get_conn() as conn:
+            conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
+            conn.execute("UPDATE users SET payment_charge_id = NULL WHERE user_id = ?", (user_id,))
+        _user_last.pop(user_id, None)
+        context.user_data.clear()
+        await update.message.reply_text("✅ Твой аккаунт сброшен. Отправь /start — начнём с начала.")
+        logger.info(f"DEV сброс: user={user_id}")
+    elif user_id in CO_ADMIN_IDS:
+        # Мягкий сброс: только история воронки, оплата в users не трогается
+        with db.get_conn() as conn:
+            conn.execute("DELETE FROM leads WHERE user_id = ?", (user_id,))
+        _user_last.pop(user_id, None)
+        context.user_data.clear()
+        await update.message.reply_text(
+            "✅ История воронки сброшена. Оплата сохранена.\n"
+            "Отправь /start — начнём с начала."
+        )
+        logger.info(f"CO_ADMIN сброс воронки: user={user_id}")
 
 
 async def cmd_leads(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает CRM-статистику по лидам (только для администратора)."""
-    if update.effective_user.id != ADMIN_ID:
+    if not _is_admin(update.effective_user.id):
         return
 
     f = db.get_funnel_stats()
@@ -907,7 +938,7 @@ async def cmd_leads(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальная воронка с конверсией на каждом шаге (только для администратора)."""
-    if update.effective_user.id != ADMIN_ID:
+    if not _is_admin(update.effective_user.id):
         return
 
     f = db.get_funnel_stats()
@@ -947,7 +978,7 @@ async def cmd_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_bloggers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сводка по блогерам: переходы и покупки по реф-кодам (только для администратора)."""
-    if update.effective_user.id != ADMIN_ID:
+    if not _is_admin(update.effective_user.id):
         return
 
     rows = db.get_blogger_stats_tg()
@@ -1006,7 +1037,7 @@ def build_app() -> Application:
         .build()
     )
 
-    _cmd_getxls, _cmd_getdb = _make_admin_commands(ADMIN_ID)
+    _cmd_getxls, _cmd_getdb = _make_admin_commands(ADMIN_ID, extra_ids=CO_ADMIN_IDS)
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("reset", cmd_reset))
