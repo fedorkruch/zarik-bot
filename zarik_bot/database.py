@@ -194,6 +194,10 @@ def init_db():
             # Реферальные коды блогеров
             "ALTER TABLE leads ADD COLUMN referral_code TEXT DEFAULT NULL",
             "ALTER TABLE max_leads ADD COLUMN referral_code TEXT DEFAULT NULL",
+            # Промокод
+            "ALTER TABLE leads ADD COLUMN promo_code TEXT DEFAULT NULL",
+            "ALTER TABLE max_leads ADD COLUMN promo_code TEXT DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN promo_code TEXT DEFAULT NULL",
         ]
         for migration in migrations:
             try:
@@ -828,6 +832,51 @@ def get_tracker_message_id(user_id: int, day_number: int) -> int | None:
             (user_id, day_number)
         ).fetchone()
     return row["message_id"] if row else None
+
+def set_lead_promo_code(user_id: int, promo_code: str):
+    """Сохраняет промокод Telegram-лида."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE leads SET promo_code = ? WHERE user_id = ?",
+            (promo_code.upper(), user_id)
+        )
+
+
+def set_max_lead_promo_code(max_user_id: int, promo_code: str):
+    """Сохраняет промокод MAX-лида."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE max_leads SET promo_code = ? WHERE max_user_id = ?",
+            (promo_code.upper(), max_user_id)
+        )
+
+
+def save_user_promo_code(user_id: int, promo_code: str):
+    """Сохраняет промокод в таблицу пользователей (после подтверждения оплаты)."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET promo_code = ? WHERE user_id = ?",
+            (promo_code.upper(), user_id)
+        )
+
+
+def get_lead_promo_code(user_id: int) -> str | None:
+    """Возвращает промокод Telegram-лида."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT promo_code FROM leads WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return row["promo_code"] if row else None
+
+
+def get_max_lead_promo_code(max_user_id: int) -> str | None:
+    """Возвращает промокод MAX-лида."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT promo_code FROM max_leads WHERE max_user_id = ?", (max_user_id,)
+        ).fetchone()
+    return row["promo_code"] if row else None
+
 
 def set_lead_referral(user_id: int, referral_code: str):
     """Сохраняет реферальный код блогера для Telegram-лида (только если ещё не задан)."""

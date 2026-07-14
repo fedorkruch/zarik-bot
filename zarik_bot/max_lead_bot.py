@@ -56,11 +56,14 @@ _test_ids_raw = os.environ.get("MAX_TEST_USER_IDS", "")
 TEST_USER_IDS = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdigit()}
 
 # ── Цены ─────────────────────────────────────────────────────
-COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
-COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
-MIN_STAKE_PROD    = 10_000    # 100 ₽
-MIN_STAKE_TEST    = 1_000     # 10 ₽
-MAX_STAKE_KOPECKS = 5_000_000 # 50 000 ₽ — верхний предел ставки
+COURSE_PRICE_PROD  = 199_000   # 1990 ₽ — боевой
+COURSE_PRICE_TEST  = 6_000     # 60 ₽  — тест
+COURSE_PRICE_PROMO = 149_000   # 1490 ₽ — по промокоду
+MIN_STAKE_PROD     = 10_000    # 100 ₽
+MIN_STAKE_TEST     = 1_000     # 10 ₽
+MAX_STAKE_KOPECKS  = 5_000_000 # 50 000 ₽ — верхний предел ставки
+
+PROMO_CODES = {"BYDA"}   # действующие промокоды (верхний регистр)
 
 def _price_for(max_user_id: int) -> int:
     return COURSE_PRICE_TEST if max_user_id in TEST_USER_IDS else COURSE_PRICE_PROD
@@ -270,6 +273,10 @@ def _offer_buttons() -> list[list[dict]]:
     return [[_btn_callback("🚀 Начать за 1990 ₽", "buy_course")]]
 
 
+def _promo_buttons() -> list[list[dict]]:
+    return [[_btn_callback("➡️ Пропустить", "promo_skip")]]
+
+
 def _stake_confirm_buttons() -> list[list[dict]]:
     return [
         [_btn_callback("✅ Да, хочу поставить", "stake_yes")],
@@ -427,9 +434,11 @@ async def send_course_payment_link(
     full_name: str = "",
     email: str = "",
     phone: str = "",
+    course_kopecks: int = 0,
 ):
     """Создаёт платёж в ЮКасса и отправляет пользователю ссылку для оплаты."""
-    course_kopecks = _price_for(max_user_id)
+    if not course_kopecks:
+        course_kopecks = _price_for(max_user_id)
     bot = get_client()
 
     # Сохраняем данные покупателя в БД
@@ -531,7 +540,7 @@ async def _step_no_pressure(max_user_id: int):
     if db.is_max_lead_purchased(max_user_id):
         return
     state = _user_state.get(max_user_id, {})
-    if any(state.get(k) for k in ("awaiting_stake", "awaiting_name", "awaiting_email", "awaiting_phone")):
+    if any(state.get(k) for k in ("awaiting_promo", "awaiting_stake", "awaiting_name", "awaiting_email", "awaiting_phone")):
         return
     bot = get_client()
     await bot.send_message(max_user_id, NO_PRESSURE_TEXT)
@@ -602,6 +611,20 @@ async def _send_followup(bot: MaxClient, max_user_id: int, day: int):
         logger.info(f"MAX follow-up day {day} → user={max_user_id}")
     except Exception as e:
         logger.warning(f"MAX follow-up day {day} error user={max_user_id}: {e}")
+
+
+async def _ask_stake_max(max_user_id: int):
+    """Отправляет вопрос о ставке после промокода (MAX)."""
+    bot = get_client()
+    min_r = _min_stake_for(max_user_id) // 100
+    stake_text = (
+        f"🎯 **Хочешь добавить ставку на себя?**\n\n"
+        f"Ставка добавляется к стоимости программы.\n"
+        f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
+        f"*Минимальная сумма — {min_r} ₽.*"
+    )
+    await bot.send_message(max_user_id, stake_text, buttons=_stake_confirm_buttons())
+    db.mark_max_lead_stake_asked(max_user_id)
 
 
 # ── Обработчики событий ───────────────────────────────────────
@@ -687,7 +710,7 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             # Второй «нет» — через 30 сек автоматически идём дальше
             _call_later(30, lambda: _step_send_intro(max_user_id))
 
-    # ── Покупка курса → предложение ставки ───────────────────
+    # ── Покупка курса → вопрос о промокоде ───────────────────
     elif payload == "buy_course":
         await bot.answer_callback(callback_id)
         if db.is_max_lead_purchased(max_user_id):
@@ -697,15 +720,21 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
             )
             return
         db.mark_max_lead_start_clicked(max_user_id)
-        min_r = _min_stake_for(max_user_id) // 100
-        stake_text = (
-            f"🎯 **Хочешь добавить ставку на себя?**\n\n"
-            f"Ставка добавляется к стоимости программы.\n"
-            f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
-            f"*Минимальная сумма — {min_r} ₽.*"
+        _user_state[max_user_id] = {"awaiting_promo": True}
+        await bot.send_message(
+            max_user_id,
+            "🎟 **Есть промокод на скидку?**\n\nВведи промокод или нажми «Пропустить» 👇",
+            buttons=_promo_buttons()
         )
-        await bot.send_message(max_user_id, stake_text, buttons=_stake_confirm_buttons())
-        db.mark_max_lead_stake_asked(max_user_id)
+
+    # ── Промокод: пропустить ──────────────────────────────────
+    elif payload == "promo_skip":
+        await bot.answer_callback(callback_id)
+        if db.is_max_lead_purchased(max_user_id):
+            return
+        promo_kopecks = _user_state.get(max_user_id, {}).get("promo_kopecks", 0)
+        _user_state[max_user_id] = {"promo_kopecks": promo_kopecks}
+        await _ask_stake_max(max_user_id)
 
     # ── Да, хочу ставку → просим ввести сумму ────────────────
     elif payload == "stake_yes":
@@ -713,7 +742,8 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         if db.is_max_lead_purchased(max_user_id):
             return
         db.mark_max_lead_stake_choice(max_user_id, "yes")
-        _user_state[max_user_id] = {"awaiting_stake": True}
+        promo_kopecks = _user_state.get(max_user_id, {}).get("promo_kopecks", 0)
+        _user_state[max_user_id] = {"awaiting_stake": True, "promo_kopecks": promo_kopecks}
         min_r = _min_stake_for(max_user_id) // 100
         await bot.send_message(
             max_user_id,
@@ -726,7 +756,8 @@ async def on_callback(max_user_id: int, callback_id: str, payload: str,
         if db.is_max_lead_purchased(max_user_id):
             return
         db.mark_max_lead_stake_choice(max_user_id, "no")
-        _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": 0}
+        promo_kopecks = _user_state.get(max_user_id, {}).get("promo_kopecks", 0)
+        _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": 0, "promo_kopecks": promo_kopecks}
         await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
 
 
@@ -763,6 +794,24 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
     # Проверяем ДО разделения на admin/user — состояние может быть у любого
     state = _user_state.get(max_user_id, {})
 
+    if state.get("awaiting_promo"):
+        code = text.strip().upper()
+        if code in PROMO_CODES:
+            db.set_max_lead_promo_code(max_user_id, code)
+            _user_state[max_user_id] = {"promo_kopecks": COURSE_PRICE_PROMO}
+            await bot.send_message(
+                max_user_id,
+                f"✅ Промокод принят! Стоимость программы снижена до {COURSE_PRICE_PROMO // 100} ₽ 🎉"
+            )
+            await _ask_stake_max(max_user_id)
+        else:
+            await bot.send_message(
+                max_user_id,
+                "❌ Промокод не найден. Попробуй ещё раз или нажми «Пропустить» 👇",
+                buttons=_promo_buttons()
+            )
+        return
+
     if state.get("awaiting_stake"):
         min_stake = _min_stake_for(max_user_id)
         clean = text.strip().replace(",", ".").replace(" ", "")
@@ -792,7 +841,11 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         if db.is_max_lead_purchased(max_user_id):
             _user_state.pop(max_user_id, None)
             return
-        _user_state[max_user_id] = {"awaiting_name": True, "stake_kopecks": amount_kopecks}
+        _user_state[max_user_id] = {
+            "awaiting_name": True,
+            "stake_kopecks": amount_kopecks,
+            "promo_kopecks": state.get("promo_kopecks", 0),
+        }
         await bot.send_message(max_user_id, "📝 Введи своё полное имя (ФИО) для чека:")
         return
 
@@ -808,6 +861,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         _user_state[max_user_id] = {
             "awaiting_email": True,
             "stake_kopecks": state.get("stake_kopecks", 0),
+            "promo_kopecks": state.get("promo_kopecks", 0),
             "full_name": name,
         }
         await bot.send_message(max_user_id, "📧 Введи email для чека:")
@@ -824,6 +878,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         _user_state[max_user_id] = {
             "awaiting_phone": True,
             "stake_kopecks": state.get("stake_kopecks", 0),
+            "promo_kopecks": state.get("promo_kopecks", 0),
             "full_name": state.get("full_name", ""),
             "email": email,
         }
@@ -845,6 +900,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
         full_name     = state.get("full_name", "")
         email         = state.get("email", "")
         stake_kopecks = state.get("stake_kopecks", 0)
+        course_kopecks = state.get("promo_kopecks", 0) or _price_for(max_user_id)
         _user_state.pop(max_user_id, None)
         if db.is_max_lead_purchased(max_user_id):
             return
@@ -854,6 +910,7 @@ async def on_message(max_user_id: int, text: str, username: str, first_name: str
             full_name=full_name,
             email=email,
             phone=phone,
+            course_kopecks=course_kopecks,
         )
         return
 

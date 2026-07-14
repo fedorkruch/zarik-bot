@@ -64,10 +64,13 @@ def _is_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID or user_id in CO_ADMIN_IDS
 
 # ── Цены ─────────────────────────────────────────────────────
-COURSE_PRICE_PROD = 199_000   # 1990 ₽ — боевой
-COURSE_PRICE_TEST = 6_000     # 60 ₽  — тест
-MIN_STAKE_PROD    = 10_000    # 100 ₽
-MIN_STAKE_TEST    = 1_000     # 10 ₽
+COURSE_PRICE_PROD  = 199_000   # 1990 ₽ — боевой
+COURSE_PRICE_TEST  = 6_000     # 60 ₽  — тест
+COURSE_PRICE_PROMO = 149_000   # 1490 ₽ — по промокоду
+MIN_STAKE_PROD     = 10_000    # 100 ₽
+MIN_STAKE_TEST     = 1_000     # 10 ₽
+
+PROMO_CODES = {"BYDA"}   # действующие промокоды (верхний регистр)
 
 def _price_for(user_id: int) -> int:
     """Стоимость программы в копейках: тест для TEST_USER_IDS, боевая для всех остальных."""
@@ -124,6 +127,13 @@ def stake_confirm_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Да, хочу поставить", callback_data="stake_yes")],
         [InlineKeyboardButton("➡️ Нет, перейти к оплате", callback_data="stake_no")],
+    ])
+
+
+def promo_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка «Пропустить» под вопросом о промокоде."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➡️ Пропустить", callback_data="promo_skip")],
     ])
 
 
@@ -495,6 +505,25 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(sub_text, reply_markup=subscribe_keyboard())
 
 
+async def _ask_stake(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет вопрос о ставке после промокода."""
+    min_r = _min_stake_for(user_id) // 100
+    stake_text = (
+        f"🎯 *Хочешь добавить ставку на себя?*\n\n"
+        f"Ставка добавляется к стоимости программы.\n"
+        f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
+        f"_Минимальная сумма — {min_r} ₽._"
+    )
+    _remember(user_id, stake_text, markup=stake_confirm_keyboard())
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=stake_text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=stake_confirm_keyboard(),
+    )
+    db.mark_lead_stake_asked(user_id)
+
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -594,7 +623,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # ── Покупка курса → предложение ставки ───────────────────
+    # ── Покупка курса → вопрос о промокоде ──────────────────
     if data == "buy_course":
         await query.answer()
         if db.is_payment_confirmed(user_id):
@@ -608,21 +637,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             return
         db.mark_lead_start_clicked(user_id)
-        min_r = _min_stake_for(user_id) // 100
-        stake_text = (
-            f"🎯 *Хочешь добавить ставку на себя?*\n\n"
-            f"Ставка добавляется к стоимости программы.\n"
-            f"Пройдёшь все 77 дней — вернём её обратно.\n\n"
-            f"_Минимальная сумма — {min_r} ₽._"
+        context.user_data["awaiting_promo"] = True
+        promo_text = (
+            "🎟 *Есть промокод на скидку?*\n\n"
+            "Введи промокод или нажми «Пропустить» 👇"
         )
-        _remember(user_id, stake_text, markup=stake_confirm_keyboard())
+        _remember(user_id, promo_text, markup=promo_keyboard())
         await context.bot.send_message(
             chat_id=user_id,
-            text=stake_text,
+            text=promo_text,
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=stake_confirm_keyboard(),
+            reply_markup=promo_keyboard(),
         )
-        db.mark_lead_stake_asked(user_id)
+        return
+
+    # ── Промокод: пропустить ──────────────────────────────────
+    if data == "promo_skip":
+        await query.answer()
+        if db.is_payment_confirmed(user_id):
+            return
+        context.user_data.pop("awaiting_promo", None)
+        context.user_data.pop("promo_kopecks", None)
+        await _ask_stake(user_id, context)
         return
 
     # ── Да, хочу ставку → просим ввести сумму ────────────────
@@ -660,6 +696,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Текстовые сообщения: ввод ставки, реакция на «скидку», или защита от случайного ввода."""
     user_id = update.effective_user.id
     text = update.message.text or ""
+
+    # 0. Ждём промокод
+    if context.user_data.get("awaiting_promo"):
+        code = text.strip().upper()
+        if code in PROMO_CODES:
+            context.user_data.pop("awaiting_promo", None)
+            context.user_data["promo_kopecks"] = COURSE_PRICE_PROMO
+            db.set_lead_promo_code(user_id, code)
+            await update.message.reply_text(
+                f"✅ Промокод принят! Стоимость программы снижена до {COURSE_PRICE_PROMO // 100} ₽ 🎉"
+            )
+            await _ask_stake(user_id, context)
+        else:
+            await update.message.reply_text(
+                "❌ Промокод не найден. Попробуй ещё раз или нажми «Пропустить» 👇",
+                reply_markup=promo_keyboard(),
+            )
+        return
 
     # 1. Ждём ввод суммы ставки — обрабатываем как число
     if context.user_data.get("awaiting_stake"):
@@ -754,7 +808,7 @@ async def send_course_invoice(
     stake_kopecks: int = 0,
 ):
     """Отправляет счёт на оплату: стоимость программы + ставка."""
-    course_kopecks = _price_for(chat_id)
+    course_kopecks = context.user_data.get("promo_kopecks") or _price_for(chat_id)
     prices = [LabeledPrice("Программа «Зарик 77 дней»", course_kopecks)]
     if stake_kopecks > 0:
         prices.append(LabeledPrice("Ставка на себя (вернём при завершении)", stake_kopecks))
@@ -833,7 +887,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     except Exception:
         stake_kopecks = 0
 
-    fee_kopecks = _price_for(user.id)
+    fee_kopecks = payment.total_amount - stake_kopecks  # реальная сумма за программу
     db.register_user(user.id, user.username or "", user.first_name or "")
     db.save_payment(
         user_id=user.id,
@@ -842,7 +896,11 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         stake_amount=stake_kopecks,
     )
     db.mark_lead_purchased(user.id)
-    logger.info(f"Новый участник: {user.id} | {user.first_name} | ставка={stake_kopecks // 100}₽")
+    # Сохраняем промокод в таблицу users (если был применён)
+    promo = db.get_lead_promo_code(user.id)
+    if promo:
+        db.save_user_promo_code(user.id, promo)
+    logger.info(f"Новый участник: {user.id} | {user.first_name} | ставка={stake_kopecks // 100}₽ | promo={promo}")
 
     await _notify_admin_tg_new_user(
         context.bot,

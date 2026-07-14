@@ -902,6 +902,10 @@ async def handle_yookassa_webhook(request: web.Request) -> web.Response:
         # save_payment ставит onboarding_step='timezone'; откатываем на 'welcome'
         # чтобы программный бот показал приветственный экран
         db.set_onboarding_step(internal_uid, "welcome")
+        # Сохраняем промокод из max_leads в users (если был применён)
+        promo = db.get_max_lead_promo_code(max_user_id)
+        if promo:
+            db.save_user_promo_code(internal_uid, promo)
         logger.info(
             f"YooKassa: payment saved to users table: "
             f"max_user_id={max_user_id} internal_uid={internal_uid}"
