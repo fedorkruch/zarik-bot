@@ -52,7 +52,7 @@ def run_teo():
     Отдельный процесс = изоляция зависимостей, нет конфликтов модулей.
     """
     sasha_dir = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sasha_bot")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "teo_bot")
     )
     while True:
         try:
