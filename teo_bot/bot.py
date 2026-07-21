@@ -20,21 +20,17 @@ import claude_client as claude
 
 logger = logging.getLogger(__name__)
 
-# ── Шаг 1: приветствие + выбор пола (показывается при /start) ────────────────
+# ── Стартовое сообщение (intro + вопрос про имя в одном) ─────────────────────
 
-START_INTRO = (
+START_MESSAGE = (
     "Привет. Я ТЕО — твой личный наставник.\n\n"
     "Я здесь чтобы помочь тебе прийти к тому чего ты по-настоящему хочешь. "
     "Неважно в какой сфере — карьера, деньги, здоровье, отношения, отдых, смысл. "
     "Для меня нет правильных или неправильных тем.\n\n"
     "Мы будем работать вместе — разберёмся что важно именно тебе, разложим это на шаги "
     "и будем двигаться. Без давления, без осуждения.\n\n"
-    "Прежде чем начать — я могу быть леди, а могу джентльменом. С кем тебе комфортнее?"
+    "Как тебя зовут?"
 )
-
-# ── Шаг 3: вопрос про имя (после выбора пола, сохраняется в историю) ─────────
-
-NAME_ASK = "Как тебя зовут?"
 
 TIME_ASK_MESSAGE = (
     "Последний вопрос — в какое время тебе удобно получать задачи на день?\n\n"
@@ -118,34 +114,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     db.upsert_user(user.id, user.username or "", user.first_name or "")
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🌸 Леди", callback_data="gender:female"),
-            InlineKeyboardButton("🎩 Джентльмен", callback_data="gender:male"),
-        ]
-    ])
+    # Сохраняем intro в историю — Claude видит контекст с первого сообщения
+    db.save_message(user.id, "assistant", START_MESSAGE)
+    db.set_onboarding_step(user.id, "onboarding")
 
-    # Шаг 1 + 2: полное intro и выбор пола в одном сообщении
-    await update.message.reply_text(START_INTRO, reply_markup=keyboard)
-    db.set_onboarding_step(user.id, "awaiting_gender")
-
-
-async def handle_gender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if not query.data.startswith("gender:"):
-        return
-
-    _, gender = query.data.split(":", 1)
-    user_id = query.from_user.id
-
-    db.set_gender(user_id, gender)
-    db.set_onboarding_step(user_id, "onboarding")
-
-    # Шаг 3: просто спрашиваем имя. Сохраняем в историю — Claude видит что уже спросили.
-    db.save_message(user_id, "assistant", NAME_ASK)
-    await query.message.reply_text(NAME_ASK)
+    await update.message.reply_text(START_MESSAGE)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,13 +134,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     step = user_data.get("onboarding_step", "start")
-
-    # ── Ждём выбора пола ──────────────────────────────────────────────────────
-    if step == "awaiting_gender":
-        await update.message.reply_text(
-            "Сначала выбери образ ТЕО кнопками выше 👆"
-        )
-        return
 
     # ── Ждём время ────────────────────────────────────────────────────────────
     if step == "awaiting_time":
@@ -232,7 +198,6 @@ def build_app() -> Application:
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("reset", cmd_reset))
-    app.add_handler(CallbackQueryHandler(handle_gender_callback, pattern=r"^gender:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     return app
