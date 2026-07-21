@@ -150,7 +150,7 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
     # Первый вызов Claude (Haiku — в 12x дешевле Sonnet при том же качестве диалога)
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=300,
+        max_tokens=400,
         system=system,
         messages=messages,
         tools=TOOLS,
@@ -184,7 +184,7 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
 
         response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=300,
+            max_tokens=400,
             system=system,
             messages=messages,
             tools=TOOLS,
