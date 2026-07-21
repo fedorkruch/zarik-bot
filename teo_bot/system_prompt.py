@@ -134,7 +134,7 @@ def build_system_prompt(
     if is_onboarding:
         instructions = ONBOARDING_INSTRUCTIONS
         # Если затянулся — жёсткий сигнал перейти к целям
-        if message_count >= 8:
+        if message_count >= 6:
             instructions += (
                 f"\n\n⚡ СТОП: уже {message_count} обменов репликами. "
                 "Немедленно переходи к формулировке целей и вызывай save_goals — "
