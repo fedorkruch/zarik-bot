@@ -131,10 +131,12 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
     today_tasks = db.get_today_tasks(user_id)
     memory = db.get_memory(user_id)
 
-    system = build_system_prompt(user, goals, today_tasks, memory)
+    # История сообщений (последние 10 — экономим токены)
+    recent = db.get_recent_messages(user_id, limit=10)
+    message_count = len(recent)
 
-    # История сообщений
-    recent = db.get_recent_messages(user_id, limit=20)
+    system = build_system_prompt(user, goals, today_tasks, memory, message_count=message_count)
+
     messages = [{"role": m["role"], "content": m["content"]} for m in recent]
     messages.append({"role": "user", "content": user_message})
 
@@ -144,10 +146,10 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
     client = get_client()
     tool_calls_made: list[dict] = []
 
-    # Первый вызов Claude
+    # Первый вызов Claude (Haiku — в 12x дешевле Sonnet при том же качестве диалога)
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
         system=system,
         messages=messages,
         tools=TOOLS,
@@ -180,8 +182,8 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
         messages.append({"role": "user", "content": tool_results})
 
         response = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
             system=system,
             messages=messages,
             tools=TOOLS,
