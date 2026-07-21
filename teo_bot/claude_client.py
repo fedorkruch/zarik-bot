@@ -131,8 +131,8 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
     today_tasks = db.get_today_tasks(user_id)
     memory = db.get_memory(user_id)
 
-    # История сообщений (последние 10 — экономим токены)
-    recent = db.get_recent_messages(user_id, limit=10)
+    # История сообщений (последние 8 — экономим токены)
+    recent = db.get_recent_messages(user_id, limit=8)
     message_count = len(recent)
 
     system = build_system_prompt(user, goals, today_tasks, memory, message_count=message_count)
@@ -149,7 +149,7 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
     # Первый вызов Claude (Haiku — в 12x дешевле Sonnet при том же качестве диалога)
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=400,
+        max_tokens=300,
         system=system,
         messages=messages,
         tools=TOOLS,
@@ -183,7 +183,7 @@ async def chat(user_id: int, user_message: str) -> tuple[str, list[dict]]:
 
         response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+            max_tokens=300,
             system=system,
             messages=messages,
             tools=TOOLS,
