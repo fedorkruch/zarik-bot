@@ -2,18 +2,30 @@
 bot.py — Telegram-бот «ТЕО».
 Онбординг-машина + роутинг сообщений в Claude API.
 """
+import hashlib
+import hmac
 import os
 import re
+import time
 import logging
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import (
     Application,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
 )
+
+WEBAPP_URL    = os.getenv("WEBAPP_URL", "")
+TEO_BOT_TOKEN = os.getenv("TEO_BOT_TOKEN", "")
+
+
+def _tracker_url(user_id: int) -> str:
+    """Генерирует подписанный URL трекера (действует 10 минут)."""
+    ts  = int(time.time())
+    sig = hmac.new(TEO_BOT_TOKEN.encode(), f"{user_id}:{ts}".encode(), hashlib.sha256).hexdigest()
+    return f"{WEBAPP_URL}/teo?uid={user_id}&ts={ts}&sig={sig}"
 
 import database as db
 import claude_client as claude
@@ -152,6 +164,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Готово. Задачи буду присылать в {time_str} ({city}).\n\n"
             "Всё, мы начали. Сегодня просто поживи — завтра утром ТЕО пришлёт первые задачи 🌿"
         )
+
+        # Кнопка трекера (если настроен WEBAPP_URL)
+        if WEBAPP_URL and TEO_BOT_TOKEN:
+            url = _tracker_url(user.id)
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("📊 Открыть трекер", web_app=WebAppInfo(url=url))
+            ]])
+            await update.message.reply_text(
+                "Все цели и задачи уже в трекере — открывай в любой момент:",
+                reply_markup=keyboard,
+            )
         return
 
     # ── Все остальные состояния → Claude ─────────────────────────────────────

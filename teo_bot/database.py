@@ -235,6 +235,56 @@ def complete_task(task_id: int):
         )
 
 
+def toggle_task(task_id: int) -> bool:
+    """Переключает completed 0↔1. Возвращает новое состояние (True = выполнено)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT completed FROM teo_tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        new_status = 0 if row["completed"] else 1
+        conn.execute(
+            """UPDATE teo_tasks
+               SET completed = ?,
+                   completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
+               WHERE id = ?""",
+            (new_status, new_status, task_id),
+        )
+    return bool(new_status)
+
+
+def get_week_tasks_with_goals(user_id: int) -> list[dict]:
+    """Задачи на неделю с полями цели (area, goal_text)."""
+    today = date.today()
+    week_end = (today + timedelta(days=6)).isoformat()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT t.*, g.area, g.goal_text, g.true_goal
+               FROM teo_tasks t
+               LEFT JOIN teo_goals g ON t.goal_id = g.id
+               WHERE t.user_id = ? AND t.scheduled_date BETWEEN ? AND ?
+               ORDER BY t.scheduled_date, t.id""",
+            (user_id, today.isoformat(), week_end),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_today_tasks_with_goals(user_id: int) -> list[dict]:
+    """Задачи на сегодня с полями цели."""
+    today = date.today().isoformat()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT t.*, g.area, g.goal_text, g.true_goal
+               FROM teo_tasks t
+               LEFT JOIN teo_goals g ON t.goal_id = g.id
+               WHERE t.user_id = ? AND t.scheduled_date = ?
+               ORDER BY t.id""",
+            (user_id, today),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ── Messages ───────────────────────────────────────────────────────────────────
 
 def save_message(user_id: int, role: str, content: str):

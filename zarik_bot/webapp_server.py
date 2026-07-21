@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 PROGRAM_BOT_TOKEN   = os.environ.get("PROGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN", "")
 MAX_PROGRAM_TOKEN   = os.environ.get("MAX_PROGRAM_BOT_TOKEN", "")
+TEO_BOT_TOKEN       = os.environ.get("TEO_BOT_TOKEN", "")
+TEO_DB_PATH         = os.environ.get("TEO_DB_PATH", "teo.db")
 PORT              = int(os.environ.get("PORT", 8080))
 ADMIN_ID          = int(os.environ["ADMIN_ID"])
 # Тест-пользователи загружаются из env — никаких ID в репозитории
@@ -31,6 +33,7 @@ TEST_USER_IDS     = {int(x) for x in _test_ids_raw.split(",") if x.strip().isdig
 # DEV-байпас доступен только если ENV != 'production'
 _IS_DEV           = os.environ.get("ENV", "production").lower() != "production"
 MINIAPP_HTML        = Path(__file__).parent / "miniapp.html"
+TEO_TRACKER_HTML    = Path(__file__).parent / "teo_tracker.html"
 TRACKER_GIFT_HTML   = Path(__file__).parent / "tracker_gift.html"
 APP_ICON            = Path(__file__).parent / "app_icon.jpg"
 HAPPY_IMG           = Path(__file__).parent / "Happy.png"
@@ -938,6 +941,163 @@ async def handle_yookassa_webhook(request: web.Request) -> web.Response:
     return web.Response(status=200)
 
 
+# ── ТЕО: авторизация и база данных ───────────────────────────
+
+import sqlite3 as _sqlite3
+from datetime import date as _date, timedelta as _timedelta
+
+
+def _teo_get_teo_user_id(request: web.Request) -> int | None:
+    """Авторизация для TEO Mini App: initData (TEO токен) или подписанный URL."""
+    # 1. Telegram initData подписанный TEO токеном
+    raw = request.headers.get("X-Init-Data") or request.rel_url.query.get("init_data", "")
+    if raw and TEO_BOT_TOKEN:
+        try:
+            params = _parse_init_data_params(raw)
+            hash_recv = params.pop("hash", None)
+            params.pop("signature", None)
+            if hash_recv:
+                auth_date = params.get("auth_date", "")
+                if auth_date.isdigit() and (_time.time() - int(auth_date)) <= _INIT_DATA_MAX_AGE:
+                    data_check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+                    secret = hmac.new(b"WebAppData", TEO_BOT_TOKEN.encode(), hashlib.sha256).digest()
+                    computed = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
+                    if hmac.compare_digest(computed, hash_recv):
+                        uid = json.loads(params.get("user", "{}")).get("id")
+                        if uid:
+                            return int(uid)
+        except Exception:
+            pass
+
+    # 2. Подписанный URL: ?uid=X&ts=Y&sig=Z (подписан TEO_BOT_TOKEN)
+    uid_q = request.rel_url.query.get("uid", "")
+    ts_q  = request.rel_url.query.get("ts", "")
+    sig_q = request.rel_url.query.get("sig", "")
+    if uid_q.lstrip("-").isdigit() and ts_q.isdigit() and sig_q and TEO_BOT_TOKEN:
+        uid = int(uid_q)
+        ts  = int(ts_q)
+        if abs(_time.time() - ts) <= 600:
+            msg      = f"{uid}:{ts}".encode()
+            expected = hmac.new(TEO_BOT_TOKEN.encode(), msg, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, sig_q):
+                return uid
+    return None
+
+
+def _teo_db():
+    conn = _sqlite3.connect(TEO_DB_PATH)
+    conn.row_factory = _sqlite3.Row
+    return conn
+
+
+def _teo_get_state(user_id: int) -> dict:
+    """Возвращает состояние пользователя ТЕО для трекера."""
+    today    = _date.today().isoformat()
+    week_end = (_date.today() + _timedelta(days=6)).isoformat()
+    conn = _teo_db()
+    try:
+        user = conn.execute(
+            "SELECT preferred_name, first_name FROM teo_users WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        name = (dict(user).get("preferred_name") or dict(user).get("first_name") or "") if user else ""
+
+        goals = [dict(r) for r in conn.execute(
+            "SELECT id, area, goal_text, true_goal FROM teo_goals WHERE user_id = ? AND active = 1 ORDER BY id",
+            (user_id,)
+        ).fetchall()]
+
+        today_tasks = [dict(r) for r in conn.execute(
+            """SELECT t.id, t.task_text, t.goal_id, t.completed, t.scheduled_date,
+                      g.area, g.goal_text as goal_label
+               FROM teo_tasks t
+               LEFT JOIN teo_goals g ON t.goal_id = g.id
+               WHERE t.user_id = ? AND t.scheduled_date = ?
+               ORDER BY t.id""",
+            (user_id, today)
+        ).fetchall()]
+
+        week_tasks = [dict(r) for r in conn.execute(
+            """SELECT t.id, t.task_text, t.goal_id, t.completed, t.scheduled_date,
+                      g.area, g.goal_text as goal_label
+               FROM teo_tasks t
+               LEFT JOIN teo_goals g ON t.goal_id = g.id
+               WHERE t.user_id = ? AND t.scheduled_date BETWEEN ? AND ?
+               ORDER BY t.scheduled_date, t.id""",
+            (user_id, today, week_end)
+        ).fetchall()]
+
+        # Приводим completed к bool
+        for t in today_tasks + week_tasks:
+            t["completed"] = bool(t["completed"])
+
+        return {"name": name, "goals": goals, "today_tasks": today_tasks, "week_tasks": week_tasks}
+    finally:
+        conn.close()
+
+
+def _teo_toggle_task(task_id: int, user_id: int) -> bool | None:
+    """Переключает completed 0↔1. Возвращает новое состояние или None если задача не найдена."""
+    conn = _teo_db()
+    try:
+        row = conn.execute(
+            "SELECT completed FROM teo_tasks WHERE id = ? AND user_id = ?",
+            (task_id, user_id)
+        ).fetchone()
+        if row is None:
+            return None
+        new_status = 0 if row["completed"] else 1
+        conn.execute(
+            """UPDATE teo_tasks
+               SET completed = ?,
+                   completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
+               WHERE id = ?""",
+            (new_status, new_status, task_id)
+        )
+        conn.commit()
+        return bool(new_status)
+    finally:
+        conn.close()
+
+
+# ── ТЕО маршруты ──────────────────────────────────────────────
+
+async def handle_teo_tracker(request: web.Request) -> web.Response:
+    """GET /teo — HTML-трекер задач ТЕО."""
+    html = TEO_TRACKER_HTML.read_text(encoding="utf-8")
+    return web.Response(text=html, content_type="text/html")
+
+
+async def handle_teo_state(request: web.Request) -> web.Response:
+    """GET /api/teo/state — данные пользователя для трекера."""
+    uid = _teo_get_teo_user_id(request)
+    if not uid:
+        return web.json_response({"error": "unauthorized"}, status=401)
+    try:
+        state = _teo_get_state(uid)
+        return web.json_response(state)
+    except Exception as e:
+        logger.exception(f"teo state error for {uid}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_teo_task(request: web.Request) -> web.Response:
+    """POST /api/teo/task — переключить статус задачи."""
+    uid = _teo_get_teo_user_id(request)
+    if not uid:
+        return web.json_response({"error": "unauthorized"}, status=401)
+    try:
+        body    = await request.json()
+        task_id = int(body.get("task_id", 0))
+        new_status = _teo_toggle_task(task_id, uid)
+        if new_status is None:
+            return web.json_response({"error": "task not found"}, status=404)
+        return web.json_response({"task_id": task_id, "completed": new_status})
+    except Exception as e:
+        logger.exception(f"teo task error for {uid}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 def create_app() -> web.Application:
     app = web.Application(
         middlewares=[_security_middleware],
@@ -956,6 +1116,10 @@ def create_app() -> web.Application:
     app.router.add_post("/api/close",          handle_close_day)
     app.router.add_post("/api/mode",           handle_set_mode)
     app.router.add_get("/img/{name}",          handle_mood_img)
+    # ТЕО трекер
+    app.router.add_get("/teo",               handle_teo_tracker)
+    app.router.add_get("/api/teo/state",     handle_teo_state)
+    app.router.add_post("/api/teo/task",     handle_teo_task)
     # MAX Мессенджер вебхуки
     app.router.add_post("/webhook/max-lead",    handle_max_lead_webhook)
     app.router.add_post("/webhook/max-program", handle_max_program_webhook)

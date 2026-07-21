@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>ТЕО · Трекер</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent }
+    body { background: #0f0f13; color: #fff; font-family: -apple-system, system-ui, "Segoe UI", sans-serif; min-height: 100vh; padding-bottom: 40px }
+
+    /* Header */
+    .header { padding: 20px 16px 14px }
+    .header-label { font-size: 12px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px }
+    .header-name { font-size: 24px; font-weight: 700 }
+
+    /* Tabs */
+    .tabs { display: flex; padding: 0 16px 12px; gap: 8px; position: sticky; top: 0; background: #0f0f13; z-index: 10; padding-top: 8px; border-bottom: 1px solid rgba(255,255,255,0.05) }
+    .tab { flex: 1; padding: 10px 0; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; outline: none }
+    .tab.active { background: #fff; color: #0f0f13 }
+    .tab:not(.active) { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.55) }
+
+    /* Content */
+    .content { padding: 16px }
+
+    /* Progress summary */
+    .summary { margin-bottom: 20px }
+    .summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px }
+    .summary-text { font-size: 13px; color: rgba(255,255,255,0.45) }
+    .summary-count { font-size: 13px; font-weight: 600; color: #34c759 }
+    .progress-bar { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #34c759, #4cd964); border-radius: 3px; transition: width 0.4s ease }
+
+    /* Goal section */
+    .goal-block { margin-bottom: 24px }
+    .goal-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px }
+    .area-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0 }
+    .area-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px }
+    .goal-title { font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 2px }
+
+    /* Task card */
+    .task-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #1c1c24; border-radius: 12px; margin-bottom: 8px; cursor: pointer; user-select: none; border: 1px solid rgba(255,255,255,0.04); transition: background 0.15s }
+    .task-card:active { background: #222230 }
+
+    .check-circle { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s; margin-top: 1px }
+    .task-card.done .check-circle { background: #34c759; border-color: #34c759 }
+    .check-icon { color: #fff; font-size: 13px; font-weight: 700; opacity: 0; transition: opacity 0.15s }
+    .task-card.done .check-icon { opacity: 1 }
+
+    .task-body { flex: 1; min-width: 0 }
+    .task-text { font-size: 15px; line-height: 1.4; transition: color 0.2s }
+    .task-card.done .task-text { color: rgba(255,255,255,0.28); text-decoration: line-through }
+    .task-sub { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 3px }
+
+    /* Week card */
+    .week-card { background: #1c1c24; border-radius: 14px; margin-bottom: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.04) }
+    .week-card-header { padding: 14px 16px 10px; border-bottom: 1px solid rgba(255,255,255,0.06) }
+    .week-card-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 4px }
+    .week-card-progress { font-size: 12px; color: rgba(255,255,255,0.35) }
+    .mini-bar { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; flex: 1; margin-left: 12px }
+    .mini-bar-fill { height: 100%; background: #34c759; border-radius: 2px; transition: width 0.3s }
+
+    .week-task { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; user-select: none; transition: background 0.12s }
+    .week-task:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.04) }
+    .week-task:active { background: rgba(255,255,255,0.03) }
+    .week-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; transition: all 0.2s }
+    .week-task.done .week-check { background: #34c759; border-color: #34c759; color: #fff }
+    .week-task-text { flex: 1; font-size: 14px; transition: color 0.2s }
+    .week-task.done .week-task-text { color: rgba(255,255,255,0.28); text-decoration: line-through }
+    .week-date { font-size: 11px; color: rgba(255,255,255,0.3); white-space: nowrap; text-transform: capitalize }
+
+    /* Area colours */
+    .c-career { background: #4a9eff }
+    .c-health  { background: #34c759 }
+    .c-finance { background: #ff9f0a }
+    .t-career  { color: #4a9eff }
+    .t-health  { color: #34c759 }
+    .t-finance { color: #ff9f0a }
+
+    /* Empty / loader */
+    .empty { text-align: center; padding: 60px 24px; color: rgba(255,255,255,0.3); font-size: 15px; line-height: 1.6 }
+    .loader { text-align: center; padding: 60px 0; font-size: 28px; animation: pulse 1.2s infinite }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* All-done banner */
+    .done-banner { background: linear-gradient(135deg, #1a2e1a, #0d1f0d); border: 1px solid rgba(52,199,89,0.3); border-radius: 14px; padding: 20px 16px; text-align: center; margin-bottom: 20px }
+    .done-banner-icon { font-size: 36px; margin-bottom: 8px }
+    .done-banner-text { font-size: 16px; font-weight: 600; color: #34c759 }
+    .done-banner-sub { font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 4px }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-label">🌿 ТЕО · Трекер</div>
+  <div class="header-name" id="user-name">...</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="btn-today" onclick="switchTab('today')">Сегодня</button>
+  <button class="tab" id="btn-week" onclick="switchTab('week')">Неделя</button>
+</div>
+
+<div class="content" id="main">
+  <div class="loader">🌿</div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#0f0f13'); }
+
+const AREA = {
+  'карьера':  { cls: 'career',  label: 'Карьера и работа' },
+  'здоровье': { cls: 'health',  label: 'Здоровье и спорт' },
+  'финансы':  { cls: 'finance', label: 'Финансы и деньги' },
+};
+const RU_DAYS = ['вс','пн','вт','ср','чт','пт','сб'];
+const RU_MON  = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+let state = null;
+let tab   = 'today';
+
+// Auth params from URL (signed by TEO_BOT_TOKEN)
+const sp = new URLSearchParams(location.search);
+const authQ = `uid=${sp.get('uid')}&ts=${sp.get('ts')}&sig=${sp.get('sig')}`;
+
+// ── Load ─────────────────────────────────────────────────────────
+async function loadState() {
+  try {
+    const headers = {};
+    if (tg?.initData) headers['X-Init-Data'] = tg.initData;
+    const r = await fetch('/api/teo/state?' + authQ, { headers });
+    if (!r.ok) { showError(r.status); return; }
+    state = await r.json();
+    document.getElementById('user-name').textContent = state.name || 'Привет';
+    render();
+  } catch {
+    document.getElementById('main').innerHTML = '<div class="empty">Не удалось загрузить данные.<br>Попробуй ещё раз.</div>';
+  }
+}
+
+function switchTab(t) {
+  tab = t;
+  document.getElementById('btn-today').classList.toggle('active', t === 'today');
+  document.getElementById('btn-week').classList.toggle('active', t === 'week');
+  render();
+}
+
+function render() { tab === 'today' ? renderToday() : renderWeek(); }
+
+// ── Today view ───────────────────────────────────────────────────
+function renderToday() {
+  const el = document.getElementById('main');
+  const tasks  = state.today_tasks || [];
+  const goals  = state.goals || [];
+
+  if (!tasks.length) {
+    el.innerHTML = '<div class="empty">Задач на сегодня нет.<br>Напиши ТЕО — составим план вместе.</div>';
+    return;
+  }
+
+  const done = tasks.filter(t => t.completed).length;
+  const pct  = Math.round(done / tasks.length * 100);
+  const allDone = done === tasks.length;
+
+  let html = '';
+
+  if (allDone) {
+    html += `<div class="done-banner">
+      <div class="done-banner-icon">🎉</div>
+      <div class="done-banner-text">День закрыт!</div>
+      <div class="done-banner-sub">Все задачи выполнены — отличная работа</div>
+    </div>`;
+  }
+
+  html += `<div class="summary">
+    <div class="summary-row">
+      <span class="summary-text">Выполнено сегодня</span>
+      <span class="summary-count">${done} / ${tasks.length}</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+  </div>`;
+
+  // Group by goal_id
+  const groups = groupByGoal(tasks, goals);
+  groups.forEach(({ goal, items }) => {
+    const a = AREA[goal?.area] || { cls: 'career', label: goal?.goal_text || 'Задачи' };
+    html += `<div class="goal-block">
+      <div class="goal-header">
+        <div class="area-dot c-${a.cls}"></div>
+        <div>
+          <div class="area-name t-${a.cls}">${a.label}</div>
+          ${goal ? `<div class="goal-title">${goal.goal_text}</div>` : ''}
+        </div>
+      </div>`;
+    items.forEach(t => {
+      html += `<div class="task-card ${t.completed ? 'done' : ''}" onclick="toggle(${t.id})">
+        <div class="check-circle"><span class="check-icon">✓</span></div>
+        <div class="task-body"><div class="task-text">${esc(t.task_text)}</div></div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// ── Week view ────────────────────────────────────────────────────
+function renderWeek() {
+  const el = document.getElementById('main');
+  const tasks = state.week_tasks || [];
+  const goals = state.goals || [];
+
+  if (!tasks.length) {
+    el.innerHTML = '<div class="empty">Задач на неделю нет.<br>Напиши ТЕО — составим план вместе.</div>';
+    return;
+  }
+
+  const groups = groupByGoal(tasks, goals);
+  let html = '';
+
+  groups.forEach(({ goal, items }) => {
+    const a = AREA[goal?.area] || { cls: 'career', label: goal?.goal_text || 'Задачи' };
+    const done = items.filter(t => t.completed).length;
+    const pct  = items.length ? Math.round(done / items.length * 100) : 0;
+
+    html += `<div class="week-card">
+      <div class="week-card-header">
+        <div class="goal-header">
+          <div class="area-dot c-${a.cls}"></div>
+          <div class="area-name t-${a.cls}">${a.label}</div>
+        </div>
+        <div class="week-card-meta">
+          <span class="week-card-progress">${done} из ${items.length}</span>
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
+
+    items.forEach(t => {
+      const d = new Date(t.scheduled_date + 'T00:00:00');
+      const dayStr = `${RU_DAYS[d.getDay()]}, ${d.getDate()} ${RU_MON[d.getMonth()]}`;
+      html += `<div class="week-task ${t.completed ? 'done' : ''}" onclick="toggle(${t.id})">
+        <div class="week-check">${t.completed ? '✓' : ''}</div>
+        <div class="week-task-text">${esc(t.task_text)}</div>
+        <div class="week-date">${dayStr}</div>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// ── Toggle task ──────────────────────────────────────────────────
+async function toggle(id) {
+  // Optimistic update
+  const updateLocal = (arr) => arr.forEach(t => { if (t.id === id) t.completed = !t.completed; });
+  updateLocal(state.today_tasks || []);
+  updateLocal(state.week_tasks  || []);
+  render();
+  if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (tg?.initData) headers['X-Init-Data'] = tg.initData;
+    const r = await fetch('/api/teo/task?' + authQ, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ task_id: id })
+    });
+    if (r.ok) {
+      const data = await r.json();
+      // Sync server answer (in case optimistic update was wrong)
+      const sync = (arr) => arr.forEach(t => { if (t.id === id) t.completed = data.completed; });
+      sync(state.today_tasks || []);
+      sync(state.week_tasks  || []);
+      render();
+    }
+  } catch {
+    // Revert optimistic update on error
+    updateLocal(state.today_tasks || []);
+    updateLocal(state.week_tasks  || []);
+    render();
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+function groupByGoal(tasks, goals) {
+  const map = new Map();
+  tasks.forEach(t => {
+    const key = t.goal_id ?? 0;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  });
+  return [...map.entries()].map(([gid, items]) => ({
+    goal: goals.find(g => g.id === gid) || null,
+    items,
+  }));
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showError(status) {
+  const msg = status === 401
+    ? 'Открой трекер через бота ТЕО — ссылка там.'
+    : `Ошибка ${status}. Попробуй позже.`;
+  document.getElementById('main').innerHTML = `<div class="empty">${msg}</div>`;
+}
+
+loadState();
+</script>
+</body>
+</html>
